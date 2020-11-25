@@ -1,0 +1,10 @@
+-------------------
+Installed packages
+-------------------
+- pip install PyMca5 (including dependencies)
+- pip install PySide2  (including dependencies, for ims plotting)
+- conda install -c conda-forge xraylib=4.0.0
+
+For tomo:
+- conda install tomopy
+
