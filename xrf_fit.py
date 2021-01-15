@@ -291,6 +291,13 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             rhot = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
             print("Done")
         rhot[np.where(rhot < 0.)] = 0. #negative rhot values do not make sense
+        rhot[np.isnan(rhot)] = 0.
+        # import scipy.ndimage as ndimage
+        # rhot = ndimage.gaussian_filter(rhot, sigma=(2, 2), order=0)
+        # fit a line through rhot for each row, and use these fitted rhot values
+        # for i in range(0, rhot.shape[0]):
+        #     fit = np.polyfit(np.arange(rhot.shape[1]), rhot[i,:], 1)
+        #     rhot[i,:] = np.arange(rhot.shape[1])*fit[0] + fit[1]
         for n in range(0, names.size):
             corr_factor = 1./np.exp(-1.*rhot[:,:] * mu[n])
             corr_factor[np.where(corr_factor > 1000.)] = 1. # points with very low correction factor are not corrected; otherwise impossibly high values are obtained
@@ -349,9 +356,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     if reffiles.size > 1:
         ' '.join(reffiles)
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
-    file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
-    file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
-    file.create_dataset('quant/'+channel+'/rhot', data=rhot, compression='gzip', compression_opts=4)
+    if absorb is not None:
+        file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
+        file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
+        file.create_dataset('quant/'+channel+'/rhot', data=rhot, compression='gzip', compression_opts=4)
     file.close()
 
     # plot images
@@ -359,7 +367,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     data.data = np.zeros((ims.shape[1],ims.shape[2], ims.shape[0]+1))
     for i in range(0, ims.shape[0]):
         data.data[:, :, i] = ims[i, :, :]
-    data.data[:,:,-1] = rhot[:,:]
+    if absorb is not None:
+        data.data[:,:,-1] = rhot[:,:]
     names = np.concatenate((names,[r'$\rho T$']))
     data.names = names
     cb_opts = plotims.Colorbar_opt(title='Conc.;[ppm]')
