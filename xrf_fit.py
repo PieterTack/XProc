@@ -64,6 +64,248 @@ def read_cnc(cncfile):
     return rv
 
 ##############################################################################
+def PCA(rawdata, nclusters=5, el_id=None):
+    """
+    returns: data transformed in 5 dims/columns + regenerated original data
+    pass in: data as 2D NumPy array of dimension [M,N] with M the amount of observations and N the variables/elements
+    """
+    if rawdata.ndim == 3:
+        # assumes first dim is the elements
+        data = rawdata.reshape(rawdata.shape[0], rawdata.shape[1]*rawdata.shape[2]).T #transform so elements becomes second dimension
+    else:
+        # we assume rawdata is properly oriented
+        data = rawdata
+
+    if el_id is not None:
+        data = data[:, el_id]
+    
+    data[np.isnan(data)] = 0.
+    m, n = data.shape
+    # mean center the data
+    data -= data.mean(axis=0)
+    data = data/data.std(axis=0)
+    # calculate the covariance matrix
+    R = np.cov(data, rowvar=False)
+    # calculate eigenvectors & eigenvalues of the covariance matrix
+    # use 'eigh' rather than 'eig' since R is symmetric, 
+    # the performance gain is substantial
+    evals, evecs = np.linalg.eigh(R)
+    # sort eigenvalue in decreasing order
+    idx = np.argsort(evals)[::-1]
+    evecs = evecs[:,idx]
+    # sort eigenvectors according to same index
+    evals = evals[idx]
+    # select the first n eigenvectors (n is desired dimension
+    # of rescaled data array, or nclusters)
+    evecs = evecs[:, :nclusters]
+    # carry out the transformation on the data using eigenvectors
+    # and return the re-scaled data, eigenvalues, and eigenvectors
+    if rawdata.ndim == 3:
+        scores = np.moveaxis(np.dot(evecs.T, data.T).T.reshape(rawdata.shape[1], rawdata.shape[2], nclusters), -1, 0)
+    else:
+        scores = np.dot(evecs.T, data.T).T
+        
+    return scores, evals, evecs
+##############################################################################
+# perform PCA analysis on h5file dataset. 
+#   before clustering, the routine performs a sqrt() normalisation on the data to reduce intensity differences between elements
+#   a selection of elements can be given in el_id as their integer values corresponding to their array position in the dataset (first element id = 0)
+#   kmeans can be set as an option, which will perform Kmeans clustering on the PCA score images and extract the respective sumspectra
+def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=None):
+    # read in h5file data, with appropriate h5dir
+    file = h5py.File(h5data, 'r+')
+    data = np.array(file[h5dir])
+    if el_id is not None:
+        names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
+    if 'channel00' in h5dir:
+        if kmeans is not None:
+            spectra = np.array(file['raw/channel00/spectra'])
+        channel = 'channel00'
+    elif 'channel02' in h5dir:
+        if kmeans is not None:
+            spectra = np.array(file['raw/channel02/spectra'])
+        channel = 'channel02'
+    
+    # perform PCA clustering
+    scores, evals, evecs = PCA(data, nclusters=nclusters, el_id=el_id)
+    PCA_names = []
+    for i in range(nclusters):
+        PCA_names.append("PC"+str(i))
+    
+    # save the cluster image , as well as the elements that were clustered (el_id), loading plot data (eigenvectors) and eigenvalues (explained variance sum)
+    try:
+        del file['PCA/'+channel+'/el_id']
+        del file['PCA/'+channel+'/nclusters']
+        del file['PCA/'+channel+'/ims']
+        del file['PCA/'+channel+'/names']
+        del file['PCA/'+channel+'/RVE']
+        del file['PCA/'+channel+'/loadings']
+    except:
+        None
+    if el_id is not None:
+        file.create_dataset('PCA/'+channel+'/el_id', data=[n.encode('utf8') for n in names[el_id]])
+    else:
+        file.create_dataset('PCA/'+channel+'/el_id', data='None')        
+    file.create_dataset('PCA/'+channel+'/nclusters', data=nclusters)
+    file.create_dataset('PCA/'+channel+'/ims', data=scores, compression='gzip', compression_opts=4)
+    file.create_dataset('PCA/'+channel+'/names', data=[n.encode('utf8') for n in PCA_names])
+    file.create_dataset('PCA/'+channel+'/RVE', data=evals[0:nclusters]/np.sum(evals))
+    file.create_dataset('PCA/'+channel+'/loadings', data=evecs, compression='gzip', compression_opts=4)
+    
+    # if kmeans option selected, follow up with Kmeans clustering on the PCA clusters
+    if kmeans is not None:
+        clusters, dist = Kmeans(scores, nclusters=nclusters, el_id=None)
+        
+        # calculate cluster sumspectra
+        #   first check if raw spectra shape is identical to clusters shape, as otherwise it's impossible to relate appropriate spectrum to pixel
+        if spectra.shape[0] == clusters.size:
+            sumspec = []
+            for i in range(nclusters):
+                sumspec.append(np.sum(spectra[np.where(clusters.ravel() == i),:], axis=0))
+        
+        # save the cluster image and sumspectra, as well as the elements that were clustered (el_id)
+        try:
+            del file['kmeans/'+channel+'/nclusters']
+            del file['kmeans/'+channel+'/data_dir_clustered']
+            del file['kmeans/'+channel+'/ims']
+            del file['kmeans/'+channel+'/el_id']
+            for i in range(nclusters):
+                del file['kmeans/'+channel+'/sumspec_'+str(i)]
+        except:
+            None
+        file.create_dataset('kmeans/'+channel+'/nclusters', data=nclusters)
+        file.create_dataset('kmeans/'+channel+'/data_dir_clustered', data=('PCA/'+channel+'/ims').encode('utf8'))
+        file.create_dataset('kmeans/'+channel+'/ims', data=clusters, compression='gzip', compression_opts=4)
+        file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in PCA_names])     
+        if spectra.shape[0] == clusters.size:
+            for i in range(nclusters):
+                file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=sumspec[i,:], compression='gzip', compression_opts=4)    
+    file.close()    
+
+##############################################################################
+def Kmeans(rawdata, nclusters=5, el_id=None):
+    from scipy.cluster.vq import kmeans, whiten, vq
+
+    if rawdata.ndim == 3:
+        # assumes first dim is the elements
+        data = rawdata.reshape(rawdata.shape[0], rawdata.shape[1]*rawdata.shape[2]).T #transform so elements becomes second dimension
+    else:
+        # we assume rawdata is properly oriented
+        data = rawdata
+
+    if el_id is not None:
+        data = data[:, el_id]
+
+    # first whiten data (normalises it)
+    data[np.isnan(data)] = 0.
+    data = whiten(data) #data should not contain any NaN or infinite values
+
+    # then do kmeans
+    centroids, distortion = kmeans(data, nclusters, iter=100)
+    
+    # now we know the centroids (or 'code book') we can find back which observation pairs to which centroid
+    clusters, distortion = vq(data, centroids)
+
+    if rawdata.ndim == 3:
+        clusters = clusters.reshape(rawdata.shape[1], rawdata.shape[2])
+    
+    return clusters, distortion
+##############################################################################
+# perform Kmeans clustering on a h5file dataset.
+#   a selection of elements can be given in el_id as their integer values corresponding to their array position in the dataset (first element id = 0)
+#   Before clustering data is whitened using scipy routines
+def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
+    # read in h5file data, with appropriate h5dir
+    file = h5py.File(h5data, 'r+')
+    data = np.array(file[h5dir])
+    if el_id is not None:
+        names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
+    if 'channel00' in h5dir:
+        spectra = np.array(file['raw/channel00/spectra'])
+        channel = 'channel00'
+    elif 'channel02' in h5dir:
+        spectra = np.array(file['raw/channel02/spectra'])
+        channel = 'channel02'
+    spectra = spectra.reshape((spectra.shape[0]*spectra.shape[1], spectra.shape[2]))
+    
+    # perform Kmeans clustering
+    clusters, dist = Kmeans(data, nclusters=nclusters, el_id=el_id)
+    
+    # calculate cluster sumspectra
+    #   first check if raw spectra shape is identical to clusters shape, as otherwise it's impossible to relate appropriate spectrum to pixel
+    if spectra.shape[0] == clusters.size:
+        sumspec = []
+        for i in range(nclusters):
+            sumspec.append(np.sum(spectra[np.where(clusters.ravel() == i),:], axis=0))
+    
+    # save the cluster image and sumspectra, as well as the elements that were clustered (el_id)
+    try:
+        del file['kmeans/'+channel+'/nclusters']
+        del file['kmeans/'+channel+'/data_dir_clustered']
+        del file['kmeans/'+channel+'/ims']
+        del file['kmeans/'+channel+'/el_id']
+        for i in range(nclusters):
+            del file['kmeans/'+channel+'/sumspec_'+str(i)]
+    except:
+        None
+    file.create_dataset('kmeans/'+channel+'/nclusters', data=nclusters)
+    file.create_dataset('kmeans/'+channel+'/data_dir_clustered', data=h5dir.encode('utf8'))
+    file.create_dataset('kmeans/'+channel+'/ims', data=clusters, compression='gzip', compression_opts=4)
+    if el_id is not None:
+        file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in names[el_id]])
+    else:
+        file.create_dataset('kmeans/'+channel+'/el_id', data='None')        
+    if spectra.shape[0] == clusters.size:
+        for i in range(nclusters):
+            file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=sumspec[i,:], compression='gzip', compression_opts=4)    
+    file.close()
+    
+##############################################################################
+# divide quantified images by the corresponding concentration value of the same element in the cncfile to obtain relative difference images
+#   If an element in the h5file is not present in the cncfile it is simply not calculated and ignored
+def div_by_cnc(h5file, cncfile, channel=None):
+    # read in h5file quant data
+    #   normalise intensities to 1s acquisition time as this is the time for which we have el yields
+    file = h5py.File(h5file, 'r+')
+    if channel is None:
+        channel = list(file['quant'].keys())[0]
+    h5_ims = np.array(file['quant/'+channel+'/ims'])
+    h5_names = np.array([n.decode('utf8') for n in file['quant/'+channel+'/names']])
+    h5_z = [Elements.getz(n.split(" ")[0]) for n in h5_names]
+    
+    # read in cnc file
+    cnc = read_cnc(cncfile)
+
+    # loop over h5_z and count how many times there's a common z in h5_z and cnc.z
+    cnt = 0
+    for z in range(0,len(h5_z)):
+        if h5_z[z] in cnc.z:
+            cnt+=1
+    
+    # make array to store rel_diff data and calculate them
+    rel_diff = np.zeros((cnt, h5_ims.shape[1], h5_ims.shape[2]))
+    rel_names = []
+    
+    cnt = 0
+    for z in range(0, len(h5_z)):
+        if h5_z[z] in cnc.z:
+            rel_diff[cnt, :, :] = h5_ims[z,:,:] / cnc.conc[list(cnc.z).index(h5_z[z])]
+            rel_names.append(h5_names[z])
+            cnt+=1
+
+    # save rel_diff data
+    try:
+        del file['rel_dif/'+channel+'/names']
+        del file['rel_dif/'+channel+'/ims']
+        del file['rel_dif/'+channel+'/cnc']
+    except:
+        None
+    file.create_dataset('rel_dif/'+channel+'/names', data=[n.encode('utf8') for n in rel_names])
+    file.create_dataset('rel_dif/'+channel+'/ims', data=rel_diff, compression='gzip', compression_opts=4)
+    file.create_dataset('rel_dif/'+channel+'/cnc', data=cncfile.split("/")[-1].encode('utf8'))
+    file.close()
+
+##############################################################################
 # quantify XRF data, making use of elemental yields as determined from reference files
 #   h5file and reffiles should all contain norm data as determined by norm_xrf_batch()
 #   The listed ref files should have had their detection limits calculated by calc_detlim() before
@@ -188,29 +430,14 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     if absorb is not None:
         cnc = read_cnc(absorb[1])
         config = ConfigDict.ConfigDict()
-        config.read(h5_cfg)
+        try:
+            config.read(h5_cfg)
+        except:
+            config.read('/'.join(h5file.split('/')[0:-1])+'/'+h5_cfg.split('/')[-1])
         cfg = [config['detector']['zero'], config['detector']['gain']]
+        absorb_el = absorb[0]
         try:
             import xraylib
-            # first determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
-            rate_ka1 = xraylib.RadRate(absorb[0], 'KL3_line')
-            rate_kb1 = xraylib.RadRate(absorb[0], 'KM3_line')
-            # calculate Ka-Kb ratio for each experimental spectrum
-                # Ka and Kb channel number
-            idx_ka1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb[0]),'KL3_line'))[-1])
-            idx_kb1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb[0]),'KM3_line'))[-1])
-            # remove 0 and negative value to avoid division errors. On those points set ka1/kb1 ratio == rate_ka1/rate_kb1
-            int_ka1 = h5_spectra[:,:,idx_ka1]
-            int_ka1[np.where(int_ka1 <= 1)] = 1.
-            int_kb1 = h5_spectra[:,:,idx_kb1]
-            int_kb1[np.where(int_kb1 <= 1)] = int_ka1[np.where(int_kb1 <= 1)]*(rate_kb1/rate_ka1)
-            ratio_ka1_kb1 = int_ka1 / int_kb1
-            # calculate corresponding layer thickness per point through matrix defined by cncfiles
-            mu_ka1 = 0
-            mu_kb1 = 0
-            for i in range(0, len(cnc.z)):
-                mu_ka1 += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb[0]),'KL3_line')) * cnc.conc[i]/1E6
-                mu_kb1 += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb[0]),'KM3_line')) * cnc.conc[i]/1E6
             # calculate absorption coefficient for each element/energy in names
             mu = np.zeros(names.size)
             for n in range(0, names.size):
@@ -224,31 +451,18 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     line = 'M5N7_line' #Ma1
                 for i in range(0, len(cnc.z)):
                     mu[n] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
+            mu_ka1 = np.zeros(len(absorb_el))
+            mu_kb1 = np.zeros(len(absorb_el))
+            rate_ka1 = np.zeros(len(absorb_el))
+            rate_kb1 = np.zeros(len(absorb_el))
+            for j in range(len(absorb_el)):
+                for i in range(0, len(cnc.z)):
+                    mu_ka1[j] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),'KL3_line')) * cnc.conc[i]/1E6
+                    mu_kb1[j] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),'KM3_line')) * cnc.conc[i]/1E6
+                # determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
+                rate_ka1[j] = xraylib.RadRate(absorb_el[j], 'KL3_line')
+                rate_kb1[j] = xraylib.RadRate(absorb_el[j], 'KM3_line')
         except ImportError: # no xraylib, so use PyMca instead
-            # first determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
-            rate_ka1 = Elements._getUnfilteredElementDict(absorb[0], None)['KL3']['rate']
-            rate_kb1 = Elements._getUnfilteredElementDict(absorb[0], None)['KM3']['rate']
-            # calculate Ka-Kb ratio for each experimental spectrum
-                # Ka1 and Kb1 channel number
-            idx_ka1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb[0],'KL3'))[-1])
-            idx_kb1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb[0],'KM3'))[-1])
-            # remove 0 and negative value to avoid division errors. On those points set ka1/kb1 ratio == rate_ka1/rate_kb1
-            int_ka1 = np.sum(h5_spectra[:,:,int(np.round(idx_ka1-0.025/cfg[1])):int(np.round(idx_ka1+0.025/cfg[1]))], axis=2)
-            int_ka1[np.where(int_ka1 < 1.)] = 1.
-            int_kb1 = np.sum(h5_spectra[:,:,int(np.round(idx_kb1-0.025/cfg[1])):int(np.round(idx_kb1+0.025/cfg[1]))], axis=2)
-            int_kb1[np.where(int_kb1 <= 1)] = int_ka1[np.where(int_kb1 <= 1)]*(rate_kb1/rate_ka1)
-            ratio_ka1_kb1 = int_ka1 / int_kb1
-            # also do not correct any point where ratio_ka1_kb1 > rate_ka1/rate_kb1
-            #   these points would suggest Ka was less absorbed than Kb
-            ratio_ka1_kb1[np.where(ratio_ka1_kb1 > rate_ka1/rate_kb1)] = rate_ka1/rate_kb1
-            ratio_ka1_kb1[np.where(ratio_ka1_kb1 <= 0.55*rate_ka1/rate_kb1)] = rate_ka1/rate_kb1
-            ratio_ka1_kb1[np.isnan(ratio_ka1_kb1)] = rate_ka1/rate_kb1
-            # calculate corresponding layer thickness per point through matrix defined by cncfiles
-            mu_ka1 = 0
-            mu_kb1 = 0
-            for i in range(0, len(cnc.z)):
-                mu_ka1 += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(absorb[0],'KL3'))['total'][0] * cnc.conc[i]/1E6
-                mu_kb1 += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(absorb[0],'KM3'))['total'][0] * cnc.conc[i]/1E6
             # calculate absorption coefficient for each element/energy in names
             mu = np.zeros(names.size)
             for n in range(0, names.size):
@@ -262,14 +476,52 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     line = 'M5N7' #Ma1
                 for i in range(0, len(cnc.z)):
                     mu[n] += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(el, line))['total'][0] * cnc.conc[i]/1E6
-        rhot = (np.log(ratio_ka1_kb1[:,:]) - np.log(rate_ka1/rate_kb1)) / (mu_kb1 - mu_ka1) # rho*T for each pixel based on Ka1 and Kb1 emission ratio
+            mu_ka1 = np.zeros(len(absorb_el))
+            mu_kb1 = np.zeros(len(absorb_el))
+            rate_ka1 = np.zeros(len(absorb_el))
+            rate_kb1 = np.zeros(len(absorb_el))
+            for j in range(len(absorb_el)):
+                for i in range(0, len(cnc.z)):
+                    mu_ka1[j] += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(absorb_el[j],'KL3'))['total'][0] * cnc.conc[i]/1E6
+                    mu_kb1[j] += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(absorb_el[j],'KM3'))['total'][0] * cnc.conc[i]/1E6
+                # determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
+                rate_ka1[j] = Elements._getUnfilteredElementDict(absorb_el[j], None)['KL3']['rate']
+                rate_kb1[j] = Elements._getUnfilteredElementDict(absorb_el[j], None)['KM3']['rate']
+        rhot = np.zeros((len(absorb_el), ims.shape[1], ims.shape[2]))
+        for j in range(len(absorb_el)):
+            # calculate Ka-Kb ratio for each experimental spectrum
+                # Ka1 and Kb1 channel number
+            idx_ka1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KL3'))[-1])
+            idx_kb1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KM3'))[-1])
+            # remove 0 and negative value to avoid division errors. On those points set ka1/kb1 ratio == rate_ka1/rate_kb1
+            int_ka1 = np.sum(h5_spectra[:,:,int(np.round(idx_ka1-0.025/cfg[1])):int(np.round(idx_ka1+0.025/cfg[1]))], axis=2)
+            int_ka1[np.where(int_ka1 < 1.)] = 1.
+            int_kb1 = np.sum(h5_spectra[:,:,int(np.round(idx_kb1-0.025/cfg[1])):int(np.round(idx_kb1+0.025/cfg[1]))], axis=2)
+            int_kb1[np.where(int_kb1 <= 1)] = int_ka1[np.where(int_kb1 <= 1)]*(rate_kb1[j]/rate_ka1[j])
+            ratio_ka1_kb1 = int_ka1 / int_kb1
+            # also do not correct any point where ratio_ka1_kb1 > rate_ka1/rate_kb1
+            #   these points would suggest Ka was less absorbed than Kb
+            ratio_ka1_kb1[np.where(ratio_ka1_kb1 > rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j]
+            ratio_ka1_kb1[np.where(ratio_ka1_kb1 <= 0.55*rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j]
+            ratio_ka1_kb1[np.isnan(ratio_ka1_kb1)] = rate_ka1[j]/rate_kb1[j]
+            # calculate corresponding layer thickness per point through matrix defined by cncfiles
+            rhot[j,:,:] = (np.log(ratio_ka1_kb1[:,:]) - np.log(rate_ka1[j]/rate_kb1[j])) / (mu_kb1[j] - mu_ka1[j]) # rho*T for each pixel based on Ka1 and Kb1 emission ratio
+            print('Average Rho*t: ',absorb_el[j], np.average(rhot[j,:,:]))
         rhot[np.where(rhot < 0.)] = 0. #negative rhot values do not make sense
+        rhot[np.isnan(rhot)] = 0.
+        rhot = np.amax(rhot, axis=0)
         # print(np.min(rhot), np.average(rhot), np.max(rhot))
         # print(mu_ka1, mu_kb1, mu, names)
         # plt.imshow(rhot)
         # plt.colorbar()
         # plt.savefig('fit/test.png', bbox_inches='tight', pad_inches=0)
         # plt.close()
+        # # cluster the rhot image and average rhot values per cluster
+        # nclrs = 5
+        # clrs, _ = Kmeans(rhot.reshape(1, rhot.shape[0], rhot.shape[1]), nclusters=nclrs, el_id=0)
+        # for i in range(nclrs):
+        #     rhot[np.where(clrs == i)] = np.average(rhot[np.where(clrs == i)])
+        
         # if this is snakescan, interpolate ims array for motor positions so images look nice
         #   this assumes that mot1 was the continuously moving motor
         if snake is True:
@@ -291,6 +543,13 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             rhot = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
             print("Done")
         rhot[np.where(rhot < 0.)] = 0. #negative rhot values do not make sense
+        rhot[np.isnan(rhot)] = 0.
+        # import scipy.ndimage as ndimage
+        # rhot = ndimage.gaussian_filter(rhot, sigma=(2, 2), order=0)
+        # fit a line through rhot for each row, and use these fitted rhot values
+        # for i in range(0, rhot.shape[0]):
+        #     fit = np.polyfit(np.arange(rhot.shape[1]), rhot[i,:], 1)
+        #     rhot[i,:] = np.arange(rhot.shape[1])*fit[0] + fit[1]
         for n in range(0, names.size):
             corr_factor = 1./np.exp(-1.*rhot[:,:] * mu[n])
             corr_factor[np.where(corr_factor > 1000.)] = 1. # points with very low correction factor are not corrected; otherwise impossibly high values are obtained
@@ -349,9 +608,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     if reffiles.size > 1:
         ' '.join(reffiles)
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
-    file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
-    file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
-    file.create_dataset('quant/'+channel+'/rhot', data=rhot, compression='gzip', compression_opts=4)
+    if absorb is not None:
+        file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
+        file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
+        file.create_dataset('quant/'+channel+'/rhot', data=rhot, compression='gzip', compression_opts=4)
     file.close()
 
     # plot images
@@ -359,7 +619,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     data.data = np.zeros((ims.shape[1],ims.shape[2], ims.shape[0]+1))
     for i in range(0, ims.shape[0]):
         data.data[:, :, i] = ims[i, :, :]
-    data.data[:,:,-1] = rhot[:,:]
+    if absorb is not None:
+        data.data[:,:,-1] = rhot[:,:]
     names = np.concatenate((names,[r'$\rho T$']))
     data.names = names
     cb_opts = plotims.Colorbar_opt(title='Conc.;[ppm]')
@@ -873,7 +1134,7 @@ def hdf_overview_images(h5file, ncols, pix_size, scl_size, log=False):
 ##############################################################################
 # normalise IMS images to detector deadtime and I0 values.
 #   When I0norm is supplied, a (long) int should be provided to which I0 value one should normalise. Otherwise the max of the I0 map is used.
-def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False):
+def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False):
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
     file = h5py.File(h5file, 'r+')
@@ -887,8 +1148,27 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False):
     mot1_name = str(file['mot1'].attrs["Name"])
     mot2 = np.array(file['mot2'])
     mot2_name = str(file['mot2'].attrs["Name"])
+    if len(ims0.shape) == 2:
+        cmd = str(np.array(file['cmd'])).split(' ')
+        ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
+        I0 = I0.reshape((I0.shape[0], 1))
+        tm = tm.reshape((tm.shape[0], 1))
+        mot1 = mot1.reshape((mot1.shape[0], 1))
+        mot2 = mot2.reshape((mot2.shape[0], 1))
+        if I0.shape[0] > ims0.shape[1]:
+            I0 = I0[0:ims0.shape[1],:]
+        if tm.shape[0] > ims0.shape[1]:
+            tm = tm[0:ims0.shape[1],:]
+        if mot1.shape[0] > ims0.shape[1]:
+            mot1 = mot1[0:ims0.shape[1],:]
+        if mot2.shape[0] > ims0.shape[1]:
+            mot2 = mot2[0:ims0.shape[1],:]
+        snake = True
+        timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
     try:
         ims2 = np.array(file['fit/channel02/ims'])
+        if len(ims2.shape) == 2:
+            ims2 = ims2.reshape((ims2.shape[0], ims2.shape[1], 1))
         names2 = file['fit/channel02/names']
         sum_fit2 = np.array(file['fit/channel02/sum/int'])
         sum_bkg2 = np.array(file['fit/channel02/sum/bkg'])
@@ -975,26 +1255,43 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False):
     #   this assumes that mot1 was the continuously moving motor
     if snake is True:
         print("Interpolating image for motor positions...", end=" ")
-        pos_low = min(mot1[:,0])
-        pos_high = max(mot1[:,0])
-        for i in range(0, mot1[:,0].size): #correct for half a pixel shift
-            if mot1[i,0] <= np.average((pos_high,pos_low)):
-                mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
-            else:
-                mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
-        mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
-        mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
+        if timetriggered is False:
+            pos_low = min(mot1[:,0])
+            pos_high = max(mot1[:,0])
+            for i in range(0, mot1[:,0].size): #correct for half a pixel shift
+                if mot1[i,0] <= np.average((pos_high,pos_low)):
+                    mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
+                else:
+                    mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
+            mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
+            mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
+            ims0_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
+            if chan02_flag:
+                ims2_tmp = np.zeros((ims2.shape[0], ims2.shape[1], ims2.shape[2]))
+        if timetriggered is True:
+            # correct positions for half pixel shift
+            mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
+            # based on cmd determine regular grid positions
+            mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(cmd[4]))
+            mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(cmd[8])) 
+            if cmd[0] == "b'cdmesh":
+                mot1_pos = mot1_pos - (mot1_pos[0] - mot1[0,0])
+                mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
+            ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
+            if chan02_flag:
+                ims2_tmp = np.zeros((ims2.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
+        # interpolate to the regular grid motor positions
         mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size),
                 mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
         x = mot1.ravel()
         y = mot2.ravel()
         for i in range(names0.size):
             values = ims0[i,:,:].ravel()
-            ims0[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
         if chan02_flag:
             for i in range(names2.size):
                 values = ims2[i,:,:].ravel()
-                ims2[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                ims2_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
         print("Done")
     
     # save normalised data
@@ -1051,12 +1348,20 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
     sumspec0 = file['raw/channel00/sumspec']
     icr0 = np.array(file['raw/channel00/icr'])
     ocr0 = np.array(file['raw/channel00/ocr'])
+    if len(spectra0.shape) == 2:
+        spectra0 = np.array(spectra0).reshape((spectra0.shape[0], 1, spectra0.shape[1]))
+        icr0 = np.array(icr0).reshape((icr0.shape[0], 1))
+        ocr0 = np.array(ocr0).reshape((ocr0.shape[0], 1))
     try:
         spectra2 = file['raw/channel02/spectra']
         nchannels2 = spectra2.shape[2]
         sumspec2 = file['raw/channel02/sumspec']
         icr2 = np.array(file['raw/channel02/icr'])
         ocr2 = np.array(file['raw/channel02/ocr'])
+        if len(spectra2.shape) == 2:
+            spectra2 = np.array(spectra2).reshape((spectra2.shape[0], 1, spectra2.shape[1]))
+            icr2 = np.array(icr2).reshape((icr2.shape[0], 1))
+            ocr2 = np.array(ocr2).reshape((ocr2.shape[0], 1))
         chan02_flag = True
     except:
         chan02_flag = False
@@ -1078,6 +1383,9 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
     # work PyMca's magic!
     t0 = time.time()
     print("Initiating fit of <"+h5file+"> using model(s) <"+cfglist+">...", end=" ")
+    n_spectra = round(spectra0.size/nchannels0, 0)
+    if chan02_flag:
+        n_spectra += round(spectra2.size/nchannels2, 0)
     if standard is None:
         # read and set PyMca configuration for channel00
         fastfit = FastXRFLinearFit.FastXRFLinearFit()
@@ -1099,7 +1407,6 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
         fitresult0_sum, result0_sum = mcafit.startfit(digest=1)
         sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
         sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
-        nspectra = spectra0.shape[0]*spectra0.shape[1]
 
         if chan02_flag:
             # read and set PyMca configuration for channel02
@@ -1122,12 +1429,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             fitresult2_sum, result2_sum = mcafit.startfit(digest=1)
             sum_fit2 = [result2_sum[peak]["fitarea"] for peak in result2_sum["groups"]]
             sum_bkg2 = [result2_sum[peak]["statistics"]-result2_sum[peak]["fitarea"] for peak in result2_sum["groups"]]
-            nspectra += spectra2.shape[0]+spectra2.shape[1]
 
         print("Done")
-        n_spectra = round(spectra0.size/nchannels0, 0)
-        if chan02_flag:
-            n_spectra += round(spectra2.size/nchannels2, 0)
         # actual fit results are contained in fitresults['parameters']
         #   labels of the elements are fitresults.labels("parameters"), first # are 'A0, A1, A2' of polynomial background, which we don't need
         peak_int0 = np.array(fitresults0['parameters'])
@@ -1164,8 +1467,10 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             ncores = multiprocessing.cpu_count()-1
         print("Using "+str(ncores)+" cores...")
         pool = multiprocessing.Pool(processes=ncores)
-        results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit),
-                                np.array(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))))
+        spec_chansum = np.sum(spectra0, axis=2)
+        spec2fit_id = np.array(np.where(spec_chansum > 0.)).ravel()
+        spec2fit = np.array(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))[spec2fit_id,:]
+        results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit), spec2fit))
         results = list(results)
         groups = list(groups)
         if groups[0] is None: #first element could be None, so let's search for first not-None item.
@@ -1177,16 +1482,10 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
         if none_id != []:
             for i in range(0, np.array(none_id).size):
                 results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
-        results = np.array(results).reshape((spectra0.shape[0], spectra0.shape[1], np.array(groups[0]).shape[0]))
-        peak_int0 = np.zeros((np.array(groups[0]).shape[0], spectra0.shape[0], spectra0.shape[1]))
-        for i in range(0, spectra0.shape[0]):
-            for j in range(0, spectra0.shape[1]):
-                for k in range(0, np.array(groups[0]).shape[0]):
-                    if results[i,j] is not None:
-                        peak_int0[k,i,j] = results[i,j,k]
-                    else:
-                        peak_int0[k,i,j] = 0
-
+        peak_int0 = np.zeros((spectra0.shape[0]*spectra0.shape[1], np.array(groups[0]).shape[0]))
+        peak_int0[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
+        peak_int0 = np.moveaxis(peak_int0.reshape((spectra0.shape[0], spectra0.shape[1], np.array(groups[0]).shape[0])),-1,0)
+        peak_int0[np.isnan(peak_int0)] = 0.
         pool.close()
         pool.join()
         
@@ -1203,7 +1502,6 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
                 cutid0 = i+1
         sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
         sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
-        nspectra = spectra0.shape[0]*spectra0.shape[1]
 
         if chan02_flag:
             # channel02
@@ -1213,8 +1511,10 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             mcafit = ClassMcaTheory.ClassMcaTheory()
             mcafit.configure(config)
             pool = multiprocessing.Pool()
-            results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit),
-                                    np.array(spectra2).reshape((spectra2.shape[0]*spectra2.shape[1], spectra2.shape[2]))))
+            spec_chansum = np.sum(spectra2, axis=2)
+            spec2fit_id = np.array(np.where(spec_chansum > 0.)).ravel()
+            spec2fit = np.array(spectra2).reshape((spectra2.shape[0]*spectra2.shape[1], spectra2.shape[2]))[spec2fit_id,:]
+            results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit), spec2fit))
             results = list(results)
             groups = list(groups)
             if groups[0] is None: #first element could be None, so let's search for first not-None item.
@@ -1226,15 +1526,10 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             if none_id != []:
                 for i in range(0, np.array(none_id).size):
                     results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
-            results = np.array(results).reshape((spectra2.shape[0], spectra2.shape[1], np.array(groups[0]).shape[0]))
-            peak_int2 = np.zeros((np.array(groups[0]).shape[0], spectra2.shape[0], spectra2.shape[1]))
-            for i in range(0, spectra2.shape[0]):
-                for j in range(0, spectra2.shape[1]):
-                    for k in range(0, np.array(groups[0]).shape[0]):
-                        if results[i,j] is not None:
-                            peak_int2[k,i,j] = results[i,j,k]
-                        else:
-                            peak_int2[k,i,j] = 0
+            peak_int2 = np.zeros((spectra2.shape[0]*spectra2.shape[1], np.array(groups[0]).shape[0]))
+            peak_int2[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
+            peak_int2 = np.moveaxis(peak_int2.reshape((spectra2.shape[0], spectra2.shape[1], np.array(groups[0]).shape[0])),-1,0)
+            peak_int2[np.isnan(peak_int2)] = 0.
             pool.close()
             pool.join()
 
@@ -1251,8 +1546,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
                     cutid2 = i+1
             sum_fit2 = [result2_sum[peak]["fitarea"] for peak in result2_sum["groups"]]
             sum_bkg2 = [result2_sum[peak]["statistics"]-result2_sum[peak]["fitarea"] for peak in result2_sum["groups"]]
-            nspectra += spectra2.shape[0]+spectra2.shape[1]
-    print("Fit finished after "+str(time.time()-t0)+" seconds for "+str(nspectra)+" spectra.")
+    print("Fit finished after "+str(time.time()-t0)+" seconds for "+str(n_spectra)+" spectra.")
 
     ims0 = peak_int0[cutid0:,:,:]
     if chan02_flag:
@@ -1265,8 +1559,10 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
         if chan02_flag:
             ims2[i,:,:] = ims2[i,:,:] * icr2/ocr2
     sumspec0 = sumspec0*np.sum(icr0)/np.sum(ocr0)
+    ims0 = np.squeeze(ims0)
     if chan02_flag:
         sumspec2 = sumspec2*np.sum(icr2)/np.sum(ocr2)
+        ims2 = np.squeeze(ims2)
 
     # save the fitted data
     print("Writing fit data to "+h5file+"...", end=" ")
@@ -1337,6 +1633,121 @@ def MergeP06Nxs(scanid, sort=True):
         scan_cmd = np.array(scan_cmd.strip("[]'").split(" "))
         print(' '.join(scan_cmd))
         f.close()
+
+        spectra0 = []
+        icr0 = []
+        ocr0 = []
+        spectra2 = []
+        icr2 = []
+        ocr2 = []
+        i0 = []
+        tm = []
+        mot1 = []
+        mot2 = []
+        files = list("")
+        # actual spectrum scan files are in dir scanid/scan_0XXX/xspress3_01
+        for file in sorted(os.listdir(sc_id+"/xspress3_01")):
+            if file.endswith(".nxs"):
+                files.append(file)
+        for file in files:
+            # Reading the spectra files, icr and ocr
+            print("Reading " +sc_id+"/xspress3_01/"+file +"...", end=" ")
+            f = h5py.File(sc_id+"/xspress3_01/"+file, 'r')
+            spe0_arr = f['entry/instrument/xspress3/channel00/histogram']
+            icr0_arr = f['entry/instrument/xspress3/channel00/scaler/allEvent']
+            ocr0_arr = f['entry/instrument/xspress3/channel00/scaler/allGood']
+            spe2_arr = f['entry/instrument/xspress3/channel02/histogram']
+            icr2_arr = f['entry/instrument/xspress3/channel02/scaler/allEvent']
+            ocr2_arr = f['entry/instrument/xspress3/channel02/scaler/allGood']
+            for i in range(spe0_arr.shape[0]):
+                spectra0.append(spe0_arr[i,:])
+                icr0.append(icr0_arr[i])
+                ocr0.append(ocr0_arr[i])
+                spectra2.append(spe2_arr[i,:])
+                icr2.append(icr2_arr[i])
+                ocr2.append(ocr2_arr[i])
+            f.close()
+            print("read")
+        for file in files:
+            # Reading I0 and measurement time data
+            print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
+            f = h5py.File(sc_id+"/adc01/"+file, 'r')
+            i0_arr = f['entry/data/value1']
+            tm_arr = f['entry/data/exposuretime']
+            for i in range(i0_arr.shape[0]):
+                i0.append(i0_arr[i])
+                tm.append(tm_arr[i])
+            f.close()
+            print("read")
+        # actual pilcgenerator files can be different structure depending on type of scan
+        files = list("")
+        try:
+            for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_01")):
+                if file.endswith(".nxs"):
+                    files.append(file)
+            pilcid = "/pilctriggergenerator_01/"
+        except:
+            for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_02")):
+                if file.endswith(".nxs"):
+                    files.append(file)
+            pilcid = "/pilctriggergenerator_02/"
+        try:
+            md_dict = {}
+            with open("/".join(sc_id.split("/")[0:-2])+"/scan_logbook.txt", "r") as file_handle:
+                raw_data = file_handle.readlines()
+                for scan_entry in raw_data:
+                    tmp_dict = eval(scan_entry)
+                    md_dict[tmp_dict['scan']['scan_prefix']] = tmp_dict
+                dictionary = md_dict[sc_id.split('/')[-1]]
+        except:
+            dictionary = md_dict
+        for file in files:
+            # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
+            print("Reading " +sc_id+"/pilctriggergenerator_01/"+file +"...", end=" ")
+            f = h5py.File(sc_id+"/pilctriggergenerator_01/"+file, 'r')
+            enc_vals = []
+            for i in range(10):
+                if 'encoder_'+str(i) in list(f['entry/data'].keys()):
+                    enc_vals.append(f['entry/data/encoder_'+str(i)])
+            enc_names = [str(enc.attrs["Name"]).strip("'") for enc in enc_vals]
+            if scan_cmd[1] in enc_names:
+                mot1_arr = enc_vals[enc_names.index(scan_cmd[1])]
+                mot1_name = enc_names[enc_names.index(scan_cmd[1])]
+            else: # in this case the motor in not in the encoder list, so could be a virtual motor... let's look in the accompanying python logbook
+                try:
+                    pivot = dictionary["axes"]["axis0"]["virtual_motor_config"]["pivot_points"]
+                    mot_list = list(dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"].keys())
+                    mot1a = enc_vals[enc_names.index(mot_list[0])]
+                    mot1a_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
+                    mot1b = enc_vals[enc_names.index(mot_list[1])]
+                    mot1b_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
+                    mot1_arr = mot2a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
+                    mot1_name = str(scan_cmd[5])
+                except:
+                    mot2_arr = enc_vals[1]
+                    mot2_name = enc_names[1]
+            if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
+                mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
+                mot2_name = enc_names[enc_names.index(scan_cmd[5])]
+            else:
+                try:
+                    pivot = dictionary["axes"]["axis1"]["virtual_motor_config"]["pivot_points"]
+                    mot_list = list(dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"].keys())
+                    mot2a = enc_vals[enc_names.index(mot_list[0])]
+                    mot2a_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
+                    mot2b = enc_vals[enc_names.index(mot_list[1])]
+                    mot2b_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
+                    mot2_arr = mot2a_contrib*(np.array(mot2a)-pivot[0])+mot2b_contrib*(np.array(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
+                    mot2_name = str(scan_cmd[5])
+                except:
+                    mot2_arr = enc_vals[1]
+                    mot2_name = enc_names[1]
+            for i in range(mot1_arr.shape[0]):
+                mot1.append(mot1_arr[i])
+                mot2.append(mot2_arr[i])
+            f.close()
+            print("read")
+        # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.array
         # let's translate scan command to figure out array dimensions we want to fill
         #   1D scan (ascan, dscan, timescan, ...) contain 7 parts, i.e. dscan samx 0 1 10 1 False
         #       sometimes False at end appears to be missing
@@ -1349,104 +1760,34 @@ def MergeP06Nxs(scanid, sort=True):
         else:
             xdim = int(scan_cmd[4])+1
         ydim = 1
-        if(scan_cmd.shape[0] == 7 or scan_cmd.shape[0] == 6):
-            ydim = 1
-        elif scan_cmd.shape[0] > 7:
-            if scan_cmd[0][0] == 'c':
-                ydim = int(scan_cmd[8])+1
-            else:
-                ydim = int(scan_cmd[8])+1
-        files = list("")
-        spectra0 = np.zeros((xdim, ydim, 4096))
-        icr0 = np.zeros((xdim, ydim))
-        ocr0 = np.zeros((xdim, ydim))
-        spectra2 = np.zeros((xdim, ydim, 4096))
-        icr2 = np.zeros((xdim, ydim))
-        ocr2 = np.zeros((xdim, ydim))
-        i0 = np.zeros((xdim, ydim))
-        tm = np.zeros((xdim, ydim))
-        mot1 = np.zeros((xdim, ydim))
-        mot2 = np.zeros((xdim, ydim))
-        # actual spectrum scan files are in dir scanid/scan_0XXX/xspress3_01
-        for file in sorted(os.listdir(sc_id+"/xspress3_01")):
-            if file.endswith(".nxs"):
-                files.append(file)
-        xid = 0 #some counters to follow array index
-        yid = 0
-        for file in files:
-            # Reading the spectra files, icr and ocr
-            print("Reading " +sc_id+"/xspress3_01/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/xspress3_01/"+file, 'r')
-            spe0_arr = f['entry/instrument/xspress3/channel00/histogram']
-            icr0_arr = f['entry/instrument/xspress3/channel00/scaler/allEvent']
-            ocr0_arr = f['entry/instrument/xspress3/channel00/scaler/allGood']
-            spe2_arr = f['entry/instrument/xspress3/channel02/histogram']
-            icr2_arr = f['entry/instrument/xspress3/channel02/scaler/allEvent']
-            ocr2_arr = f['entry/instrument/xspress3/channel02/scaler/allGood']
-            for i in range(spe0_arr.shape[0]):
-                spectra0[xid, yid, :] = spe0_arr[i,:]
-                icr0[xid, yid] = icr0_arr[i]
-                ocr0[xid, yid] = ocr0_arr[i]
-                spectra2[xid, yid, :] = spe2_arr[i,:]
-                icr2[xid, yid] = icr2_arr[i]
-                ocr2[xid, yid] = ocr2_arr[i]
-                xid += 1
-                if xid >= xdim:
-                    xid = 0
-                    yid += 1
-            f.close()
-            print("read")
-        xid = 0 #some counters to follow array index
-        yid = 0
-        for file in files:
-            # Reading I0 and measurement time data
-            print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/adc01/"+file, 'r')
-            i0_arr = f['entry/data/value1']
-            tm_arr = f['entry/data/exposuretime']
-            for i in range(i0_arr.shape[0]):
-                i0[xid, yid] = i0_arr[i]
-                tm[xid, yid] = tm_arr[i]
-                xid += 1
-                if xid >= xdim:
-                    xid = 0
-                    yid += 1
-            f.close()
-            print("read")
-        # actual pilcgenerator files can be different structure depending on type of scan
-        files = list("")
-        for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_01")):
-            if file.endswith(".nxs"):
-                files.append(file)
-        xid = 0 #some counters to follow array index
-        yid = 0
-        for file in files:
-            # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
-            print("Reading " +sc_id+"/pilctriggergenerator_01/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/pilctriggergenerator_01/"+file, 'r')
-            enc_vals = [f['entry/data/encoder_1'],f['entry/data/encoder_2'],f['entry/data/encoder_3'],f['entry/data/encoder_4']]
-            enc_names = [str(enc.attrs["Name"]).strip("'") for enc in enc_vals]
-            if scan_cmd[1] in enc_names:
-                mot1_arr = enc_vals[enc_names.index(scan_cmd[1])]
-                mot1_name = enc_names[enc_names.index(scan_cmd[1])]
-            else:
-                mot1_arr = enc_vals[0]
-                mot1_name = enc_names[0]
-            if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
-                mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
-                mot2_name = enc_names[enc_names.index(scan_cmd[5])]
-            else:
-                mot2_arr = enc_vals[1]
-                mot2_name = enc_names[1]
-            for i in range(mot1_arr.shape[0]):
-                mot1[xid, yid] = mot1_arr[i]
-                mot2[xid, yid] = mot2_arr[i]
-                xid += 1
-                if xid >= xdim:
-                    xid = 0
-                    yid += 1
-            f.close()
-            print("read")
+        if scan_cmd.shape[0] > 7:
+            ydim = int(scan_cmd[8])+1
+        if spectra0.shape[0] == xdim*ydim:
+            spectra0 = np.array(spectra0).reshape((xdim, ydim, spectra0.shape[1]))
+            icr0 = np.array(icr0).reshape((xdim, ydim))
+            ocr0 = np.array(ocr0).reshape((xdim, ydim))
+            spectra2 = np.array(spectra2).reshape((xdim, ydim, spectra2.shape[1]))
+            icr2 = np.array(icr2).reshape((xdim, ydim))
+            ocr2 = np.array(ocr2).reshape((xdim, ydim))
+            i0 = np.array(i0).reshape((xdim, ydim))
+            tm = np.array(tm).reshape((xdim, ydim))
+            mot1 = np.array(mot1).reshape((xdim, ydim))
+            mot2 = np.array(mot2).reshape((xdim, ydim))
+            timetrig = False
+        else:            
+            spectra0 = np.array(spectra0)
+            icr0 = np.array(icr0)
+            ocr0 = np.array(ocr0)
+            spectra2 = np.array(spectra2)
+            icr2 = np.array(icr2)
+            ocr2 = np.array(ocr2)
+            i0 = np.array(i0)
+            tm = np.array(tm)
+            mot1 = np.array(mot1)
+            mot2 = np.array(mot2)
+            # in this case we should never sort or flip data
+            sort = False
+            timetrig = True
         # store data arrays so they can be concatenated in case of multiple scans
         if k == 0:
             spectra0_tmp = spectra0
@@ -1514,36 +1855,46 @@ def MergeP06Nxs(scanid, sort=True):
             tm[i,:] = tm[i,sort_id]
 
     # flip and rotate the data so images are oriented as sample on beamline (up=up, left=left, ... when looking downstream)
-    spectra0 = np.flip(spectra0, 0)
-    icr0 = np.flip(icr0, 0)
-    ocr0 = np.flip(ocr0, 0)
-    spectra2 = np.flip(spectra2, 0)
-    icr2 = np.flip(icr2, 0)
-    ocr2 = np.flip(ocr2, 0)
-    mot1 = np.flip(mot1, 0)
-    mot2 = np.flip(mot2, 0)
-    i0 = np.flip(i0, 0)
-    tm = np.flip(tm, 0)
-    spectra0 = np.rot90(spectra0, 3, (0,1))
-    icr0 = np.rot90(icr0, 3)
-    ocr0 = np.rot90(ocr0, 3)
-    spectra2 = np.rot90(spectra2, 3, (0,1))
-    icr2 = np.rot90(icr2, 3)
-    ocr2 = np.rot90(ocr2, 3)
-    mot1 = np.rot90(mot1, 3)
-    mot2 = np.rot90(mot2, 3)
-    i0 = np.rot90(i0, 3)
-    tm = np.rot90(tm, 3)
-    
+    # also calculate sumspec and maxspec spectra
+    if timetrig is False:
+        spectra0 = np.flip(spectra0, 0)
+        icr0 = np.flip(icr0, 0)
+        ocr0 = np.flip(ocr0, 0)
+        spectra2 = np.flip(spectra2, 0)
+        icr2 = np.flip(icr2, 0)
+        ocr2 = np.flip(ocr2, 0)
+        mot1 = np.flip(mot1, 0)
+        mot2 = np.flip(mot2, 0)
+        i0 = np.flip(i0, 0)
+        tm = np.flip(tm, 0)
+        spectra0 = np.rot90(spectra0, 3, (0,1))
+        icr0 = np.rot90(icr0, 3)
+        ocr0 = np.rot90(ocr0, 3)
+        spectra2 = np.rot90(spectra2, 3, (0,1))
+        icr2 = np.rot90(icr2, 3)
+        ocr2 = np.rot90(ocr2, 3)
+        mot1 = np.rot90(mot1, 3)
+        mot2 = np.rot90(mot2, 3)
+        i0 = np.rot90(i0, 3)
+        tm = np.rot90(tm, 3)
+        sumspec0 = np.sum(spectra0[:], axis=(0,1))
+        sumspec2 = np.sum(spectra2[:], axis=(0,1))
+        maxspec0 = np.zeros(sumspec0.shape[0])
+        for i in range(sumspec0.shape[0]):
+            maxspec0[i] = spectra0[:,:,i].max()
+        maxspec2 = np.zeros(sumspec2.shape[0])
+        for i in range(sumspec2.shape[0]):
+            maxspec2[i] = spectra2[:,:,i].max()
+    else:
+        sumspec0 = np.sum(spectra0[:], axis=(0))
+        sumspec2 = np.sum(spectra2[:], axis=(0))
+        maxspec0 = np.zeros(sumspec0.shape[0])
+        for i in range(sumspec0.shape[0]):
+            maxspec0[i] = spectra0[:,i].max()
+        maxspec2 = np.zeros(sumspec2.shape[0])
+        for i in range(sumspec2.shape[0]):
+            maxspec2[i] = spectra2[:,i].max()
     # Hooray! We read all the information! Let's write it to a separate file
-    sumspec0 = np.sum(spectra0[:], axis=(0,1))
-    sumspec2 = np.sum(spectra2[:], axis=(0,1))
-    maxspec0 = np.zeros(sumspec0.shape[0])
-    for i in range(sumspec0.shape[0]):
-        maxspec0[i] = spectra0[:,:,i].max()
-    maxspec2 = np.zeros(sumspec2.shape[0])
-    for i in range(sumspec2.shape[0]):
-        maxspec2[i] = spectra2[:,:,i].max()
     print("Writing merged file: "+scan_suffix+"_merge.h5...", end=" ")
     f = h5py.File(scan_suffix+"_merge.h5", 'w')
     f.create_dataset('cmd', data=' '.join(scan_cmd))
