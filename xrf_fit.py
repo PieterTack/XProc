@@ -435,7 +435,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         except:
             config.read('/'.join(h5file.split('/')[0:-1])+'/'+h5_cfg.split('/')[-1])
         cfg = [config['detector']['zero'], config['detector']['gain']]
-        absorb_el = np.array(absorb[0])
+        absorb_el = absorb[0]
         try:
             import xraylib
             # calculate absorption coefficient for each element/energy in names
@@ -451,11 +451,11 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     line = 'M5N7_line' #Ma1
                 for i in range(0, len(cnc.z)):
                     mu[n] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
-            mu_ka1 = np.zeros(absorb_el.size)
-            mu_kb1 = np.zeros(absorb_el.size)
-            rate_ka1 = np.zeros(absorb_el.size)
-            rate_kb1 = np.zeros(absorb_el.size)
-            for j in range(absorb_el.size):
+            mu_ka1 = np.zeros(len(absorb_el))
+            mu_kb1 = np.zeros(len(absorb_el))
+            rate_ka1 = np.zeros(len(absorb_el))
+            rate_kb1 = np.zeros(len(absorb_el))
+            for j in range(len(absorb_el)):
                 for i in range(0, len(cnc.z)):
                     mu_ka1[j] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),'KL3_line')) * cnc.conc[i]/1E6
                     mu_kb1[j] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),'KM3_line')) * cnc.conc[i]/1E6
@@ -476,19 +476,19 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     line = 'M5N7' #Ma1
                 for i in range(0, len(cnc.z)):
                     mu[n] += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(el, line))['total'][0] * cnc.conc[i]/1E6
-            mu_ka1 = np.zeros(absorb_el.size)
-            mu_kb1 = np.zeros(absorb_el.size)
-            rate_ka1 = np.zeros(absorb_el.size)
-            rate_kb1 = np.zeros(absorb_el.size)
-            for j in range(absorb_el.size):
+            mu_ka1 = np.zeros(len(absorb_el))
+            mu_kb1 = np.zeros(len(absorb_el))
+            rate_ka1 = np.zeros(len(absorb_el))
+            rate_kb1 = np.zeros(len(absorb_el))
+            for j in range(len(absorb_el)):
                 for i in range(0, len(cnc.z)):
                     mu_ka1[j] += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(absorb_el[j],'KL3'))['total'][0] * cnc.conc[i]/1E6
                     mu_kb1[j] += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(absorb_el[j],'KM3'))['total'][0] * cnc.conc[i]/1E6
                 # determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
                 rate_ka1[j] = Elements._getUnfilteredElementDict(absorb_el[j], None)['KL3']['rate']
                 rate_kb1[j] = Elements._getUnfilteredElementDict(absorb_el[j], None)['KM3']['rate']
-        rhot = np.zeros((absorb_el.size, ims.shape[1], ims.shape[2]))
-        for j in range(absorb_el.size):
+        rhot = np.zeros((len(absorb_el), ims.shape[1], ims.shape[2]))
+        for j in range(len(absorb_el)):
             # calculate Ka-Kb ratio for each experimental spectrum
                 # Ka1 and Kb1 channel number
             idx_ka1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KL3'))[-1])
