@@ -1703,8 +1703,8 @@ def MergeP06Nxs(scanid, sort=True):
             dictionary = md_dict
         for file in files:
             # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
-            print("Reading " +sc_id+"/pilctriggergenerator_01/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/pilctriggergenerator_01/"+file, 'r')
+            print("Reading " +sc_id+pilcid+file +"...", end=" ")
+            f = h5py.File(sc_id+pilcid+file, 'r')
             enc_vals = []
             for i in range(10):
                 if 'encoder_'+str(i) in list(f['entry/data'].keys()):
@@ -1724,8 +1724,8 @@ def MergeP06Nxs(scanid, sort=True):
                     mot1_arr = mot2a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                     mot1_name = str(scan_cmd[5])
                 except:
-                    mot2_arr = enc_vals[1]
-                    mot2_name = enc_names[1]
+                    mot1_arr = enc_vals[0]
+                    mot1_name = enc_names[0]
             if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
                 mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
                 mot2_name = enc_names[enc_names.index(scan_cmd[5])]
