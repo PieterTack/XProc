@@ -10,7 +10,6 @@ from PyMca5.PyMcaPhysics.xrf import Elements
 from PyMca5.PyMcaIO import ConfigDict
 import plotims
 import numpy as np
-from scipy.interpolate import interp2d
 from scipy.interpolate import griddata
 import h5py
 import os
@@ -80,7 +79,6 @@ def PCA(rawdata, nclusters=5, el_id=None):
         data = data[:, el_id]
     
     data[np.isnan(data)] = 0.
-    m, n = data.shape
     # mean center the data
     data -= data.mean(axis=0)
     data = data/data.std(axis=0)
@@ -140,8 +138,8 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=None):
         del file['PCA/'+channel+'/names']
         del file['PCA/'+channel+'/RVE']
         del file['PCA/'+channel+'/loadings']
-    except:
-        None
+    except Exception:
+        pass
     if el_id is not None:
         file.create_dataset('PCA/'+channel+'/el_id', data=[n.encode('utf8') for n in names[el_id]])
     else:
@@ -171,8 +169,8 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=None):
             del file['kmeans/'+channel+'/el_id']
             for i in range(nclusters):
                 del file['kmeans/'+channel+'/sumspec_'+str(i)]
-        except:
-            None
+        except Exception:
+            pass
         file.create_dataset('kmeans/'+channel+'/nclusters', data=nclusters)
         file.create_dataset('kmeans/'+channel+'/data_dir_clustered', data=('PCA/'+channel+'/ims').encode('utf8'))
         file.create_dataset('kmeans/'+channel+'/ims', data=clusters, compression='gzip', compression_opts=4)
@@ -246,8 +244,8 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
         del file['kmeans/'+channel+'/el_id']
         for i in range(nclusters):
             del file['kmeans/'+channel+'/sumspec_'+str(i)]
-    except:
-        None
+    except Exception:
+        pass
     file.create_dataset('kmeans/'+channel+'/nclusters', data=nclusters)
     file.create_dataset('kmeans/'+channel+'/data_dir_clustered', data=h5dir.encode('utf8'))
     file.create_dataset('kmeans/'+channel+'/ims', data=clusters, compression='gzip', compression_opts=4)
@@ -298,8 +296,8 @@ def div_by_cnc(h5file, cncfile, channel=None):
         del file['rel_dif/'+channel+'/names']
         del file['rel_dif/'+channel+'/ims']
         del file['rel_dif/'+channel+'/cnc']
-    except:
-        None
+    except Exception:
+        pass
     file.create_dataset('rel_dif/'+channel+'/names', data=[n.encode('utf8') for n in rel_names])
     file.create_dataset('rel_dif/'+channel+'/ims', data=rel_diff, compression='gzip', compression_opts=4)
     file.create_dataset('rel_dif/'+channel+'/cnc', data=cncfile.split("/")[-1].encode('utf8'))
@@ -432,7 +430,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         config = ConfigDict.ConfigDict()
         try:
             config.read(h5_cfg)
-        except:
+        except Exception:
             config.read('/'.join(h5file.split('/')[0:-1])+'/'+h5_cfg.split('/')[-1])
         cfg = [config['detector']['zero'], config['detector']['gain']]
         absorb_el = absorb[0]
@@ -601,8 +599,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         del file['quant/'+channel+'/ratio_exp']
         del file['quant/'+channel+'/ratio_th']
         del file['quant/'+channel+'/rhot']
-    except:
-        None
+    except Exception:
+        pass
     file.create_dataset('quant/'+channel+'/names', data=[n.encode('utf8') for n in names])
     file.create_dataset('quant/'+channel+'/ims', data=ims, compression='gzip', compression_opts=4)
     if reffiles.size > 1:
@@ -946,12 +944,12 @@ def calc_detlim(h5file, cncfile):
             sum_bkg2 = np.array(file['norm/channel02/sum/bkg'])
             names2 = file['norm/channel02/names']
             chan02_flag = True
-        except:
+        except Exception:
             chan02_flag = False
         tm = np.array(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
         I0 = np.array(file['raw/I0'])
         I0norm = np.array(file['norm/I0'])
-    except:
+    except Exception:
         print("ERROR: calc_detlim: cannot open normalised data in "+h5file)
         return
     
@@ -1033,8 +1031,8 @@ def calc_detlim(h5file, cncfile):
     cncfile = cncfile.split("/")[-1]
     try:
         del file['detlim/'+cncfile+'/unit']
-    except:
-        None
+    except Exception:
+        pass
     file.create_dataset('detlim/'+cncfile+'/unit', data='ppm')
     try:
         del file['detlim/'+cncfile+'/channel00/names']
@@ -1045,8 +1043,8 @@ def calc_detlim(h5file, cncfile):
         del file['elyield/'+cncfile+'/channel00/yield']
         del file['elyield/'+cncfile+'/channel00/stddev']
         del file['elyield/'+cncfile+'/channel00/names']
-    except:
-        None
+    except Exception:
+        pass
     file.create_dataset('detlim/'+cncfile+'/channel00/names', data=[n.encode('utf8') for n in names0_mod[:]])
     file.create_dataset('detlim/'+cncfile+'/channel00/1s/data', data=dl_1s_0, compression='gzip', compression_opts=4)
     file.create_dataset('detlim/'+cncfile+'/channel00/1s/stddev', data=dl_1s_err_0, compression='gzip', compression_opts=4)
@@ -1067,8 +1065,8 @@ def calc_detlim(h5file, cncfile):
             del file['elyield/'+cncfile+'/channel02/yield']
             del file['elyield/'+cncfile+'/channel02/stddev']
             del file['elyield/'+cncfile+'/channel02/names']
-        except:
-            None
+        except Exception:
+            pass
         file.create_dataset('detlim/'+cncfile+'/channel02/names', data=[n.encode('utf8') for n in names2_mod[:]])
         file.create_dataset('detlim/'+cncfile+'/channel02/1s/data', data=dl_1s_2, compression='gzip', compression_opts=4)
         file.create_dataset('detlim/'+cncfile+'/channel02/1s/stddev', data=dl_1s_err_2, compression='gzip', compression_opts=4)
@@ -1111,7 +1109,7 @@ def hdf_overview_images(h5file, ncols, pix_size, scl_size, log=False):
             chan02_flag = True
             if log:
                 imsdata2.data = np.log10(imsdata2.data)
-    except:
+    except Exception:
         chan02_flag = False
  
     sb_opts = plotims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
@@ -1173,7 +1171,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         sum_fit2 = np.array(file['fit/channel02/sum/int'])
         sum_bkg2 = np.array(file['fit/channel02/sum/bkg'])
         chan02_flag = True
-    except:
+    except Exception:
         chan02_flag = False
     
     # set I0 value to normalise to
@@ -1218,8 +1216,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             del file['raw/acquisition_time']
             if chan02_flag:
                 del file['fit/channel02/ims']
-        except:
-            None
+        except Exception:
+            pass
         file.create_dataset('fit/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
         file.create_dataset('raw/I0', data=I0, compression='gzip', compression_opts=4)
         dset = file.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
@@ -1302,8 +1300,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         del file['norm/channel00/names']
         del file['norm/channel00/sum/int']
         del file['norm/channel00/sum/bkg']
-    except:
-        None
+    except Exception:
+        pass
     file.create_dataset('norm/I0', data=normto)
     file.create_dataset('norm/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
     file.create_dataset('norm/channel00/names', data=names0)
@@ -1315,8 +1313,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             del file['norm/channel02/names']
             del file['norm/channel02/sum/int']
             del file['norm/channel02/sum/bkg']
-        except:
-            None
+        except Exception:
+            pass
         file.create_dataset('norm/channel02/ims', data=ims2, compression='gzip', compression_opts=4)
         file.create_dataset('norm/channel02/names', data=names2)
         file.create_dataset('norm/channel02/sum/int', data=sum_fit2, compression='gzip', compression_opts=4)
@@ -1363,7 +1361,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             icr2 = np.array(icr2).reshape((icr2.shape[0], 1))
             ocr2 = np.array(ocr2).reshape((ocr2.shape[0], 1))
         chan02_flag = True
-    except:
+    except Exception:
         chan02_flag = False
 
     # First correct specscan00188_merge.h5tra for icr/ocr
@@ -1391,7 +1389,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
         fastfit = FastXRFLinearFit.FastXRFLinearFit()
         try: 
             fastfit.setFitConfigurationFile(cfg0)
-        except:
+        except Exception:
             print("-----------------------------------------------------------------------------")
             print("Error: %s is not a valid PyMca configuration file." % cfg0)
             print("-----------------------------------------------------------------------------")
@@ -1413,7 +1411,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             fastfit = FastXRFLinearFit.FastXRFLinearFit()
             try: 
                 fastfit.setFitConfigurationFile(cfg2)
-            except:
+            except Exception:
                 print("-----------------------------------------------------------------------------")
                 print("Error: %s is not a valid PyMca configuration file." % cfg2)
                 print("-----------------------------------------------------------------------------")
@@ -1478,7 +1476,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
                 if groups[i] is not None:
                     groups[0] = groups[i]
                     break
-        none_id = [i for i, x in enumerate(results) if x == None]
+        none_id = [i for i, x in enumerate(results) if x is None]
         if none_id != []:
             for i in range(0, np.array(none_id).size):
                 results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
@@ -1522,7 +1520,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
                     if groups[i] is not None:
                         groups[0] = groups[i]
                         break
-            none_id = [i for i, x in enumerate(results) if x == None]
+            none_id = [i for i, x in enumerate(results) if x is None]
             if none_id != []:
                 for i in range(0, np.array(none_id).size):
                     results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
@@ -1537,7 +1535,6 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             mcafit.setData(range(0,nchannels2), sumspec2)
             mcafit.estimate()
             fitresult2_sum, result2_sum = mcafit.startfit(digest=1)
-            names2 = result2_sum["groups"]
             names2 = [n.replace('Scatter Peak000', 'Rayl') for n in result2_sum["groups"]]
             names2 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names2])
             cutid2 = 0
@@ -1558,10 +1555,12 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
         ims0[i,:,:] = ims0[i,:,:] * icr0/ocr0
         if chan02_flag:
             ims2[i,:,:] = ims2[i,:,:] * icr2/ocr2
-    sumspec0 = sumspec0*np.sum(icr0)/np.sum(ocr0)
+    sum_fit0 = sum_fit0*np.sum(icr0)/np.sum(ocr0)
+    sum_bkg0 = sum_bkg0*np.sum(icr0)/np.sum(ocr0)
     ims0 = np.squeeze(ims0)
     if chan02_flag:
-        sumspec2 = sumspec2*np.sum(icr2)/np.sum(ocr2)
+        sum_fit2 = sum_fit2*np.sum(icr2)/np.sum(ocr2)
+        sum_bkg2 = sum_bkg2*np.sum(icr2)/np.sum(ocr2)
         ims2 = np.squeeze(ims2)
 
     # save the fitted data
@@ -1572,8 +1571,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
         del file['fit/channel00/cfg']
         del file['fit/channel00/sum/int']
         del file['fit/channel00/sum/bkg']
-    except:
-        None
+    except Exception:
+        pass
     file.create_dataset('fit/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
     file.create_dataset('fit/channel00/names', data=[n.encode('utf8') for n in names0[cutid0:]])
     file.create_dataset('fit/channel00/cfg', data=cfg0)
@@ -1586,8 +1585,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             del file['fit/channel02/cfg']
             del file['fit/channel02/sum/int']
             del file['fit/channel02/sum/bkg']
-        except:
-            None
+        except Exception:
+            pass
         file.create_dataset('fit/channel02/ims', data=ims2, compression='gzip', compression_opts=4)
         file.create_dataset('fit/channel02/names', data=[n.encode('utf8') for n in names2[cutid2:]])
         file.create_dataset('fit/channel02/cfg', data=cfg2)
@@ -1598,7 +1597,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
 
 ##############################################################################
 # def Pymca_fit(spectra, mcafit):
-def Pymca_fit(spectra, mcafit):
+def Pymca_fit(spectra, mcafit, verbose=None):
 
     mcafit.setData(range(0,spectra.shape[0]), spectra)
     try:
@@ -1606,8 +1605,9 @@ def Pymca_fit(spectra, mcafit):
         fitresult, result = mcafit.startfit(digest=1)
         groups = result["groups"]
         result = [result[peak]["fitarea"] for peak in result["groups"]]
-    except:
-        print('Error in mcafit.estimate()', spectra.shape)
+    except Exception:
+        if verbose is not None:
+            print('Error in mcafit.estimate()', spectra.shape)
         result = None
         groups = None
         
@@ -1686,7 +1686,7 @@ def MergeP06Nxs(scanid, sort=True):
                 if file.endswith(".nxs"):
                     files.append(file)
             pilcid = "/pilctriggergenerator_01/"
-        except:
+        except Exception:
             for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_02")):
                 if file.endswith(".nxs"):
                     files.append(file)
@@ -1699,7 +1699,7 @@ def MergeP06Nxs(scanid, sort=True):
                     tmp_dict = eval(scan_entry)
                     md_dict[tmp_dict['scan']['scan_prefix']] = tmp_dict
                 dictionary = md_dict[sc_id.split('/')[-1]]
-        except:
+        except Exception:
             dictionary = md_dict
         for file in files:
             # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
@@ -1721,9 +1721,9 @@ def MergeP06Nxs(scanid, sort=True):
                     mot1a_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
                     mot1b = enc_vals[enc_names.index(mot_list[1])]
                     mot1b_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
-                    mot1_arr = mot2a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
+                    mot1_arr = mot1a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                     mot1_name = str(scan_cmd[5])
-                except:
+                except Exception:
                     mot1_arr = enc_vals[0]
                     mot1_name = enc_names[0]
             if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
@@ -1739,7 +1739,7 @@ def MergeP06Nxs(scanid, sort=True):
                     mot2b_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
                     mot2_arr = mot2a_contrib*(np.array(mot2a)-pivot[0])+mot2b_contrib*(np.array(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                     mot2_name = str(scan_cmd[5])
-                except:
+                except Exception:
                     mot2_arr = enc_vals[1]
                     mot2_name = enc_names[1]
             for i in range(mot1_arr.shape[0]):
