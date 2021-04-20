@@ -1762,11 +1762,13 @@ def MergeP06Nxs(scanid, sort=True):
         ydim = 1
         if scan_cmd.shape[0] > 7:
             ydim = int(scan_cmd[8])+1
-        if spectra0.shape[0] == xdim*ydim:
-            spectra0 = np.array(spectra0).reshape((xdim, ydim, spectra0.shape[1]))
+        if np.array(spectra0).shape[0] == xdim*ydim:
+            spectra0 = np.array(spectra0)
+            spectra0 = spectra0.reshape((xdim, ydim, spectra0.shape[1]))
             icr0 = np.array(icr0).reshape((xdim, ydim))
             ocr0 = np.array(ocr0).reshape((xdim, ydim))
-            spectra2 = np.array(spectra2).reshape((xdim, ydim, spectra2.shape[1]))
+            spectra2 = np.array(spectra2)
+            spectra2 = spectra2.reshape((xdim, ydim, spectra2.shape[1]))
             icr2 = np.array(icr2).reshape((xdim, ydim))
             ocr2 = np.array(ocr2).reshape((xdim, ydim))
             i0 = np.array(i0).reshape((xdim, ydim))
