@@ -61,8 +61,8 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
         del h5f['tomo/'+channel+'/rotation_center']
         del h5f['tomo/'+channel+'/slices']
         del h5f['tomo/'+channel+'/names']
-    except:
-        None
+    except Exception:
+        pass
     h5f.create_dataset('tomo/'+channel+'/rotation_center', data=rot_center, compression='gzip', compression_opts=4)
     h5f.create_dataset('tomo/'+channel+'/slices', data=recon, compression='gzip', compression_opts=4)
     h5f.create_dataset('tomo/'+channel+'/names', data=h5f['norm/'+channel+'/names'])
