@@ -1553,7 +1553,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
     #TODO: something goes wrong with the dimensions in case of 1D scan.
     for i in range(names0.size):
         ims0[i,:,:] = ims0[i,:,:] * icr0/ocr0
-        if chan02_flag:
+    if chan02_flag:
+        for i in range(names2.size):        
             ims2[i,:,:] = ims2[i,:,:] * icr2/ocr2
     sum_fit0 = sum_fit0*np.sum(icr0)/np.sum(ocr0)
     sum_bkg0 = sum_bkg0*np.sum(icr0)/np.sum(ocr0)
