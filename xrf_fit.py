@@ -1346,8 +1346,9 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
     sumspec0 = file['raw/channel00/sumspec']
     icr0 = np.array(file['raw/channel00/icr'])
     ocr0 = np.array(file['raw/channel00/ocr'])
-    if len(spectra0.shape) == 2:
-        spectra0 = np.array(spectra0).reshape((spectra0.shape[0], 1, spectra0.shape[1]))
+    spec0_shape = spectra0.shape
+    if len(spec0_shape) == 2:
+        spectra0 = np.array(spectra0).reshape((spec0_shape[0], 1, spec0_shape[1]))
         icr0 = np.array(icr0).reshape((icr0.shape[0], 1))
         ocr0 = np.array(ocr0).reshape((ocr0.shape[0], 1))
     try:
@@ -1558,11 +1559,13 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             ims2[i,:,:] = ims2[i,:,:] * icr2/ocr2
     sum_fit0 = sum_fit0*np.sum(icr0)/np.sum(ocr0)
     sum_bkg0 = sum_bkg0*np.sum(icr0)/np.sum(ocr0)
-    ims0 = np.squeeze(ims0)
+    if len(spec0_shape) == 2:
+        ims0 = np.squeeze(ims0)
     if chan02_flag:
         sum_fit2 = sum_fit2*np.sum(icr2)/np.sum(ocr2)
         sum_bkg2 = sum_bkg2*np.sum(icr2)/np.sum(ocr2)
-        ims2 = np.squeeze(ims2)
+        if len(spec0_shape) == 2:
+            ims2 = np.squeeze(ims2)
 
     # save the fitted data
     print("Writing fit data to "+h5file+"...", end=" ")
