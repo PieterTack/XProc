@@ -1557,13 +1557,13 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
     if chan02_flag:
         for i in range(names2.size):        
             ims2[i,:,:] = ims2[i,:,:] * icr2/ocr2
-    sum_fit0 = sum_fit0*np.sum(icr0)/np.sum(ocr0)
-    sum_bkg0 = sum_bkg0*np.sum(icr0)/np.sum(ocr0)
+    sum_fit0 = np.array(sum_fit0)*np.sum(icr0)/np.sum(ocr0)
+    sum_bkg0 = np.array(sum_bkg0)*np.sum(icr0)/np.sum(ocr0)
     if len(spec0_shape) == 2:
         ims0 = np.squeeze(ims0)
     if chan02_flag:
-        sum_fit2 = sum_fit2*np.sum(icr2)/np.sum(ocr2)
-        sum_bkg2 = sum_bkg2*np.sum(icr2)/np.sum(ocr2)
+        sum_fit2 = np.array(sum_fit2)*np.sum(icr2)/np.sum(ocr2)
+        sum_bkg2 = np.array(sum_bkg2)*np.sum(icr2)/np.sum(ocr2)
         if len(spec0_shape) == 2:
             ims2 = np.squeeze(ims2)
 
