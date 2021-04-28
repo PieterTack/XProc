@@ -1327,7 +1327,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
 # fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
 #   NOTE: the cfg file sscan00188_merge.h5hould use the SNIP background method! Others will fail as considered 'too slow' by the PyMca fit routine itself
 #   NOTE2: setting a standard also fits the separate spectra without bulk fit! This can take a long time!!
-def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
+def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
     # perhaps channel00 and channel02 need different cfg files. Allow for tuple or array in this case.
     cfgfile = np.array(cfgfile)
     if cfgfile.size == 1:
@@ -1467,9 +1467,9 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
         print("Using "+str(ncores)+" cores...")
         pool = multiprocessing.Pool(processes=ncores)
         spec_chansum = np.sum(spectra0, axis=2)
-        spec2fit_id = np.array(np.where(spec_chansum > 0.)).ravel()
+        spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
         spec2fit = np.array(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))[spec2fit_id,:]
-        results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit), spec2fit))
+        results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
         results = list(results)
         groups = list(groups)
         if groups[0] is None: #first element could be None, so let's search for first not-None item.
@@ -1511,9 +1511,9 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None):
             mcafit.configure(config)
             pool = multiprocessing.Pool()
             spec_chansum = np.sum(spectra2, axis=2)
-            spec2fit_id = np.array(np.where(spec_chansum > 0.)).ravel()
+            spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
             spec2fit = np.array(spectra2).reshape((spectra2.shape[0]*spectra2.shape[1], spectra2.shape[2]))[spec2fit_id,:]
-            results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit), spec2fit))
+            results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
             results = list(results)
             groups = list(groups)
             if groups[0] is None: #first element could be None, so let's search for first not-None item.
@@ -1609,9 +1609,9 @@ def Pymca_fit(spectra, mcafit, verbose=None):
         fitresult, result = mcafit.startfit(digest=1)
         groups = result["groups"]
         result = [result[peak]["fitarea"] for peak in result["groups"]]
-    except Exception:
+    except Exception as ex:
         if verbose is not None:
-            print('Error in mcafit.estimate()', spectra.shape)
+            print('Error in mcafit.estimate()', ex)
         result = None
         groups = None
         
@@ -2455,7 +2455,8 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
 #     # fit_xrf_batch('scan_00024_merge.h5', 'athog.cfg', standard='atho_g.cnc')
 #     # norm_xrf_batch('scan_00024_merge.h5', I0norm=200000)
 #     # calc_detlim('scan_00024_merge.h5', 'atho_g.cnc')
-    
+
+    # fit_xrf_batch('D:\School\PhD\python_pro\CM2_45mm_hotspot_0001_scan1.h5', 'D:\School\PhD\python_pro\cm2.cfg', standard='some', ncores=-1, verbose=True)
 #     None    
 
 
