@@ -19,6 +19,7 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     
     h5f = h5py.File(h5file, 'r+')
     ims = np.array(h5f['norm/'+channel+'/ims'])
+    # ims = ims[:,25:,:] #only do this if omitting certain angles from the scan...
     names = ["-".join(name.decode('utf8').split(" ")) for name in h5f['norm/'+channel+'/names']]
     angle = np.array(h5f[mot1])[:,0]*np.pi /180 #motor positions expected in degrees, convert to rad
     
@@ -26,7 +27,10 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     # remove negative and NaN values, remove stripe artefacts, ...
     for k in range(0, ims.shape[0]):
         proj[:,k,:] = tomopy.remove_neg(tomopy.remove_nan(ims[k, :, :], 0)) #also replace all nan values and negative values with 0
-    # proj = tomopy.prep.stripe.remove_all_stripe(proj)
+    # proj = tomopy.prep.stripe.remove_stripe_sf(proj, size=1)
+    # proj = tomopy.prep.stripe.remove_dead_stripe(proj, snr=5, size=20, norm=False)
+    
+    
     # find centre of rotation and perform reconstruction        
     if rot_centre is None:
         rot_center = tomopy.find_center(proj[:,names.index(signal),:].reshape((proj.shape[0],1,proj.shape[2])), angle, ind=0, init=ims.shape[2]/2, tol=0.5, sinogram_order=False)
@@ -42,11 +46,12 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     #     'num_iter': 200,
     #     'extra_options': extra_options
     # }        
-    recon = tomopy.recon(proj, angle, center=rot_center, algorithm='gridrec', sinogram_order=False) #tomopy.astra, options=options)#
+    recon = tomopy.recon(proj, angle, center=rot_center, algorithm='gridrec', sinogram_order=False, filter_name='shepp') #tomopy.astra, options=options)#
     # Algorithms: 'gridrec', 'mlem'
-
+    # filter_name: 'shepp' (default), 'parzen'
+    
     # Ring removal attempt
-    # recon = tomopy.misc.corr.remove_ring(recon, thresh_min=0, thresh_max=np.max(recon), thresh=np.max(recon))
+    # recon = tomopy.misc.corr.remove_ring(recon)
     
     # prepare data for imaging in plotims
     data = plotims.ims()

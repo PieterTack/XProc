@@ -111,7 +111,7 @@ def PCA(rawdata, nclusters=5, el_id=None):
 #   kmeans can be set as an option, which will perform Kmeans clustering on the PCA score images and extract the respective sumspectra
 def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=None):
     # read in h5file data, with appropriate h5dir
-    file = h5py.File(h5data, 'r+')
+    file = h5py.File(h5file, 'r+')
     data = np.array(file[h5dir])
     if el_id is not None:
         names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
@@ -214,7 +214,7 @@ def Kmeans(rawdata, nclusters=5, el_id=None):
 #   Before clustering data is whitened using scipy routines
 def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
     # read in h5file data, with appropriate h5dir
-    file = h5py.File(h5data, 'r+')
+    file = h5py.File(h5file, 'r+')
     data = np.array(file[h5dir])
     if el_id is not None:
         names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
@@ -234,7 +234,7 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
     if spectra.shape[0] == clusters.size:
         sumspec = []
         for i in range(nclusters):
-            sumspec.append(np.sum(spectra[np.where(clusters.ravel() == i),:], axis=0))
+            sumspec.append(np.sum(np.squeeze(spectra[np.where(clusters.ravel() == i),:]), axis=0))
     
     # save the cluster image and sumspectra, as well as the elements that were clustered (el_id)
     try:
@@ -250,12 +250,12 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
     file.create_dataset('kmeans/'+channel+'/data_dir_clustered', data=h5dir.encode('utf8'))
     file.create_dataset('kmeans/'+channel+'/ims', data=clusters, compression='gzip', compression_opts=4)
     if el_id is not None:
-        file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in names[el_id]])
+        file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in np.array(names)[el_id]])
     else:
         file.create_dataset('kmeans/'+channel+'/el_id', data='None')        
     if spectra.shape[0] == clusters.size:
         for i in range(nclusters):
-            file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=sumspec[i,:], compression='gzip', compression_opts=4)    
+            file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.array(sumspec)[i,:], compression='gzip', compression_opts=4)    
     file.close()
     
 ##############################################################################
@@ -624,7 +624,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     cb_opts = plotims.Colorbar_opt(title='Conc.;[ppm]')
     nrows = int(np.ceil(len(names)/4)) # define nrows based on ncols
     colim_opts = plotims.Collated_image_opts(ncol=4, nrow=nrows, cb=True)
-    plotims.plot_colim(data, names, 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=h5file.split('.')[0]+'_ch'+channel[-1]+'_quant.png')
+    plotims.plot_colim(data, names, 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=os.path.splitext(h5file)[0]+'_ch'+channel[-1]+'_quant.png')
 
 
 ##############################################################################
@@ -1084,18 +1084,18 @@ def calc_detlim(h5file, cncfile):
     plot_detlim([dl_1s_0, dl_1000s_0],
                 [names0_mod, names0_mod],
                 tm=['1s','1000s'], ref=['DL'], 
-                dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(h5file.split('.')[0])+'_ch0_DL.png')
+                dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch0_DL.png')
     if chan02_flag:
         plot_detlim([dl_1s_2, dl_1000s_2],
                     [names2_mod, names2_mod],
                     tm=['1s','1000s'], ref=['DL'], 
-                    dl_err=[dl_1s_err_2, dl_1000s_err_2], bar=False, save=str(h5file.split('.')[0])+'_ch2_DL.png')
+                    dl_err=[dl_1s_err_2, dl_1000s_err_2], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch2_DL.png')
 
 ##############################################################################
 # make publish-worthy overview images of all fitted elements in h5file (including scale bars, colorbar, ...)
 # plot norm if present, otherwise plot fit/.../ims
 def hdf_overview_images(h5file, ncols, pix_size, scl_size, log=False):
-    filename = h5file.split(".")[0]
+    filename = os.path.splitext(h5file)[0]
 
     imsdata0 = plotims.read_h5(h5file, 'channel00')
     if log:
@@ -1703,7 +1703,8 @@ def MergeP06Nxs(scanid, sort=True):
                     tmp_dict = eval(scan_entry)
                     md_dict[tmp_dict['scan']['scan_prefix']] = tmp_dict
                 dictionary = md_dict[sc_id.split('/')[-1]]
-        except Exception:
+        except Exception as ex:
+            print("Warning: ", ex)
             dictionary = md_dict
         for file in files:
             # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
@@ -1728,6 +1729,7 @@ def MergeP06Nxs(scanid, sort=True):
                     mot1_arr = mot1a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                     mot1_name = str(scan_cmd[5])
                 except Exception:
+                    print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
                     mot1_arr = enc_vals[0]
                     mot1_name = enc_names[0]
             if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
@@ -1744,6 +1746,7 @@ def MergeP06Nxs(scanid, sort=True):
                     mot2_arr = mot2a_contrib*(np.array(mot2a)-pivot[0])+mot2b_contrib*(np.array(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                     mot2_name = str(scan_cmd[5])
                 except Exception:
+                    print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
                     mot2_arr = enc_vals[1]
                     mot2_name = enc_names[1]
             for i in range(mot1_arr.shape[0]):
