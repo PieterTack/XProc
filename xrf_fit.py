@@ -109,7 +109,7 @@ def PCA(rawdata, nclusters=5, el_id=None):
 #   before clustering, the routine performs a sqrt() normalisation on the data to reduce intensity differences between elements
 #   a selection of elements can be given in el_id as their integer values corresponding to their array position in the dataset (first element id = 0)
 #   kmeans can be set as an option, which will perform Kmeans clustering on the PCA score images and extract the respective sumspectra
-def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=None):
+def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
     # read in h5file data, with appropriate h5dir
     file = h5py.File(h5file, 'r+')
     data = np.array(file[h5dir])
@@ -151,7 +151,7 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=None):
     file.create_dataset('PCA/'+channel+'/loadings', data=evecs, compression='gzip', compression_opts=4)
     
     # if kmeans option selected, follow up with Kmeans clustering on the PCA clusters
-    if kmeans is not None:
+    if kmeans is True:
         clusters, dist = Kmeans(scores, nclusters=nclusters, el_id=None)
         
         # calculate cluster sumspectra
@@ -633,7 +633,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
 #   includes 3sigma error bars, ...
 #   tm and ref are 1D str arrays denoting name and measurement time (including unit!) of corresponding data
 #TODO: something still wrong with element labels on top of scatter plots
-def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=False):
+def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None):
     # check shape of dl. If 1D, then only single curve selected. 2D array means several DLs
     dl = np.array(dl, dtype='object')
     el_names = np.array(el_names, dtype='object')
@@ -1094,15 +1094,15 @@ def calc_detlim(h5file, cncfile):
 ##############################################################################
 # make publish-worthy overview images of all fitted elements in h5file (including scale bars, colorbar, ...)
 # plot norm if present, otherwise plot fit/.../ims
-def hdf_overview_images(h5file, ncols, pix_size, scl_size, log=False):
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
     filename = os.path.splitext(h5file)[0]
 
-    imsdata0 = plotims.read_h5(h5file, 'channel00')
+    imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
     if log:
         imsdata0.data = np.log10(imsdata0.data)
         filename += '_log'
     try:
-        imsdata2 = plotims.read_h5(h5file, 'channel02')
+        imsdata2 = plotims.read_h5(h5file, datadir+'/channel02/ims')
         if imsdata2 is None:
             chan02_flag = False
         else:
@@ -1462,7 +1462,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
         mcafit = ClassMcaTheory.ClassMcaTheory()
         mcafit.configure(config)
-        if ncores is None or ncores == -1:
+        if ncores is None or ncores == -1 or ncores == 0:
             ncores = multiprocessing.cpu_count()-1
         print("Using "+str(ncores)+" cores...")
         pool = multiprocessing.Pool(processes=ncores)
