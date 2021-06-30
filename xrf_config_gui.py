@@ -22,12 +22,11 @@ import numpy as np
 from scipy.signal import find_peaks
 import h5py
 from PyMca5.PyMcaPhysics.xrf import ClassMcaTheory
-from PyMca5.PyMcaIO import ConfigDict
 from PyMca5.PyMcaPhysics.xrf import Elements
 
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QImage, QDoubleValidator, qRgb
+from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import QApplication, QWidget, QDialog
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
 from PyQt5.QtWidgets import QCheckBox, QPushButton, QLabel, QCheckBox, \
