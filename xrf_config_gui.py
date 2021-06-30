@@ -235,7 +235,7 @@ class CalibrateWindow(QDialog):
 
     def calculate(self):
         # calculate new cte and gain
-        if self.energies is not []:
+        if self.energies != []:
             params = np.polyfit(self.chnls, self.energies, 1) #1st degree linear fit
             self.newgain = params[0]
             self.newcte = params[1]
@@ -825,7 +825,7 @@ class Config_GUI(QWidget):
         self.adjust_fittree(self.fittree)
 
     def subdir_change(self, index):
-        if self.subdirs is not []:
+        if self.subdirs != []:
             self.rawspe = self.file.spe(self.subdirs[index])
             self.fitres = None
             self.update_plot(update=False)
