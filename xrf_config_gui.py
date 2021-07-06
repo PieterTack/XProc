@@ -419,11 +419,11 @@ class Config_GUI(QWidget):
         self.fitopts_lbl = QLabel("Fit options:")
         layout_fitopts.addWidget(self.fitopts_lbl)
         self.fitrange_lbl0 = QLabel("Fit range:")
-        self.fitmin = QLineEdit("{:d}".format(self.ConfigDict['fit']['xmin']))
+        self.fitmin = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmin']))
         self.fitmin.setMaximumWidth(50)
         self.fitmin.setValidator(QDoubleValidator(0, 1E6, 0))
         self.fitrange_lbl1 = QLabel(" - ")
-        self.fitmax = QLineEdit("{:d}".format(self.ConfigDict['fit']['xmax']))
+        self.fitmax = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmax']))
         self.fitmax.setMaximumWidth(50)
         self.fitmax.setValidator(QDoubleValidator(0, 1E6, 0))
         layout_fitrange.addWidget(self.fitrange_lbl0)
@@ -856,8 +856,8 @@ class Config_GUI(QWidget):
             self.adjust_elselect()
 
     def set_fitminmax(self):
-        self.ConfigDict['fit']['xmin'] = int(self.fitmin.text())
-        self.ConfigDict['fit']['xmax'] = int(self.fitmax.text())
+        self.ConfigDict['fit']['xmin'] = np.round((float(self.fitmin.text())-self.ConfigDict['detector']['zero'])/self.ConfigDict['detector']['gain'])
+        self.ConfigDict['fit']['xmax'] = np.round((float(self.fitmax.text())-self.ConfigDict['detector']['zero'])/self.ConfigDict['detector']['gain'])
         
     def fitscatter_params(self):
         if self.fit_scatter.isChecked():
@@ -1110,8 +1110,6 @@ class Config_GUI(QWidget):
         filename = QFileDialog.getOpenFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
         self.ConfigDict.read(filename)
         # go over ConfigDict and adjust GUI accordingly
-        self.fitmin.setText("{:d}".format(self.ConfigDict['fit']['xmin']))
-        self.fitmax.setText("{:d}".format(self.ConfigDict['fit']['xmax']))
         if self.ConfigDict['fit']['scatterflag'] == 1:
             self.fit_scatter.setChecked(True)
             self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy'][0]))
@@ -1157,6 +1155,8 @@ class Config_GUI(QWidget):
             self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['exppolorder']))
         self.gain.setText("{:.3f}".format(self.ConfigDict['detector']['gain']))
         self.cte.setText("{:.3f}".format(self.ConfigDict['detector']['zero']))
+        self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['fit']['gain']+self.ConfigDict['fit']['zero']))
+        self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['fit']['gain']+self.ConfigDict['fit']['zero']))
         self.dettype.setCurrentText(self.ConfigDict['detector']['detele']) #Si or Ge; 'detene' tab appears not used directly...
         self.fitres = None
         if self.ConfigDict['peaks'] != {}:
