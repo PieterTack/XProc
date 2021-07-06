@@ -419,11 +419,11 @@ class Config_GUI(QWidget):
         self.fitopts_lbl = QLabel("Fit options:")
         layout_fitopts.addWidget(self.fitopts_lbl)
         self.fitrange_lbl0 = QLabel("Fit range:")
-        self.fitmin = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmin']))
+        self.fitmin = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitmin.setMaximumWidth(50)
         self.fitmin.setValidator(QDoubleValidator(0, 1E6, 0))
         self.fitrange_lbl1 = QLabel(" - ")
-        self.fitmax = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmax']))
+        self.fitmax = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitmax.setMaximumWidth(50)
         self.fitmax.setValidator(QDoubleValidator(0, 1E6, 0))
         layout_fitrange.addWidget(self.fitrange_lbl0)
@@ -731,7 +731,6 @@ class Config_GUI(QWidget):
 
     def update_plot(self, update=True):
         # plot default spectrum
-        print("updated...", update)
         if self.rawspe is not None:
             xdata = np.arange(len(self.rawspe))*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']
             if update is False:
@@ -834,6 +833,8 @@ class Config_GUI(QWidget):
     def update_ctegain(self):
         self.ConfigDict['detector']['gain'] = float(self.gain.text())
         self.ConfigDict['detector']['zero'] = float(self.cte.text())
+        self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
+        self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitres = None
         self.update_plot(update=False)
 
@@ -1155,8 +1156,8 @@ class Config_GUI(QWidget):
             self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['exppolorder']))
         self.gain.setText("{:.3f}".format(self.ConfigDict['detector']['gain']))
         self.cte.setText("{:.3f}".format(self.ConfigDict['detector']['zero']))
-        self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['fit']['gain']+self.ConfigDict['fit']['zero']))
-        self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['fit']['gain']+self.ConfigDict['fit']['zero']))
+        self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
+        self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.dettype.setCurrentText(self.ConfigDict['detector']['detele']) #Si or Ge; 'detene' tab appears not used directly...
         self.fitres = None
         if self.ConfigDict['peaks'] != {}:
@@ -1205,6 +1206,8 @@ class Config_GUI(QWidget):
                 self.ConfigDict['detector']['zero'] = float(self.new_window.newcte)
                 self.gain.setText("{:.3f}".format(self.ConfigDict['detector']['gain']))
                 self.cte.setText("{:.3f}".format(self.ConfigDict['detector']['zero']))
+                self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
+                self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
             self.new_window.close()
             self.new_window = None
             self.fitres = None
