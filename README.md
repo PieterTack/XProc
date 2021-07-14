@@ -24,6 +24,8 @@ pip install h5py
 pip install PySide2
 pip install PyMca5
 pip install PyQt5
+conda install -c conda-forge tomopy
+conda install -c conda-forge xraylib=4.1.0
 ```
 
 #### Uniform h5 file structure
