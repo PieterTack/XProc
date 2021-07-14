@@ -27,6 +27,7 @@ pip install PyQt5
 
 #### Uniform h5 file structure
 For convenient data processing, it is advised to use a uniform data structure. Until such time as all synchrotrons and subsequent beamlines unanimously decide to follow the same data structure, it is up to the multiple-beamline-frequenting user to define their own structure. This is the structure that is expected for the data routines provided by xrf_proc.py and plotims.py:
+
 `Filename.h5`
 	`cmd`	the scan command line executed during the experiment
 	`raw`	contains all raw data – should never be overwritten!
@@ -131,7 +132,7 @@ Functions can then be used following, e.g.:
 `Fit.h5id15convert(arg1)`
 
 Due to differences in beamline data formats, typically separate “conversion” functions are required for different beamlines. Currently, the following functions are supported:
-`h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', atol=None)`
+	`h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', atol=None)`
 	h5id15: (string) beamline stored h5 data file location, e.g. ‘id15/NIST_611_0001.h5’. A list of strings can be supplied to combine different measurements into 1 file, in which case the scanid argument should also be a list of identical length.
 	scanid: (string) the identifier of the relevant scan in the h5 file, typically the scan number followed by .1, e.g. ‘4.1’. A list of strings can be supplied to combine different scans into 1 file, in which case all scanid’s are obtained from the same h5id15 file.
 	scan_dim: (tuple) the scan dimensions, i.e. (10,10) for a 10×10 mapping
@@ -250,12 +251,14 @@ A typical step in XRF data analysis, following fitting and normalisation procedu
 
 Although these functions are useful to perform clustering on readily available data within the H5 files, it can be useful to have access to general PCA and Kmeans functions to be used on any dataset:
 	`Kmeans(rawdata, nclusters=5, el_id=None)`
+	
 	rawdata: (float) 2D float array containing the data to be clustered of shape M×N with N the amount of elements and M the data points. Alternatively, a 3D float array can be supplied of shape N×M×L (M×L being the shape of the data image, multiplied by N elements) 
 	nclusters: [optional] (int) The amount of K-means cluster to divide the data into. Default: 5.
 	el_id: [optional] (int) List containing the element indices along axis N. If None (default) all elements are included.
 	Returns two arguments: clusters, distortion. Clusters contains the attributed cluster index for each data point. Distortion is the distance of each point and its cluster centre as provided by the scipy.cluster.vq.vq() function.
 
 	`PCA(rawdata, nclusters=5, el_id=None)`
+	
 	rawdata: (float) 2D float array containing the data to be clustered of shape M×N with N the amount of elements and M the data points. Alternatively, a 3D float array can be supplied of shape N×M×L (M×L being the shape of the data image, multiplied by N elements)
 	nclusters: [optional] (int) The amount of principal components to divide the data into. Default: 5.
 	el_id: [optional] (int) List containing the element indices along axis N. If None (default) all elements are included.
@@ -263,10 +266,11 @@ Although these functions are useful to perform clustering on readily available d
 
 Additionally, although this function is not a part of xrf_proc.py but of plotims.py, a convenient tool for statistical analysis can be the studying of correlation plots. This can be fairly easily done using the plotims.plot_corel() function:
 	`plot_correl(imsdata, imsnames, el_id=None, save=None)`
-	imsdata: (float) N*M*Y array containing the signal intensities of N*M datapoints for Y elements .
-	imsnames: (string) array of Y elements, containing the names of the corresponding elements
-	el_id: [optional] (int) list containing the indices of the elements to include in the plot
-	save: [optional] (string) File path to save the created image
+	
+	* imsdata: (float) N*M*Y array containing the signal intensities of N*M datapoints for Y elements .
+	* imsnames: (string) array of Y elements, containing the names of the corresponding elements
+	* el_id: [optional] (int) list containing the indices of the elements to include in the plot
+	* save: [optional] (string) File path to save the created image
 
 The generated image will display the correlation scatter plots in the top right half, including a best linear fit (black dashed line) and 95% confidence interval as well as R² values for the linear fit correlation. The main diagonal contains the intensity distribution histogram plots of each variable. The lower left half contains kernel density distribution plots, as well as the Pearson correlation coefficients with a marking of the confidence interval (***: 0.1%CI, **:1%CI, *:5%CI, no stars: <5%CI).
 In order to use this function, make sure to import plotims:
