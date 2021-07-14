@@ -271,7 +271,7 @@ Although these functions are useful to perform clustering on readily available d
 >	* el_id: [optional] (int) List containing the element indices along axis N. If None (default) all elements are included.
 >	* Returns 3 arguments: scores, evals, evecs which are the principal component scores (images), eigenvalues (RVE, not yet normalised) and eigenvectors (loading values) respectively.
 
-Additionally, although this function is not a part of xrf_proc.py but of plotims.py, a convenient tool for statistical analysis can be the studying of correlation plots. This can be fairly easily done using the `plotims.plot_corel()` function:
+Additionally, although this function is not a part of xrf_proc.py but of plotims.py, a convenient tool for statistical analysis can be the studying of correlation plots. This can be fairly easily done using the `plotims.plot_correl()` function:
 
 >	`plot_correl(imsdata, imsnames, el_id=None, save=None)`	
 >	* imsdata: (float) N*M*Y array containing the signal intensities of N*M datapoints for Y elements .
