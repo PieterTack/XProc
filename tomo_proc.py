@@ -9,7 +9,6 @@ import tomopy
 import h5py
 import numpy as np
 import plotims
-from scipy.interpolate import griddata
 
 
 def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='channel00', ncol=8, selfabs=None):
@@ -107,7 +106,7 @@ def h5_i1tomo_recon(h5file, rot_centre=None):
     try:
         i1 = np.array(h5f['raw/I1'])
     except Exception:
-        i1 = None
+        # i1 = None
         h5f.close()
         return
 
@@ -131,7 +130,6 @@ def h5_i1tomo_recon(h5file, rot_centre=None):
                 mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
         mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
         mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
-        i1_tmp = np.zeros((i1.shape[0], i1.shape[1]))
         # interpolate to the regular grid motor positions
         mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size), mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
         x = mot1.ravel()
