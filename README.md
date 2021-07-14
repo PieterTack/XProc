@@ -5,15 +5,17 @@ Program with data stream for XRF analysis, including fitting, normalisation, qua
 ### Using xrf_proc
 Xrf_proc is a python based API that should be used for XRF spectral integration (making use of PyMca5 routines), and subsequent data processing.
 Relies on the following packages:
-	PyMca5
-	plotims (https://github.com/PieterTack/plotims)
-	numpy
-	scipy
-	h5py
-	matplotlib
+
+	* PyMca5
+	* plotims (https://github.com/PieterTack/plotims)
+	* numpy
+	* scipy
+	* h5py
+	* matplotlib
+
 optional:
-	tomopy (required for ct reconstruction)
-	xraylib
+	* tomopy (required for ct reconstruction)
+	* xraylib
 
 Install using:
 ```
