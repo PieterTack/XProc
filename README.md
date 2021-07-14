@@ -278,7 +278,7 @@ import plotims as Ims
   
 ## Example file
 Below is an example python processing file:
-```
+```python
 import sys
 sys.path.insert(1, 'D:/School/PhD/python_pro/plotims')
 sys.path.insert(1, 'D:/School/PhD/python_pro/xrf_proc')
