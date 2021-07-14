@@ -43,7 +43,9 @@ For convenient data processing, it is advised to use a uniform data structure. U
 		- `channel02` [optional] the same structure of channel00 is applied here for channel02 if a second detector channel was available.
 	- `mot1`	nD array containing mot1 motor positions (snakemesh motor)
 	- `mot2`	nD array containing mot2 motor positions
+
 --- folders below are added by additional data processing---
+
 	- `fit`	contains the fitted data
 		- `channel00`
 			- `cfg`		file path of the used PyMca config file
@@ -269,7 +271,7 @@ Although these functions are useful to perform clustering on readily available d
 >	* el_id: [optional] (int) List containing the element indices along axis N. If None (default) all elements are included.
 >	* Returns 3 arguments: scores, evals, evecs which are the principal component scores (images), eigenvalues (RVE, not yet normalised) and eigenvectors (loading values) respectively.
 
-Additionally, although this function is not a part of xrf_proc.py but of plotims.py, a convenient tool for statistical analysis can be the studying of correlation plots. This can be fairly easily done using the plotims.plot_corel() function:
+Additionally, although this function is not a part of xrf_proc.py but of plotims.py, a convenient tool for statistical analysis can be the studying of correlation plots. This can be fairly easily done using the `plotims.plot_corel()` function:
 
 >	`plot_correl(imsdata, imsnames, el_id=None, save=None)`	
 >	* imsdata: (float) N*M*Y array containing the signal intensities of N*M datapoints for Y elements .
