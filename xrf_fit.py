@@ -1290,6 +1290,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             for i in range(names2.size):
                 values = ims2[i,:,:].ravel()
                 ims2_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+        ims0 = ims0_tmp
+        ims2 = ims2_tmp
         print("Done")
     
     # save normalised data
@@ -1645,6 +1647,7 @@ def MergeP06Nxs(scanid, sort=True):
         icr2 = []
         ocr2 = []
         i0 = []
+        i1 = []
         tm = []
         mot1 = []
         mot2 = []
@@ -1677,9 +1680,11 @@ def MergeP06Nxs(scanid, sort=True):
             print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/adc01/"+file, 'r')
             i0_arr = f['entry/data/value1']
+            i1_arr = f['entry/data/value2']
             tm_arr = f['entry/data/exposuretime']
             for i in range(i0_arr.shape[0]):
                 i0.append(i0_arr[i])
+                i1.append(i1_arr[i])
                 tm.append(tm_arr[i])
             f.close()
             print("read")
@@ -1771,17 +1776,36 @@ def MergeP06Nxs(scanid, sort=True):
             ydim = int(scan_cmd[8])+1
         if np.array(spectra0).shape[0] == xdim*ydim:
             spectra0 = np.array(spectra0)
-            spectra0 = spectra0.reshape((xdim, ydim, spectra0.shape[1]))
-            icr0 = np.array(icr0).reshape((xdim, ydim))
-            ocr0 = np.array(ocr0).reshape((xdim, ydim))
+            spectra0 = spectra0.reshape((ydim, xdim, spectra0.shape[1]))
+            icr0 = np.array(icr0).reshape((ydim, xdim))
+            ocr0 = np.array(ocr0).reshape((ydim, xdim))
             spectra2 = np.array(spectra2)
-            spectra2 = spectra2.reshape((xdim, ydim, spectra2.shape[1]))
-            icr2 = np.array(icr2).reshape((xdim, ydim))
-            ocr2 = np.array(ocr2).reshape((xdim, ydim))
-            i0 = np.array(i0).reshape((xdim, ydim))
-            tm = np.array(tm).reshape((xdim, ydim))
-            mot1 = np.array(mot1).reshape((xdim, ydim))
-            mot2 = np.array(mot2).reshape((xdim, ydim))
+            spectra2 = spectra2.reshape((ydim, xdim, spectra2.shape[1]))
+            icr2 = np.array(icr2).reshape((ydim, xdim))
+            ocr2 = np.array(ocr2).reshape((ydim, xdim))
+            i0 = np.array(i0).reshape((ydim, xdim))
+            i1 = np.array(i1).reshape((ydim, xdim))
+            tm = np.array(tm).reshape((ydim, xdim))
+            mot1 = np.array(mot1).reshape((ydim, xdim))
+            mot2 = np.array(mot2).reshape((ydim, xdim))
+            timetrig = False
+        elif np.array(spectra0).shape[0] < xdim*ydim:
+            spectra0 = np.array(spectra0)
+            zerosize = xdim*ydim-spectra0.shape[0]
+            zeros = np.zeros((zerosize, spectra0.shape[1]))
+            spectra0 = np.concatenate((spectra0, zeros)).reshape((ydim, xdim, spectra0.shape[1]))
+            spectra2 = np.array(spectra2)
+            spectra2 = np.concatenate((spectra2, zeros)).reshape((ydim, xdim, spectra2.shape[1]))
+            zeros = np.zeros((zerosize))
+            icr0 = np.concatenate((np.array(icr0), zeros)).reshape((ydim, xdim))
+            ocr0 = np.concatenate((np.array(ocr0), zeros)).reshape((ydim, xdim))
+            icr2 = np.concatenate((np.array(icr2), zeros)).reshape((ydim, xdim))
+            ocr2 = np.concatenate((np.array(ocr2), zeros)).reshape((ydim, xdim))
+            i0 = np.concatenate((np.array(i0), zeros)).reshape((ydim, xdim))
+            i1 = np.concatenate((np.array(i1), zeros)).reshape((ydim, xdim))
+            tm = np.concatenate((np.array(tm), zeros)).reshape((ydim, xdim))
+            mot1 = np.concatenate((np.array(mot1), zeros)).reshape((ydim, xdim))
+            mot2 = np.concatenate((np.array(mot2), zeros)).reshape((ydim, xdim))
             timetrig = False
         else:            
             spectra0 = np.array(spectra0)
@@ -1791,6 +1815,7 @@ def MergeP06Nxs(scanid, sort=True):
             icr2 = np.array(icr2)
             ocr2 = np.array(ocr2)
             i0 = np.array(i0)
+            i1 = np.array(i1)
             tm = np.array(tm)
             mot1 = np.array(mot1)
             mot2 = np.array(mot2)
@@ -1808,18 +1833,20 @@ def MergeP06Nxs(scanid, sort=True):
             mot1_tmp = mot1
             mot2_tmp = mot2
             i0_tmp = i0
+            i1_tmp = i1
             tm_tmp = tm
         else:
-            spectra0_tmp = np.concatenate((spectra0_tmp,spectra0), axis=1)
-            icr0_tmp = np.concatenate((icr0_tmp,icr0), axis=1)
-            ocr0_tmp = np.concatenate((ocr0_tmp,ocr0), axis=1)
-            spectra2_tmp = np.concatenate((spectra2_tmp,spectra2), axis=1)
-            icr2_tmp = np.concatenate((icr2_tmp,icr2), axis=1)
-            ocr2_tmp = np.concatenate((ocr2_tmp,ocr2), axis=1)
-            mot1_tmp = np.concatenate((mot1_tmp,mot1), axis=1)
-            mot2_tmp = np.concatenate((mot2_tmp,mot2), axis=1)
-            i0_tmp = np.concatenate((i0_tmp,i0), axis=1)
-            tm_tmp = np.concatenate((tm_tmp,tm), axis=1)
+            spectra0_tmp = np.concatenate((spectra0_tmp,spectra0), axis=0)
+            icr0_tmp = np.concatenate((icr0_tmp,icr0), axis=0)
+            ocr0_tmp = np.concatenate((ocr0_tmp,ocr0), axis=0)
+            spectra2_tmp = np.concatenate((spectra2_tmp,spectra2), axis=0)
+            icr2_tmp = np.concatenate((icr2_tmp,icr2), axis=0)
+            ocr2_tmp = np.concatenate((ocr2_tmp,ocr2), axis=0)
+            mot1_tmp = np.concatenate((mot1_tmp,mot1), axis=0)
+            mot2_tmp = np.concatenate((mot2_tmp,mot2), axis=0)
+            i0_tmp = np.concatenate((i0_tmp,i0), axis=0)
+            i1_tmp = np.concatenate((i1_tmp,i1), axis=0)
+            tm_tmp = np.concatenate((tm_tmp,tm), axis=0)
 
     # redefine as original arrays for further processing
     spectra0 = spectra0_tmp 
@@ -1831,27 +1858,14 @@ def MergeP06Nxs(scanid, sort=True):
     mot1 = mot1_tmp 
     mot2 = mot2_tmp 
     i0 = i0_tmp 
+    i1 = i1_tmp 
     tm = tm_tmp 
 
     # for continuous scans, the mot1 position runs in snake-type fashion
     #   so we need to sort the positions line per line and adjust all other data accordingly
     if sort is True:
-        for i in range(mot1[0,:].size):
-            sort_id = np.argsort(mot1[:,i])
-            spectra0[:,i,:] = spectra0[sort_id,i,:]
-            icr0[:,i] = icr0[sort_id,i]
-            ocr0[:,i] = ocr0[sort_id,i]
-            spectra2[:,i,:] = spectra2[sort_id,i,:]
-            icr2[:,i] = icr2[sort_id,i]
-            ocr2[:,i] = ocr2[sort_id,i]
-            mot1[:,i] = mot1[sort_id,i]
-            mot2[:,i] = mot2[sort_id,i]
-            i0[:,i] = i0[sort_id,i]
-            tm[:,i] = tm[sort_id,i]
-    
-        # To make sure (especially when merging scans) sort mot2 as well
-        for i in range(mot2[:,0].size):
-            sort_id = np.argsort(mot2[i,:])
+        for i in range(mot1[:,0].size):
+            sort_id = np.argsort(mot1[i,:])
             spectra0[i,:,:] = spectra0[i,sort_id,:]
             icr0[i,:] = icr0[i,sort_id]
             ocr0[i,:] = ocr0[i,sort_id]
@@ -1861,31 +1875,49 @@ def MergeP06Nxs(scanid, sort=True):
             mot1[i,:] = mot1[i,sort_id]
             mot2[i,:] = mot2[i,sort_id]
             i0[i,:] = i0[i,sort_id]
+            i1[i,:] = i1[i,sort_id]
             tm[i,:] = tm[i,sort_id]
+    
+        # To make sure (especially when merging scans) sort mot2 as well
+        for i in range(mot2[0,:].size):
+            sort_id = np.argsort(mot2[:,i])
+            spectra0[:,i,:] = spectra0[sort_id,i,:]
+            icr0[:,i] = icr0[sort_id,i]
+            ocr0[:,i] = ocr0[sort_id,i]
+            spectra2[:,i,:] = spectra2[sort_id,i,:]
+            icr2[:,i] = icr2[sort_id,i]
+            ocr2[:,i] = ocr2[sort_id,i]
+            mot1[:,i] = mot1[sort_id,i]
+            mot2[:,i] = mot2[sort_id,i]
+            i0[:,i] = i0[sort_id,i]
+            i1[:,i] = i1[sort_id,i]
+            tm[:,i] = tm[sort_id,i]
 
     # flip and rotate the data so images are oriented as sample on beamline (up=up, left=left, ... when looking downstream)
     # also calculate sumspec and maxspec spectra
     if timetrig is False:
-        spectra0 = np.flip(spectra0, 0)
-        icr0 = np.flip(icr0, 0)
-        ocr0 = np.flip(ocr0, 0)
-        spectra2 = np.flip(spectra2, 0)
-        icr2 = np.flip(icr2, 0)
-        ocr2 = np.flip(ocr2, 0)
-        mot1 = np.flip(mot1, 0)
-        mot2 = np.flip(mot2, 0)
-        i0 = np.flip(i0, 0)
-        tm = np.flip(tm, 0)
-        spectra0 = np.rot90(spectra0, 3, (0,1))
-        icr0 = np.rot90(icr0, 3)
-        ocr0 = np.rot90(ocr0, 3)
-        spectra2 = np.rot90(spectra2, 3, (0,1))
-        icr2 = np.rot90(icr2, 3)
-        ocr2 = np.rot90(ocr2, 3)
-        mot1 = np.rot90(mot1, 3)
-        mot2 = np.rot90(mot2, 3)
-        i0 = np.rot90(i0, 3)
-        tm = np.rot90(tm, 3)
+        # spectra0 = np.flip(spectra0, 0)
+        # icr0 = np.flip(icr0, 0)
+        # ocr0 = np.flip(ocr0, 0)
+        # spectra2 = np.flip(spectra2, 0)
+        # icr2 = np.flip(icr2, 0)
+        # ocr2 = np.flip(ocr2, 0)
+        # mot1 = np.flip(mot1, 0)
+        # mot2 = np.flip(mot2, 0)
+        # i0 = np.flip(i0, 0)
+        # i1 = np.flip(i1, 0)
+        # tm = np.flip(tm, 0)
+        # spectra0 = np.rot90(spectra0, 2, (0,1))
+        # icr0 = np.rot90(icr0, 2)
+        # ocr0 = np.rot90(ocr0, 2)
+        # spectra2 = np.rot90(spectra2, 2, (0,1))
+        # icr2 = np.rot90(icr2, 2)
+        # ocr2 = np.rot90(ocr2, 2)
+        # mot1 = np.rot90(mot1, 2)
+        # mot2 = np.rot90(mot2, 2)
+        # i0 = np.rot90(i0, 2)
+        # i1 = np.rot90(i1, 2)
+        # tm = np.rot90(tm, 2)
         sumspec0 = np.sum(spectra0[:], axis=(0,1))
         sumspec2 = np.sum(spectra2[:], axis=(0,1))
         maxspec0 = np.zeros(sumspec0.shape[0])
@@ -1918,6 +1950,7 @@ def MergeP06Nxs(scanid, sort=True):
     f.create_dataset('raw/channel02/sumspec', data=sumspec2, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel02/maxspec', data=maxspec2, compression='gzip', compression_opts=4)
     f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
     dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
     dset.attrs['Name'] = mot1_name
     dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
