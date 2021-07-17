@@ -31,7 +31,7 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
 
     #do self-absorption correction if requested
     if selfabs is not None:
-        #selfabs should contain the directory to the trained neural network (Gao Bo, 2021 https://dx.doi.org/10.1021/acs.analchem.0c03828)
+        #selfabs should contain the directory to the trained neural network (Gao Bo, 2021 10.1109/tns.2021.3079629)
         proj = Gao_tomo_selfabscorr(selfabs, proj)
     
 
@@ -186,7 +186,7 @@ def h5_i1tomo_recon(h5file, rot_centre=None):
 
 
 def Gao_tomo_selfabscorr(neuraldir, data):
-    # Here are the functions pertaining to Bo Gao's self-absorption algorithm https://dx.doi.org/10.1021/acs.analchem.0c03828
+    # Here are the functions pertaining to Bo Gao's self-absorption algorithm 10.1109/tns.2021.3079629
     #   Please cite this research when you use this function
     #   Neuraldir is the path directory to the neural network h5 file
     #   Data is a 3D numpy array of size M*N*O with N the amount of elements, M the angular axis and O the translational axis 
