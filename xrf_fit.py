@@ -1963,7 +1963,7 @@ def MergeP06Nxs(scanid, sort=True):
 # convert id15a bliss h5 format to our h5 structure file
 #   syntax: h5id15convert('exp_file.h5', '3.1', (160,1), mot1_name='hry', mot2_name='hrz')
 #   when scanid is an array or list of multiple elements, the images will be stitched together to 1 file
-def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', atol=None):
+def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i1id='fpico3', icrid='event_count_rate', ocrid='events', atol=None):
     scan_dim = np.array(scan_dim)
     scanid = np.array(scanid)
     if scan_dim.size == 1:
@@ -1999,16 +1999,25 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
         if j == 0:
             f = h5py.File(file, 'r')
             scan_cmd = np.array(f[sc_id+'/title'])+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
-            spectra0_temp = np.array(f[sc_id+'/measurement/fluodet_det0'])
+            spectra0_temp = np.array(f[sc_id+'/measurement/'+ch0id])
             spectra0 = np.zeros((sc_dim[0], sc_dim[1], spectra0_temp.shape[1]))
             for i in range(0, spectra0_temp.shape[1]):
                 spectra0[:,:,i] = spectra0_temp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-            icr0 = np.array(f[sc_id+'/measurement/fluodet_det0_input_counts'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            ocr0 = np.array(f[sc_id+'/measurement/fluodet_det0_output_counts'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            i0 = np.array(f[sc_id+'/measurement/fpico3'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            icr0 = np.array(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            ocr0 = np.array(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if ch2id is not None:
+                spectra2_temp = np.array(f[sc_id+'/measurement/'+ch2id])
+                spectra2 = np.zeros((sc_dim[0], sc_dim[1], spectra2_temp.shape[1]))
+                for i in range(0, spectra2_temp.shape[1]):
+                    spectra2[:,:,i] = spectra2_temp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
+                icr2 = np.array(f[sc_id+'/measurement/'+ch2id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                ocr2 = np.array(f[sc_id+'/measurement/'+ch2id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            i0 = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if i1id is not None:
+                i1 = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             mot1 = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             mot2 = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            tm = np.array(f[sc_id+'/measurement/fluodet_det0_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            tm = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             f.close()
 
             # find direction in which mot1 and mot2 increase  #TODO: this probably fails in case of line scans...
@@ -2026,16 +2035,25 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
             f = h5py.File(file, 'r')
             scan_cmd += ' '+(np.array(f[sc_id+'/title'])+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
             #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
-            spectra0_tmp = np.array(f[sc_id+'/measurement/fluodet_det0'])
+            spectra0_tmp = np.array(f[sc_id+'/measurement/'+ch0id])
             spectra0_temp = np.zeros((sc_dim[0], sc_dim[1], spectra0_tmp.shape[1]))
             for i in range(0, spectra0_tmp.shape[1]):
                 spectra0_temp[:,:,i] = spectra0_tmp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-            icr0_temp = np.array(f[sc_id+'/measurement/fluodet_det0_input_counts'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            ocr0_temp = np.array(f[sc_id+'/measurement/fluodet_det0_output_counts'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            i0_temp = np.array(f[sc_id+'/measurement/fpico3'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            icr0_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            ocr0_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if ch2id is not None:
+                spectra2_tmp = np.array(f[sc_id+'/measurement/'+ch2id])
+                spectra2_temp = np.zeros((sc_dim[0], sc_dim[1], spectra2_temp.shape[1]))
+                for i in range(0, spectra2_tmp.shape[1]):
+                    spectra2_temp[:,:,i] = spectra2_tmp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
+                icr2_temp = np.array(f[sc_id+'/measurement/'+ch2id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                ocr2_temp = np.array(f[sc_id+'/measurement/'+ch2id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            i0_temp = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if i1id is not None:
+                i1_temp = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             mot1_temp = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             mot2_temp = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            tm_temp = np.array(f[sc_id+'/measurement/fluodet_det0_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            tm_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             f.close()
 
             mot_flag = 0 #TODO: if mot1_temp.shape is larger than mot1 it crashes...
@@ -2064,7 +2082,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                     new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                     new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                     new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    if ch2id is not None:
+                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                     new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                    if i1id is not None:
+                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                     new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2076,8 +2100,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[mot2.shape[0]:,:] = icr0_temp[:,:]
                         new_ocr0[0:mot2.shape[0],:] = ocr0[:,:]
                         new_ocr0[mot2.shape[0]:,:] = ocr0_temp[:,:]
+                        if ch2id is not None:
+                            new_spectra2[0:mot2.shape[0],:,:] = spectra2[:,:,:]
+                            new_spectra2[mot2.shape[0]:,:,:] = spectra2_temp[:,:,:]
+                            new_icr2[0:mot2.shape[0],:] = icr2[:,:]
+                            new_icr2[mot2.shape[0]:,:] = icr2_temp[:,:]
+                            new_ocr2[0:mot2.shape[0],:] = ocr2[:,:]
+                            new_ocr2[mot2.shape[0]:,:] = ocr2_temp[:,:]
                         new_i0[0:mot2.shape[0],:] = i0[:,:]
                         new_i0[mot2.shape[0]:,:] = i0_temp[:,:]
+                        if i1id is not None:
+                            new_i1[0:mot2.shape[0],:] = i1[:,:]
+                            new_i1[mot2.shape[0]:,:] = i1_temp[:,:]
                         new_mot1[0:mot2.shape[0],:] = mot1[:,:]
                         new_mot1[mot2.shape[0]:,:] = mot1_temp[:,:]
                         new_mot2[0:mot2.shape[0],:] = mot2[:,:]
@@ -2091,8 +2125,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[:,mot2.shape[0]:] = icr0_temp[:,:]
                         new_ocr0[:,0:mot2.shape[0]] = ocr0[:,:]
                         new_ocr0[:,mot2.shape[0]:] = ocr0_temp[:,:]
+                        if ch2id is not None:
+                            new_spectra2[:,0:mot2.shape[0],:] = spectra2[:,:,:]
+                            new_spectra2[:,mot2.shape[0]:,:] = spectra2_temp[:,:,:]
+                            new_icr2[:,0:mot2.shape[0]] = icr2[:,:]
+                            new_icr2[:,mot2.shape[0]:] = icr2_temp[:,:]
+                            new_ocr2[:,0:mot2.shape[0]] = ocr2[:,:]
+                            new_ocr2[:,mot2.shape[0]:] = ocr2_temp[:,:]
                         new_i0[:,0:mot2.shape[0]] = i0[:,:]
                         new_i0[:,mot2.shape[0]:] = i0_temp[:,:]
+                        if i1id is not None:
+                            new_i1[:,0:mot2.shape[0]] = i1[:,:]
+                            new_i1[:,mot2.shape[0]:] = i1_temp[:,:]
                         new_mot1[:,0:mot2.shape[0]] = mot1[:,:]
                         new_mot1[:,mot2.shape[0]:] = mot1_temp[:,:]
                         new_mot2[:,0:mot2.shape[0]] = mot2[:,:]
@@ -2106,7 +2150,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                     new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                     new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                     new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    if ch2id is not None:
+                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                     new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                    if i1id is not None:
+                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                     new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2118,8 +2168,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[mot2.shape[0]:,:] = icr0[:,:]
                         new_ocr0[0:mot2.shape[0],:] = ocr0_temp[:,:]
                         new_ocr0[mot2.shape[0]:,:] = ocr0[:,:]
+                        if ch2id is not None:
+                            new_spectra2[0:mot2.shape[0],:,:] = spectra2_temp[:,:,:]
+                            new_spectra2[mot2.shape[0]:,:,:] = spectra2[:,:,:]
+                            new_icr2[0:mot2.shape[0],:] = icr2_temp[:,:]
+                            new_icr2[mot2.shape[0]:,:] = icr2[:,:]
+                            new_ocr2[0:mot2.shape[0],:] = ocr2_temp[:,:]
+                            new_ocr2[mot2.shape[0]:,:] = ocr2[:,:]
                         new_i0[0:mot2.shape[0],:] = i0_temp[:,:]
                         new_i0[mot2.shape[0]:,:] = i0[:,:]
+                        if i1id is not None:
+                            new_i1[0:mot2.shape[0],:] = i1_temp[:,:]
+                            new_i1[mot2.shape[0]:,:] = i1[:,:]
                         new_mot1[0:mot2.shape[0],:] = mot1_temp[:,:]
                         new_mot1[mot2.shape[0]:,:] = mot1[:,:]
                         new_mot2[0:mot2.shape[0],:] = mot2_temp[:,:]
@@ -2133,8 +2193,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[:,mot2_temp.shape[0]:] = icr0[:,:]
                         new_ocr0[:,0:mot2_temp.shape[0]] = ocr0_temp[:,:]
                         new_ocr0[:,mot2_temp.shape[0]:] = ocr0[:,:]
+                        if ch2id is not None:
+                            new_spectra2[:,0:mot2_temp.shape[0],:] = spectra2_temp[:,:,:]
+                            new_spectra2[:,mot2_temp.shape[0]:,:] = spectra2[:,:,:]
+                            new_icr2[:,0:mot2_temp.shape[0]] = icr2_temp[:,:]
+                            new_icr2[:,mot2_temp.shape[0]:] = icr2[:,:]
+                            new_ocr2[:,0:mot2_temp.shape[0]] = ocr2_temp[:,:]
+                            new_ocr2[:,mot2_temp.shape[0]:] = ocr2[:,:]
                         new_i0[:,0:mot2_temp.shape[0]] = i0_temp[:,:]
                         new_i0[:,mot2_temp.shape[0]:] = i0[:,:]
+                        if i1id is not None:
+                            new_i1[:,0:mot2_temp.shape[0]] = i1_temp[:,:]
+                            new_i1[:,mot2_temp.shape[0]:] = i1[:,:]
                         new_mot1[:,0:mot2_temp.shape[0]] = mot1_temp[:,:]
                         new_mot1[:,mot2_temp.shape[0]:] = mot1[:,:]
                         new_mot2[:,0:mot2_temp.shape[0]] = mot2_temp[:,:]
@@ -2153,7 +2223,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                             new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                             new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            if ch2id is not None:
+                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                             new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                            if i1id is not None:
+                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                             new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2164,8 +2240,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[keep_id:,:] = icr0_temp[:,:]
                             new_ocr0[0:keep_id,:] = ocr0[0:keep_id,:]
                             new_ocr0[keep_id:,:] = ocr0_temp[:,:]
+                            if ch2id is not None:
+                                new_spectra2[0:keep_id,:,:] = spectra2[0:keep_id,:,:]
+                                new_spectra2[keep_id:,:,:] = spectra2_temp[:,:,:]
+                                new_icr2[0:keep_id,:] = icr2[0:keep_id,:]
+                                new_icr2[keep_id:,:] = icr2_temp[:,:]
+                                new_ocr2[0:keep_id,:] = ocr2[0:keep_id,:]
+                                new_ocr2[keep_id:,:] = ocr2_temp[:,:]
                             new_i0[0:keep_id,:] = i0[0:keep_id,:]
                             new_i0[keep_id:,:] = i0_temp[:,:]
+                            if i1id is not None:
+                                new_i1[0:keep_id,:] = i1[0:keep_id,:]
+                                new_i1[keep_id:,:] = i1_temp[:,:]
                             new_mot1[0:keep_id,:] = mot1[0:keep_id,:]
                             new_mot1[keep_id:,:] = mot1_temp[:,:]
                             new_mot2[0:keep_id,:] = mot2[0:keep_id,:]
@@ -2179,7 +2265,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                             new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                             new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            if ch2id is not None:
+                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                             new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                            if i1id is not None:
+                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                             new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2190,8 +2282,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[:,keep_id:] = icr0_temp[:,:]
                             new_ocr0[:,0:keep_id] = ocr0[:,0:keep_id]
                             new_ocr0[:,keep_id:] = ocr0_temp[:,:]
+                            if ch2id is not None:
+                                new_spectra2[:,0:keep_id,:] = spectra2[:,0:keep_id,:]
+                                new_spectra2[:,keep_id:,:] = spectra2_temp[:,:,:]
+                                new_icr2[:,0:keep_id] = icr2[:,0:keep_id]
+                                new_icr2[:,keep_id:] = icr2_temp[:,:]
+                                new_ocr2[:,0:keep_id] = ocr2[:,0:keep_id]
+                                new_ocr2[:,keep_id:] = ocr2_temp[:,:]
                             new_i0[:,0:keep_id] = i0[:,0:keep_id]
                             new_i0[:,keep_id:] = i0_temp[:,:]
+                            if i1id is not None:
+                                new_i1[:,0:keep_id] = i1[:,0:keep_id]
+                                new_i1[:,keep_id:] = i1_temp[:,:]
                             new_mot1[:,0:keep_id] = mot1[:,0:keep_id]
                             new_mot1[:,keep_id:] = mot1_temp[:,:]
                             new_mot2[:,0:keep_id] = mot2[:,0:keep_id]
@@ -2206,7 +2308,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                         new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                         new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                        if ch2id is not None:
+                            new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                            new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                            new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                         new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                        if i1id is not None:
+                            new_i1 = np.zeros((new_dim[0], new_dim[1]))
                         new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                         new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                         new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2218,8 +2326,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[keep_id:,:] = icr0[:,:]
                             new_ocr0[0:keep_id,:] = ocr0_temp[0:keep_id,:]
                             new_ocr0[keep_id:,:] = ocr0[:,:]
+                            if ch2id is not None:
+                                new_spectra2[0:keep_id,:,:] = spectra2_temp[0:keep_id,:,:]
+                                new_spectra2[keep_id:,:,:] = spectra2[:,:,:]
+                                new_icr2[0:keep_id,:] = icr2_temp[0:keep_id,:]
+                                new_icr2[keep_id:,:] = icr2[:,:]
+                                new_ocr2[0:keep_id,:] = ocr2_temp[0:keep_id,:]
+                                new_ocr2[keep_id:,:] = ocr2[:,:]
                             new_i0[0:keep_id,:] = i0_temp[0:keep_id,:]
                             new_i0[keep_id:,:] = i0[:,:]
+                            if i1id is not None:
+                                new_i1[0:keep_id,:] = i1_temp[0:keep_id,:]
+                                new_i1[keep_id:,:] = i1[:,:]
                             new_mot1[0:keep_id,:] = mot1_temp[0:keep_id,:]
                             new_mot1[keep_id:,:] = mot1[:,:]
                             new_mot2[0:keep_id,:] = mot2_temp[0:keep_id,:]
@@ -2233,8 +2351,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[:,keep_id:] = icr0[:,:]
                             new_ocr0[:,0:keep_id] = ocr0_temp[:,0:keep_id]
                             new_ocr0[:,keep_id:] = ocr0[:,:]
+                            if ch2id is not None:
+                                new_spectra2[:,0:keep_id,:] = spectra2_temp[:,0:keep_id,:]
+                                new_spectra2[:,keep_id:,:] = spectra2[:,:,:]
+                                new_icr2[:,0:keep_id] = icr2_temp[:,0:keep_id]
+                                new_icr2[:,keep_id:] = icr2[:,:]
+                                new_ocr2[:,0:keep_id] = ocr2_temp[:,0:keep_id]
+                                new_ocr2[:,keep_id:] = ocr2[:,:]
                             new_i0[:,0:keep_id] = i0_temp[:,0:keep_id]
                             new_i0[:,keep_id:] = i0[:,:]
+                            if i1id is not None:
+                                new_i1[:,0:keep_id] = i1_temp[:,0:keep_id]
+                                new_i1[:,keep_id:] = i1[:,:]
                             new_mot1[:,0:keep_id] = mot1_temp[:,0:keep_id]
                             new_mot1[:,keep_id:] = mot1[:,:]
                             new_mot2[:,0:keep_id] = mot2_temp[:,0:keep_id]
@@ -2250,7 +2378,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                     new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                     new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                     new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    if ch2id is not None:
+                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                     new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                    if i1id is not None:
+                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                     new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2262,8 +2396,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[mot2.shape[0]:,:] = icr0_temp[:,:]
                         new_ocr0[0:mot2.shape[0],:] = ocr0[:,:]
                         new_ocr0[mot2.shape[0]:,:] = ocr0_temp[:,:]
+                        if ch2id is not None:
+                            new_spectra2[0:mot2.shape[0],:,:] = spectra2[:,:,:]
+                            new_spectra2[mot2.shape[0]:,:,:] = spectra2_temp[:,:,:]
+                            new_icr2[0:mot2.shape[0],:] = icr2[:,:]
+                            new_icr2[mot2.shape[0]:,:] = icr2_temp[:,:]
+                            new_ocr2[0:mot2.shape[0],:] = ocr2[:,:]
+                            new_ocr2[mot2.shape[0]:,:] = ocr2_temp[:,:]
                         new_i0[0:mot2.shape[0],:] = i0[:,:]
                         new_i0[mot2.shape[0]:,:] = i0_temp[:,:]
+                        if i1id is not None:
+                            new_i1[0:mot2.shape[0],:] = i1[:,:]
+                            new_i1[mot2.shape[0]:,:] = i1_temp[:,:]
                         new_mot1[0:mot2.shape[0],:] = mot1[:,:]
                         new_mot1[mot2.shape[0]:,:] = mot1_temp[:,:]
                         new_mot2[0:mot2.shape[0],:] = mot2[:,:]
@@ -2277,8 +2421,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[:,mot2.shape[0]:] = icr0_temp[:,:]
                         new_ocr0[:,0:mot2.shape[0]] = ocr0[:,:]
                         new_ocr0[:,mot2.shape[0]:] = ocr0_temp[:,:]
+                        if ch2id is not None:
+                            new_spectra2[:,0:mot2.shape[0],:] = spectra2[:,:,:]
+                            new_spectra2[:,mot2.shape[0]:,:] = spectra2_temp[:,:,:]
+                            new_icr2[:,0:mot2.shape[0]] = icr2[:,:]
+                            new_icr2[:,mot2.shape[0]:] = icr2_temp[:,:]
+                            new_ocr2[:,0:mot2.shape[0]] = ocr2[:,:]
+                            new_ocr2[:,mot2.shape[0]:] = ocr2_temp[:,:]
                         new_i0[:,0:mot2.shape[0]] = i0[:,:]
                         new_i0[:,mot2.shape[0]:] = i0_temp[:,:]
+                        if i1id is not None:
+                            new_i1[:,0:mot2.shape[0]] = i1[:,:]
+                            new_i1[:,mot2.shape[0]:] = i1_temp[:,:]
                         new_mot1[:,0:mot2.shape[0]] = mot1[:,:]
                         new_mot1[:,mot2.shape[0]:] = mot1_temp[:,:]
                         new_mot2[:,0:mot2.shape[0]] = mot2[:,:]
@@ -2292,7 +2446,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                     new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                     new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                     new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    if ch2id is not None:
+                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                     new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                    if i1id is not None:
+                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                     new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                     new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2304,8 +2464,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[mot2.shape[0]:,:] = icr0[:,:]
                         new_ocr0[0:mot2.shape[0],:] = ocr0_temp[:,:]
                         new_ocr0[mot2.shape[0]:,:] = ocr0[:,:]
+                        if ch2id is not None:
+                            new_spectra2[0:mot2.shape[0],:,:] = spectra2_temp[:,:,:]
+                            new_spectra2[mot2.shape[0]:,:,:] = spectra2[:,:,:]
+                            new_icr2[0:mot2.shape[0],:] = icr2_temp[:,:]
+                            new_icr2[mot2.shape[0]:,:] = icr2[:,:]
+                            new_ocr2[0:mot2.shape[0],:] = ocr2_temp[:,:]
+                            new_ocr2[mot2.shape[0]:,:] = ocr2[:,:]
                         new_i0[0:mot2.shape[0],:] = i0_temp[:,:]
                         new_i0[mot2.shape[0]:,:] = i0[:,:]
+                        if i1id is not None:
+                            new_i1[0:mot2.shape[0],:] = i1_temp[:,:]
+                            new_i1[mot2.shape[0]:,:] = i1[:,:]
                         new_mot1[0:mot2.shape[0],:] = mot1_temp[:,:]
                         new_mot1[mot2.shape[0]:,:] = mot1[:,:]
                         new_mot2[0:mot2.shape[0],:] = mot2_temp[:,:]
@@ -2319,8 +2489,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                         new_icr0[:,mot2_temp.shape[0]:] = icr0[:,:]
                         new_ocr0[:,0:mot2_temp.shape[0]] = ocr0_temp[:,:]
                         new_ocr0[:,mot2_temp.shape[0]:] = ocr0[:,:]
+                        if ch2id is not None:
+                            new_spectra2[:,0:mot2_temp.shape[0],:] = spectra2_temp[:,:,:]
+                            new_spectra2[:,mot2_temp.shape[0]:,:] = spectra2[:,:,:]
+                            new_icr2[:,0:mot2_temp.shape[0]] = icr2_temp[:,:]
+                            new_icr2[:,mot2_temp.shape[0]:] = icr2[:,:]
+                            new_ocr2[:,0:mot2_temp.shape[0]] = ocr2_temp[:,:]
+                            new_ocr2[:,mot2_temp.shape[0]:] = ocr2[:,:]
                         new_i0[:,0:mot2_temp.shape[0]] = i0_temp[:,:]
                         new_i0[:,mot2_temp.shape[0]:] = i0[:,:]
+                        if i1id is not None:
+                            new_i1[:,0:mot2_temp.shape[0]] = i1_temp[:,:]
+                            new_i1[:,mot2_temp.shape[0]:] = i1[:,:]
                         new_mot1[:,0:mot2_temp.shape[0]] = mot1_temp[:,:]
                         new_mot1[:,mot2_temp.shape[0]:] = mot1[:,:]
                         new_mot2[:,0:mot2_temp.shape[0]] = mot2_temp[:,:]
@@ -2339,7 +2519,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                             new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                             new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            if ch2id is not None:
+                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                             new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                            if i1id is not None:
+                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                             new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2350,8 +2536,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[keep_id:,:] = icr0_temp[:,:]
                             new_ocr0[0:keep_id,:] = ocr0[0:keep_id,:]
                             new_ocr0[keep_id:,:] = ocr0_temp[:,:]
+                            if ch2id is not None:
+                                new_spectra2[0:keep_id,:,:] = spectra2[0:keep_id,:,:]
+                                new_spectra2[keep_id:,:,:] = spectra2_temp[:,:,:]
+                                new_icr2[0:keep_id,:] = icr2[0:keep_id,:]
+                                new_icr2[keep_id:,:] = icr2_temp[:,:]
+                                new_ocr2[0:keep_id,:] = ocr2[0:keep_id,:]
+                                new_ocr2[keep_id:,:] = ocr2_temp[:,:]
                             new_i0[0:keep_id,:] = i0[0:keep_id,:]
                             new_i0[keep_id:,:] = i0_temp[:,:]
+                            if i1id is not None:
+                                new_i1[0:keep_id,:] = i1[0:keep_id,:]
+                                new_i1[keep_id:,:] = i1_temp[:,:]
                             new_mot1[0:keep_id,:] = mot1[0:keep_id,:]
                             new_mot1[keep_id:,:] = mot1_temp[:,:]
                             new_mot2[0:keep_id,:] = mot2[0:keep_id,:]
@@ -2365,7 +2561,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                             new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                             new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            if ch2id is not None:
+                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                             new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                            if i1id is not None:
+                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                             new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2376,8 +2578,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[:,keep_id:] = icr0_temp[:,:]
                             new_ocr0[:,0:keep_id] = ocr0[:,0:keep_id]
                             new_ocr0[:,keep_id:] = ocr0_temp[:,:]
+                            if ch2id is not None:
+                                new_spectra2[:,0:keep_id,:] = spectra2[:,0:keep_id,:]
+                                new_spectra2[:,keep_id:,:] = spectra2_temp[:,:,:]
+                                new_icr2[:,0:keep_id] = icr2[:,0:keep_id]
+                                new_icr2[:,keep_id:] = icr2_temp[:,:]
+                                new_ocr2[:,0:keep_id] = ocr2[:,0:keep_id]
+                                new_ocr2[:,keep_id:] = ocr2_temp[:,:]
                             new_i0[:,0:keep_id] = i0[:,0:keep_id]
                             new_i0[:,keep_id:] = i0_temp[:,:]
+                            if i1id is not None:
+                                new_i1[:,0:keep_id] = i1[:,0:keep_id]
+                                new_i1[:,keep_id:] = i1_temp[:,:]
                             new_mot1[:,0:keep_id] = mot1[:,0:keep_id]
                             new_mot1[:,keep_id:] = mot1_temp[:,:]
                             new_mot2[:,0:keep_id] = mot2[:,0:keep_id]
@@ -2393,7 +2605,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                             new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                             new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            if ch2id is not None:
+                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                             new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                            if i1id is not None:
+                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                             new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2404,8 +2622,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[keep_id:,:] = icr0[:,:]
                             new_ocr0[0:keep_id,:] = ocr0_temp[0:keep_id,:]
                             new_ocr0[keep_id:,:] = ocr0[:,:]
+                            if ch2id is not None:
+                                new_spectra2[0:keep_id,:,:] = spectra2_temp[0:keep_id,:,:]
+                                new_spectra2[keep_id:,:,:] = spectra2[:,:,:]
+                                new_icr2[0:keep_id,:] = icr2_temp[0:keep_id,:]
+                                new_icr2[keep_id:,:] = icr2[:,:]
+                                new_ocr2[0:keep_id,:] = ocr2_temp[0:keep_id,:]
+                                new_ocr2[keep_id:,:] = ocr2[:,:]
                             new_i0[0:keep_id,:] = i0_temp[0:keep_id,:]
                             new_i0[keep_id:,:] = i0[:,:]
+                            if i1id is not None:
+                                new_i1[0:keep_id,:] = i1_temp[0:keep_id,:]
+                                new_i1[keep_id:,:] = i1[:,:]
                             new_mot1[0:keep_id,:] = mot1_temp[0:keep_id,:]
                             new_mot1[keep_id:,:] = mot1[:,:]
                             new_mot2[0:keep_id,:] = mot2_temp[0:keep_id,:]
@@ -2419,7 +2647,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
                             new_icr0 = np.zeros((new_dim[0], new_dim[1]))
                             new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            if ch2id is not None:
+                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
+                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
+                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
                             new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                            if i1id is not None:
+                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot1 = np.zeros((new_dim[0], new_dim[1]))
                             new_mot2 = np.zeros((new_dim[0], new_dim[1]))
                             new_tm = np.zeros((new_dim[0], new_dim[1]))
@@ -2430,8 +2664,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
                             new_icr0[:,keep_id:] = icr0[:,:]
                             new_ocr0[:,0:keep_id] = ocr0_temp[:,0:keep_id]
                             new_ocr0[:,keep_id:] = ocr0[:,:]
+                            if ch2id is not None:
+                                new_spectra2[:,0:keep_id,:] = spectra2_temp[:,0:keep_id,:]
+                                new_spectra2[:,keep_id:,:] = spectra2[:,:,:]
+                                new_icr2[:,0:keep_id] = icr2_temp[:,0:keep_id]
+                                new_icr2[:,keep_id:] = icr2[:,:]
+                                new_ocr2[:,0:keep_id] = ocr2_temp[:,0:keep_id]
+                                new_ocr2[:,keep_id:] = ocr2[:,:]
                             new_i0[:,0:keep_id] = i0_temp[:,0:keep_id]
                             new_i0[:,keep_id:] = i0[:,:]
+                            if i1id is not None:
+                                new_i1[:,0:keep_id] = i1_temp[:,0:keep_id]
+                                new_i1[:,keep_id:] = i1[:,:]
                             new_mot1[:,0:keep_id] = mot1_temp[:,0:keep_id]
                             new_mot1[:,keep_id:] = mot1[:,:]
                             new_mot2[:,0:keep_id] = mot2_temp[:,0:keep_id]
@@ -2444,7 +2688,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
             spectra0 = new_spectra0
             icr0 = new_icr0
             ocr0 = new_ocr0
+            if ch2id is not None:
+                spectra2 = new_spectra2
+                icr2 = new_icr2
+                ocr2 = new_ocr2
             i0 = new_i0
+            if i1id is not None:
+                i1 = new_i1
             mot1 = new_mot1
             mot2 = new_mot2
             tm = new_tm
@@ -2455,6 +2705,11 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
     maxspec0 = np.zeros(sumspec0.shape[0])
     for i in range(sumspec0.shape[0]):
         maxspec0[i] = spectra0[:,:,i].max()
+    if ch2id is not None:
+        sumspec2 = np.sum(spectra2[:], axis=(0,1))
+        maxspec2 = np.zeros(sumspec2.shape[0])
+        for i in range(sumspec2.shape[0]):
+            maxspec2[i] = spectra2[:,:,i].max()
     
     # write h5 file in our structure
     filename = h5id15[0].split(".")[0]+scan_suffix+'.h5' #scanid is of type 1.1,  2.1,  4.1
@@ -2465,12 +2720,15 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', at
     f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/sumspec', data=sumspec0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/maxspec', data=maxspec0, compression='gzip', compression_opts=4)
-    # f.create_dataset('raw/channel02/spectra', data=spectra2, compression='gzip', compression_opts=4)
-    # f.create_dataset('raw/channel02/icr', data=icr2, compression='gzip', compression_opts=4)
-    # f.create_dataset('raw/channel02/ocr', data=ocr2, compression='gzip', compression_opts=4)
-    # f.create_dataset('raw/channel02/sumspec', data=sumspec2, compression='gzip', compression_opts=4)
-    # f.create_dataset('raw/channel02/maxspec', data=maxspec2, compression='gzip', compression_opts=4)
+    if ch2id is not None:
+        f.create_dataset('raw/channel02/spectra', data=spectra2, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel02/icr', data=icr2, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel02/ocr', data=ocr2, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel02/sumspec', data=sumspec2, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel02/maxspec', data=maxspec2, compression='gzip', compression_opts=4)
     f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+    if i1id is not None:
+        f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
     dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
     dset.attrs['Name'] = mot1_name
     dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
