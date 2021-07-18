@@ -1097,12 +1097,12 @@ def calc_detlim(h5file, cncfile):
 def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
     filename = os.path.splitext(h5file)[0]
 
-    imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
+    imsdata0 = plotims.read_h5(h5file, 'channel00')
     if log:
         imsdata0.data = np.log10(imsdata0.data)
         filename += '_log'
     try:
-        imsdata2 = plotims.read_h5(h5file, datadir+'/channel02/ims')
+        imsdata2 = plotims.read_h5(h5file, 'channel02')
         if imsdata2 is None:
             chan02_flag = False
         else:
@@ -1963,7 +1963,7 @@ def MergeP06Nxs(scanid, sort=True):
 # convert id15a bliss h5 format to our h5 structure file
 #   syntax: h5id15convert('exp_file.h5', '3.1', (160,1), mot1_name='hry', mot2_name='hrz')
 #   when scanid is an array or list of multiple elements, the images will be stitched together to 1 file
-def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i1id='fpico3', icrid='event_count_rate', ocrid='events', atol=None):
+def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i1id='fpico3', icrid='event_count_rate', ocrid='events', atol=None, sort=True):
     scan_dim = np.array(scan_dim)
     scanid = np.array(scanid)
     if scan_dim.size == 1:
@@ -2060,13 +2060,13 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
             if mot1_id == 1 and not np.allclose(mot1[0,(mot1[0,:].shape[0]-mot1_temp[0,:].shape[0]):], mot1_temp[0,:], atol=atol):
                     mot_flag = 1
                     print('Here1')
-            if mot1_id == 0 and not np.allclose(mot1[(mot1[:,0].shape[0]-mot1_temp[:,0].shape[0]):,0], mot1_temp[:,0], atol=atol):
+            elif mot1_id == 0 and not np.allclose(mot1[(mot1[:,0].shape[0]-mot1_temp[:,0].shape[0]):,0], mot1_temp[:,0], atol=atol):
                     mot_flag = 1
                     print('Here2')
-            if mot2_id == 1 and not np.allclose(mot2[0,(mot2[0,:].shape[0]-mot2_temp[0,:].shape[0]):], mot2_temp[0,:], atol=atol):
+            elif mot2_id == 1 and not np.allclose(mot2[0,(mot2[0,:].shape[0]-mot2_temp[0,:].shape[0]):], mot2_temp[0,:], atol=atol):
                     mot_flag = 2
                     print('Here3')
-            if mot2_id == 0 and not np.allclose(mot2[(mot2[:,0].shape[0]-mot2_temp[:,0].shape[0]):,0], mot2_temp[:,0], atol=atol):
+            elif mot2_id == 0 and not np.allclose(mot2[(mot2[:,0].shape[0]-mot2_temp[:,0].shape[0]):,0], mot2_temp[:,0], atol=atol):
                     mot_flag = 2
                     print('Here4')
                     print(mot2[(mot2[:,0].shape[0]-mot2_temp[:,0].shape[0]):,0])
@@ -2699,6 +2699,38 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
             mot2 = new_mot2
             tm = new_tm
         
+    # sort the positions line per line and adjust all other data accordingly
+    if sort is True:
+        for i in range(mot2[:,0].size):
+            sort_id = np.argsort(mot2[i,:])
+            spectra0[i,:,:] = spectra0[i,sort_id,:]
+            icr0[i,:] = icr0[i,sort_id]
+            ocr0[i,:] = ocr0[i,sort_id]
+            if ch2id is not None:
+            	spectra2[i,:,:] = spectra2[i,sort_id,:]
+            	icr2[i,:] = icr2[i,sort_id]
+            	ocr2[i,:] = ocr2[i,sort_id]
+            mot1[i,:] = mot1[i,sort_id]
+            mot2[i,:] = mot2[i,sort_id]
+            i0[i,:] = i0[i,sort_id]
+            if i1id is not None:
+            	i1[i,:] = i1[i,sort_id]
+            tm[i,:] = tm[i,sort_id]
+    
+        # To make sure (especially when merging scans) sort mot2 as well
+        for i in range(mot1[0,:].size):
+            sort_id = np.argsort(mot1[:,i])
+            spectra0[:,i,:] = spectra0[sort_id,i,:]
+            icr0[:,i] = icr0[sort_id,i]
+            ocr0[:,i] = ocr0[sort_id,i]
+            spectra2[:,i,:] = spectra2[sort_id,i,:]
+            icr2[:,i] = icr2[sort_id,i]
+            ocr2[:,i] = ocr2[sort_id,i]
+            mot1[:,i] = mot1[sort_id,i]
+            mot2[:,i] = mot2[sort_id,i]
+            i0[:,i] = i0[sort_id,i]
+            i1[:,i] = i1[sort_id,i]
+            tm[:,i] = tm[sort_id,i]
 
     # calculate maxspec and sumspec
     sumspec0 = np.sum(spectra0[:], axis=(0,1))
