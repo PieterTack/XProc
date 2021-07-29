@@ -1113,6 +1113,7 @@ class Config_GUI(QWidget):
         self.ConfigDict.write(filename)
 
     def load_config(self):
+        #TODO: set Ge or Si button...
         filename = QFileDialog.getOpenFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
         self.ConfigDict.read(filename)
         # go over ConfigDict and adjust GUI accordingly

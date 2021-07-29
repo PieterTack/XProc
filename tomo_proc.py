@@ -203,7 +203,7 @@ def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False):
         h5f.close()
         return
     
-    if rot_mot == None or rot_mot == 'mot1':
+    if rot_mot is None or rot_mot == 'mot1':
         mot1id = 'mot2'
         mot2id = 'mot1'
     else:
