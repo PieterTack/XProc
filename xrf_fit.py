@@ -1097,12 +1097,12 @@ def calc_detlim(h5file, cncfile):
 def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
     filename = os.path.splitext(h5file)[0]
 
-    imsdata0 = plotims.read_h5(h5file, 'channel00')
+    imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
     if log:
         imsdata0.data = np.log10(imsdata0.data)
         filename += '_log'
     try:
-        imsdata2 = plotims.read_h5(h5file, 'channel02')
+        imsdata2 = plotims.read_h5(h5file, datadir+'/channel02/ims')
         if imsdata2 is None:
             chan02_flag = False
         else:
@@ -1620,6 +1620,105 @@ def Pymca_fit(spectra, mcafit, verbose=None):
     return result, groups
 
 ##############################################################################
+# add together multiple h5 files of the same dimensions...
+#   Make sure it is also ordered similarly etc...
+#   Use at your own risk.
+def add_h5s(h5files, newfilename):
+    if type(h5files) is not type(list()):
+        print("ERROR: h5files must be a list!")
+        return
+    else:
+        for i in range(len(h5files)):
+            if i == 0:
+                print("Reading "+h5files[i]+"...", end="")
+                f = h5py.File(h5files[i],'r')
+                cmd = f['cmd'][()].decode('utf8')
+                mot1 = np.array(f['mot1'])
+                mot1_name = str(f['mot1'].attrs["Name"])
+                mot2 = np.array(f['mot2'])
+                mot2_name = str(f['mot2'].attrs["Name"])
+                i0 = np.array(f['raw/I0'])
+                try:
+                    i1 = np.array(f['raw/I1'])
+                    i1flag = True
+                except KeyError:
+                    i1flag = False
+                tm = np.array(f['raw/acquisition_time'])
+                icr0 = np.array(f['raw/channel00/icr'])
+                ocr0 = np.array(f['raw/channel00/ocr'])
+                spectra0 = np.array(f['raw/channel00/spectra'])
+                maxspec0 = np.array(f['raw/channel00/maxspec'])
+                sumspec0 = np.array(f['raw/channel00/sumspec'])
+                try:
+                    icr2 = np.array(f['raw/channel02/icr'])
+                    ocr2 = np.array(f['raw/channel02/ocr'])
+                    spectra2 = np.array(f['raw/channel02/spectra'])
+                    maxspec2 = np.array(f['raw/channel02/maxspec'])
+                    sumspec2 = np.array(f['raw/channel02/sumspec'])
+                    ch2flag = True
+                except KeyError:
+                    ch2flag = False
+                f.close()
+                print("Done")
+            else:
+                print("Reading "+h5files[i]+"...", end="")
+                f = h5py.File(h5files[i],'r')
+                mot1 += np.array(f['mot1'])
+                mot2 += np.array(f['mot2'])
+                i0 += np.array(f['raw/I0'])
+                if i1flag:
+                    i1 += np.array(f['raw/I1'])
+                tm += np.array(f['raw/acquisition_time'])
+                icr0 += np.array(f['raw/channel00/icr'])
+                ocr0 += np.array(f['raw/channel00/ocr'])
+                spectra0 += np.array(f['raw/channel00/spectra'])
+                maxspec_tmp = np.array(f['raw/channel00/maxspec'])
+                for j in range(len(maxspec0)):
+                    if maxspec_tmp[j] > maxspec0[j]:
+                        maxspec0[j] = maxspec_tmp[j]
+                sumspec0 += np.array(f['raw/channel00/sumspec'])
+                if ch2flag:
+                    icr2 += np.array(f['raw/channel02/icr'])
+                    ocr2 += np.array(f['raw/channel02/ocr'])
+                    spectra2 += np.array(f['raw/channel02/spectra'])
+                    maxspec_tmp = np.array(f['raw/channel02/maxspec'])
+                    for j in range(len(maxspec2)):
+                        if maxspec_tmp[j] > maxspec2[j]:
+                            maxspec2[j] = maxspec_tmp[j]
+                    sumspec2 += np.array(f['raw/channel02/sumspec'])
+                    ch2flag = True
+                f.close()
+                print("Done")
+        # make the motor positions the average
+        mot1 /= len(h5files)
+        mot2 /= len(h5files)
+        # write the new file
+        print("writing "+newfilename+"...", end="")
+        f = h5py.File(newfilename, 'w')
+        f.create_dataset('cmd', data=cmd)
+        f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/sumspec', data=sumspec0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/maxspec', data=maxspec0, compression='gzip', compression_opts=4)
+        if ch2flag:
+            f.create_dataset('raw/channel02/spectra', data=spectra2, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel02/icr', data=icr2, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel02/ocr', data=ocr2, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel02/sumspec', data=sumspec2, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel02/maxspec', data=maxspec2, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+        if i1flag:
+            f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+        dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot1_name
+        dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot2_name
+        f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
+        f.close()                   
+        print("Done")
+
+##############################################################################
 # Merges separate P06 nxs files to 1 handy h5 file containing 2D array of spectra, relevant motor positions, I0 counter, ICR, OCR and mesaurement time.
 def MergeP06Nxs(scanid, sort=True):
     scanid = np.array(scanid)
@@ -1998,7 +2097,7 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
                 sc_dim = scan_dim
         if j == 0:
             f = h5py.File(file, 'r')
-            scan_cmd = np.array(f[sc_id+'/title'])+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
+            scan_cmd = f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
             spectra0_temp = np.array(f[sc_id+'/measurement/'+ch0id])
             spectra0 = np.zeros((sc_dim[0], sc_dim[1], spectra0_temp.shape[1]))
             for i in range(0, spectra0_temp.shape[1]):
@@ -2033,7 +2132,7 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
         # when reading second file, we should stitch it to the first file's image
         else:
             f = h5py.File(file, 'r')
-            scan_cmd += ' '+(np.array(f[sc_id+'/title'])+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
+            scan_cmd += ' '+(f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
             #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
             spectra0_tmp = np.array(f[sc_id+'/measurement/'+ch0id])
             spectra0_temp = np.zeros((sc_dim[0], sc_dim[1], spectra0_tmp.shape[1]))
@@ -2057,16 +2156,34 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
             f.close()
 
             mot_flag = 0 #TODO: if mot1_temp.shape is larger than mot1 it crashes...
-            if mot1_id == 1 and not np.allclose(mot1[0,(mot1[0,:].shape[0]-mot1_temp[0,:].shape[0]):], mot1_temp[0,:], atol=atol):
+            if mot1_id == 0:
+                if mot1_temp[:,0].shape[0] >= mot1[:,0].shape[0]:
+                    mot1lim = mot1[:,0].shape[0]
+                else:
+                    mot1lim = mot1_temp[:,0].shape[0]
+                if mot2_temp[:,0].shape[0] >= mot2[:,0].shape[0]:
+                    mot2lim = mot2[:,0].shape[0]
+                else:
+                    mot2lim = mot2_temp[:,0].shape[0]
+            if mot1_id == 1:
+                if mot1_temp[0,:].shape[0] >= mot1[0,:].shape[0]:
+                    mot1lim = mot1[0,:].shape[0]
+                else:
+                    mot1lim = mot1_temp[0,:].shape[0]
+                if mot2_temp[0,:].shape[0] >= mot2[0,:].shape[0]:
+                    mot2lim = mot2[0,:].shape[0]
+                else:
+                    mot2lim = mot2_temp[0,:].shape[0]
+            if mot1_id == 1 and not np.allclose(mot1[0,(mot1[0,:].shape[0]-mot1lim):], mot1_temp[0,:mot1lim], atol=atol):
                     mot_flag = 1
-                    print('Here1')
-            elif mot1_id == 0 and not np.allclose(mot1[(mot1[:,0].shape[0]-mot1_temp[:,0].shape[0]):,0], mot1_temp[:,0], atol=atol):
+                    print('Here1',end=' ')
+            elif mot1_id == 0 and not np.allclose(mot1[(mot1[:,0].shape[0]-mot1lim):,0], mot1_temp[:mot1lim,0], atol=atol):
                     mot_flag = 1
-                    print('Here2')
-            elif mot2_id == 1 and not np.allclose(mot2[0,(mot2[0,:].shape[0]-mot2_temp[0,:].shape[0]):], mot2_temp[0,:], atol=atol):
+                    print('Here2',end=' ')
+            elif mot2_id == 1 and not np.allclose(mot2[0,(mot2[0,:].shape[0]-mot2lim):], mot2_temp[0,:mot2lim], atol=atol):
                     mot_flag = 2
-                    print('Here3')
-            elif mot2_id == 0 and not np.allclose(mot2[(mot2[:,0].shape[0]-mot2_temp[:,0].shape[0]):,0], mot2_temp[:,0], atol=atol):
+                    print('Here3',end=' ')
+            elif mot2_id == 0 and not np.allclose(mot2[(mot2[:,0].shape[0]-mot2lim):,0], mot2_temp[:mot2lim,0], atol=atol):
                     mot_flag = 2
                     print('Here4')
                     print(mot2[(mot2[:,0].shape[0]-mot2_temp[:,0].shape[0]):,0])
@@ -2076,141 +2193,34 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
             if mot_flag == 2:
                 # as mot1 and mot1_temp are identical, it must be that mot2 changes
                 if mot2.max() < mot2_temp.min():
-                    # mot2 should come before mot2_temp
-                    new_dim = np.array(mot2.shape)
-                    new_dim[mot2_id] += mot2_temp.shape[mot2_id]
-                    new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                    new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                    new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    spectra0 = np.concatenate((spectra0, spectra0_temp),axis=mot1_id)
+                    icr0 = np.concatenate((icr0, icr0_temp), axis=mot1_id)
+                    ocr0 = np.concatenate((ocr0, ocr0_temp), axis=mot1_id)
                     if ch2id is not None:
-                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                        spectra2 = np.concatenate((spectra2, spectra2_temp),axis=mot1_id)
+                        icr2 = np.concatenate((icr2, icr2_temp), axis=mot1_id)
+                        ocr2 = np.concatenate((ocr2, ocr2_temp), axis=mot1_id)
+                    i0 = np.concatenate((i0, i0_temp), axis=mot1_id)
                     if i1id is not None:
-                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_tm = np.zeros((new_dim[0], new_dim[1]))
-                    # fill the new array and resave as .._temp
-                    if mot2_id == 0:
-                        new_spectra0[0:mot2.shape[0],:,:] = spectra0[:,:,:]
-                        new_spectra0[mot2.shape[0]:,:,:] = spectra0_temp[:,:,:]
-                        new_icr0[0:mot2.shape[0],:] = icr0[:,:]
-                        new_icr0[mot2.shape[0]:,:] = icr0_temp[:,:]
-                        new_ocr0[0:mot2.shape[0],:] = ocr0[:,:]
-                        new_ocr0[mot2.shape[0]:,:] = ocr0_temp[:,:]
-                        if ch2id is not None:
-                            new_spectra2[0:mot2.shape[0],:,:] = spectra2[:,:,:]
-                            new_spectra2[mot2.shape[0]:,:,:] = spectra2_temp[:,:,:]
-                            new_icr2[0:mot2.shape[0],:] = icr2[:,:]
-                            new_icr2[mot2.shape[0]:,:] = icr2_temp[:,:]
-                            new_ocr2[0:mot2.shape[0],:] = ocr2[:,:]
-                            new_ocr2[mot2.shape[0]:,:] = ocr2_temp[:,:]
-                        new_i0[0:mot2.shape[0],:] = i0[:,:]
-                        new_i0[mot2.shape[0]:,:] = i0_temp[:,:]
-                        if i1id is not None:
-                            new_i1[0:mot2.shape[0],:] = i1[:,:]
-                            new_i1[mot2.shape[0]:,:] = i1_temp[:,:]
-                        new_mot1[0:mot2.shape[0],:] = mot1[:,:]
-                        new_mot1[mot2.shape[0]:,:] = mot1_temp[:,:]
-                        new_mot2[0:mot2.shape[0],:] = mot2[:,:]
-                        new_mot2[mot2.shape[0]:,:] = mot2_temp[:,:]
-                        new_tm[0:mot2.shape[0],:] = tm[:,:]
-                        new_tm[mot2.shape[0]:,:] = tm_temp[:,:]
-                    else:
-                        new_spectra0[:,0:mot2.shape[0],:] = spectra0[:,:,:]
-                        new_spectra0[:,mot2.shape[0]:,:] = spectra0_temp[:,:,:]
-                        new_icr0[:,0:mot2.shape[0]] = icr0[:,:]
-                        new_icr0[:,mot2.shape[0]:] = icr0_temp[:,:]
-                        new_ocr0[:,0:mot2.shape[0]] = ocr0[:,:]
-                        new_ocr0[:,mot2.shape[0]:] = ocr0_temp[:,:]
-                        if ch2id is not None:
-                            new_spectra2[:,0:mot2.shape[0],:] = spectra2[:,:,:]
-                            new_spectra2[:,mot2.shape[0]:,:] = spectra2_temp[:,:,:]
-                            new_icr2[:,0:mot2.shape[0]] = icr2[:,:]
-                            new_icr2[:,mot2.shape[0]:] = icr2_temp[:,:]
-                            new_ocr2[:,0:mot2.shape[0]] = ocr2[:,:]
-                            new_ocr2[:,mot2.shape[0]:] = ocr2_temp[:,:]
-                        new_i0[:,0:mot2.shape[0]] = i0[:,:]
-                        new_i0[:,mot2.shape[0]:] = i0_temp[:,:]
-                        if i1id is not None:
-                            new_i1[:,0:mot2.shape[0]] = i1[:,:]
-                            new_i1[:,mot2.shape[0]:] = i1_temp[:,:]
-                        new_mot1[:,0:mot2.shape[0]] = mot1[:,:]
-                        new_mot1[:,mot2.shape[0]:] = mot1_temp[:,:]
-                        new_mot2[:,0:mot2.shape[0]] = mot2[:,:]
-                        new_mot2[:,mot2.shape[0]:] = mot2_temp[:,:]
-                        new_tm[:,0:mot2.shape[0]] = tm[:,:]
-                        new_tm[:,mot2.shape[0]:] = tm_temp[:,:]                        
+                        i1 = np.concatenate((i1, i1_temp), axis=mot1_id)
+                    mot1 = np.concatenate((mot1, mot1_temp), axis=mot1_id)
+                    mot2 = np.concatenate((mot2, mot2_temp), axis=mot1_id)
+                    tm = np.concatenate((tm, tm_temp), axis=mot1_id)
                 elif mot2_temp.max() < mot2.min():
                     # mot2_temp should come before mot2
-                    new_dim = np.array(mot2.shape)
-                    new_dim[mot2_id] += mot2_temp.shape[mot2_id]
-                    new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                    new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                    new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    spectra0 = np.concatenate((spectra0_temp, spectra0),axis=mot1_id)
+                    icr0 = np.concatenate((icr0_temp, icr0), axis=mot1_id)
+                    ocr0 = np.concatenate((ocr0_temp, ocr0), axis=mot1_id)
                     if ch2id is not None:
-                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                        spectra2 = np.concatenate((spectra2_temp, spectra2),axis=mot1_id)
+                        icr2 = np.concatenate((icr2_temp, icr2), axis=mot1_id)
+                        ocr2 = np.concatenate((ocr2_temp, ocr2), axis=mot1_id)
+                    i0 = np.concatenate((i0_temp, i0), axis=mot1_id)
                     if i1id is not None:
-                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_tm = np.zeros((new_dim[0], new_dim[1]))
-                    # fill the new array
-                    if mot2_id == 0:
-                        new_spectra0[0:mot2.shape[0],:,:] = spectra0_temp[:,:,:]
-                        new_spectra0[mot2.shape[0]:,:,:] = spectra0[:,:,:]
-                        new_icr0[0:mot2.shape[0],:] = icr0_temp[:,:]
-                        new_icr0[mot2.shape[0]:,:] = icr0[:,:]
-                        new_ocr0[0:mot2.shape[0],:] = ocr0_temp[:,:]
-                        new_ocr0[mot2.shape[0]:,:] = ocr0[:,:]
-                        if ch2id is not None:
-                            new_spectra2[0:mot2.shape[0],:,:] = spectra2_temp[:,:,:]
-                            new_spectra2[mot2.shape[0]:,:,:] = spectra2[:,:,:]
-                            new_icr2[0:mot2.shape[0],:] = icr2_temp[:,:]
-                            new_icr2[mot2.shape[0]:,:] = icr2[:,:]
-                            new_ocr2[0:mot2.shape[0],:] = ocr2_temp[:,:]
-                            new_ocr2[mot2.shape[0]:,:] = ocr2[:,:]
-                        new_i0[0:mot2.shape[0],:] = i0_temp[:,:]
-                        new_i0[mot2.shape[0]:,:] = i0[:,:]
-                        if i1id is not None:
-                            new_i1[0:mot2.shape[0],:] = i1_temp[:,:]
-                            new_i1[mot2.shape[0]:,:] = i1[:,:]
-                        new_mot1[0:mot2.shape[0],:] = mot1_temp[:,:]
-                        new_mot1[mot2.shape[0]:,:] = mot1[:,:]
-                        new_mot2[0:mot2.shape[0],:] = mot2_temp[:,:]
-                        new_mot2[mot2.shape[0]:,:] = mot2[:,:]
-                        new_tm[0:mot2.shape[0],:] = tm_temp[:,:]
-                        new_tm[mot2.shape[0]:,:] = tm[:,:]
-                    else:
-                        new_spectra0[:,0:mot2_temp.shape[0],:] = spectra0_temp[:,:,:]
-                        new_spectra0[:,mot2_temp.shape[0]:,:] = spectra0[:,:,:]
-                        new_icr0[:,0:mot2_temp.shape[0]] = icr0_temp[:,:]
-                        new_icr0[:,mot2_temp.shape[0]:] = icr0[:,:]
-                        new_ocr0[:,0:mot2_temp.shape[0]] = ocr0_temp[:,:]
-                        new_ocr0[:,mot2_temp.shape[0]:] = ocr0[:,:]
-                        if ch2id is not None:
-                            new_spectra2[:,0:mot2_temp.shape[0],:] = spectra2_temp[:,:,:]
-                            new_spectra2[:,mot2_temp.shape[0]:,:] = spectra2[:,:,:]
-                            new_icr2[:,0:mot2_temp.shape[0]] = icr2_temp[:,:]
-                            new_icr2[:,mot2_temp.shape[0]:] = icr2[:,:]
-                            new_ocr2[:,0:mot2_temp.shape[0]] = ocr2_temp[:,:]
-                            new_ocr2[:,mot2_temp.shape[0]:] = ocr2[:,:]
-                        new_i0[:,0:mot2_temp.shape[0]] = i0_temp[:,:]
-                        new_i0[:,mot2_temp.shape[0]:] = i0[:,:]
-                        if i1id is not None:
-                            new_i1[:,0:mot2_temp.shape[0]] = i1_temp[:,:]
-                            new_i1[:,mot2_temp.shape[0]:] = i1[:,:]
-                        new_mot1[:,0:mot2_temp.shape[0]] = mot1_temp[:,:]
-                        new_mot1[:,mot2_temp.shape[0]:] = mot1[:,:]
-                        new_mot2[:,0:mot2_temp.shape[0]] = mot2_temp[:,:]
-                        new_mot2[:,mot2_temp.shape[0]:] = mot2[:,:]
-                        new_tm[:,0:mot2_temp.shape[0]] = tm_temp[:,:]
-                        new_tm[:,mot2_temp.shape[0]:] =  tm[:,:]
+                        i1 = np.concatenate((i1_temp, i1), axis=mot1_id)
+                    mot1 = np.concatenate((mot1_temp, mot1), axis=mot1_id)
+                    mot2 = np.concatenate((mot2_temp, mot2), axis=mot1_id)
+                    tm = np.concatenate((tm_temp, tm), axis=mot1_id)
                 else:
                     # there is some overlap between mot2 and mot2_temp; figure out where it overlaps and stitch like that
                     #TODO: there is the case where the new slice could fit entirely within the old one...
@@ -2218,295 +2228,95 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
                         # mot2 should come first, followed by mot2_temp
                         if mot2_id == 0:
                             keep_id = np.array(np.where(mot2[:,0] < mot2_temp.min())).max()+1 #add one as we also need last element of id's
-                            new_dim = np.array(mot2_temp.shape)
-                            new_dim[mot2_id] += keep_id
-                            new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                            new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                            new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            spectra0 = np.concatenate((spectra0[0:keep_id,:,:], spectra0_temp),axis=mot1_id)
+                            icr0 = np.concatenate((icr0[0:keep_id,:], icr0_temp), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0[0:keep_id,:], ocr0_temp), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                                spectra2 = np.concatenate((spectra2[0:keep_id,:,:], spectra2_temp),axis=mot1_id)
+                                icr2 = np.concatenate((icr2[0:keep_id,:], icr2_temp), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2[0:keep_id,:], ocr2_temp), axis=mot1_id)
+                            i0 = np.concatenate((i0[0:keep_id,:], i0_temp), axis=mot1_id)
                             if i1id is not None:
-                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_tm = np.zeros((new_dim[0], new_dim[1]))
-                            # fill the new array
-                            new_spectra0[0:keep_id,:,:] = spectra0[0:keep_id,:,:]
-                            new_spectra0[keep_id:,:,:] = spectra0_temp[:,:,:]
-                            new_icr0[0:keep_id,:] = icr0[0:keep_id,:]
-                            new_icr0[keep_id:,:] = icr0_temp[:,:]
-                            new_ocr0[0:keep_id,:] = ocr0[0:keep_id,:]
-                            new_ocr0[keep_id:,:] = ocr0_temp[:,:]
-                            if ch2id is not None:
-                                new_spectra2[0:keep_id,:,:] = spectra2[0:keep_id,:,:]
-                                new_spectra2[keep_id:,:,:] = spectra2_temp[:,:,:]
-                                new_icr2[0:keep_id,:] = icr2[0:keep_id,:]
-                                new_icr2[keep_id:,:] = icr2_temp[:,:]
-                                new_ocr2[0:keep_id,:] = ocr2[0:keep_id,:]
-                                new_ocr2[keep_id:,:] = ocr2_temp[:,:]
-                            new_i0[0:keep_id,:] = i0[0:keep_id,:]
-                            new_i0[keep_id:,:] = i0_temp[:,:]
-                            if i1id is not None:
-                                new_i1[0:keep_id,:] = i1[0:keep_id,:]
-                                new_i1[keep_id:,:] = i1_temp[:,:]
-                            new_mot1[0:keep_id,:] = mot1[0:keep_id,:]
-                            new_mot1[keep_id:,:] = mot1_temp[:,:]
-                            new_mot2[0:keep_id,:] = mot2[0:keep_id,:]
-                            new_mot2[keep_id:,:] = mot2_temp[:,:]
-                            new_tm[0:keep_id,:] = tm[0:keep_id,:]
-                            new_tm[keep_id:,:] = tm_temp[:,:]
+                                i1 = np.concatenate((i1[0:keep_id,:], i1_temp), axis=mot1_id)
+                            mot1 = np.concatenate((mot1[0:keep_id,:], mot1_temp), axis=mot1_id)
+                            mot2 = np.concatenate((mot2[0:keep_id,:], mot2_temp), axis=mot1_id)
+                            tm = np.concatenate((tm[0:keep_id,:], tm_temp), axis=mot1_id)
                         else:
                             keep_id = np.array(np.where(mot2[0,:] < mot2_temp.min())).max()+1 #add one as we also need last element of id's
-                            new_dim = np.array(mot2_temp.shape)
-                            new_dim[mot2_id] += keep_id
-                            new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                            new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                            new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            spectra0 = np.concatenate((spectra0[:,0:keep_id,:], spectra0_temp),axis=mot1_id)
+                            icr0 = np.concatenate((icr0[:,0:keep_id], icr0_temp), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0[:,0:keep_id], ocr0_temp), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                                spectra2 = np.concatenate((spectra2[:,0:keep_id,:,:], spectra2_temp),axis=mot1_id)
+                                icr2 = np.concatenate((icr2[:,0:keep_id], icr2_temp), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2[:,0:keep_id], ocr2_temp), axis=mot1_id)
+                            i0 = np.concatenate((i0[:,0:keep_id], i0_temp), axis=mot1_id)
                             if i1id is not None:
-                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_tm = np.zeros((new_dim[0], new_dim[1]))
-                            # fill the new array
-                            new_spectra0[:,0:keep_id,:] = spectra0[:,0:keep_id,:]
-                            new_spectra0[:,keep_id:,:] = spectra0_temp[:,:,:]
-                            new_icr0[:,0:keep_id] = icr0[:,0:keep_id]
-                            new_icr0[:,keep_id:] = icr0_temp[:,:]
-                            new_ocr0[:,0:keep_id] = ocr0[:,0:keep_id]
-                            new_ocr0[:,keep_id:] = ocr0_temp[:,:]
-                            if ch2id is not None:
-                                new_spectra2[:,0:keep_id,:] = spectra2[:,0:keep_id,:]
-                                new_spectra2[:,keep_id:,:] = spectra2_temp[:,:,:]
-                                new_icr2[:,0:keep_id] = icr2[:,0:keep_id]
-                                new_icr2[:,keep_id:] = icr2_temp[:,:]
-                                new_ocr2[:,0:keep_id] = ocr2[:,0:keep_id]
-                                new_ocr2[:,keep_id:] = ocr2_temp[:,:]
-                            new_i0[:,0:keep_id] = i0[:,0:keep_id]
-                            new_i0[:,keep_id:] = i0_temp[:,:]
-                            if i1id is not None:
-                                new_i1[:,0:keep_id] = i1[:,0:keep_id]
-                                new_i1[:,keep_id:] = i1_temp[:,:]
-                            new_mot1[:,0:keep_id] = mot1[:,0:keep_id]
-                            new_mot1[:,keep_id:] = mot1_temp[:,:]
-                            new_mot2[:,0:keep_id] = mot2[:,0:keep_id]
-                            new_mot2[:,keep_id:] = mot2_temp[:,:]
-                            new_tm[:,0:keep_id] = tm[:,0:keep_id]
-                            new_tm[:,keep_id:] = tm_temp[:,:]
+                                i1 = np.concatenate((i1[:,0:keep_id], i1_temp), axis=mot1_id)
+                            mot1 = np.concatenate((mot1[:,0:keep_id], mot1_temp), axis=mot1_id)
+                            mot2 = np.concatenate((mot2[:,0:keep_id], mot2_temp), axis=mot1_id)
+                            tm = np.concatenate((tm[:,0:keep_id], tm_temp), axis=mot1_id)
                     else:
                         # first mot2_temp, followed by remainder of mot2 (where no more overlap)
                         keep_id = np.array(np.where(mot2_temp[mot2_id] < mot2.min())).max()+1 #add one as we also need last element of id's
-                        new_dim = np.array(mot2.shape)
-                        new_dim[mot2_id] += keep_id
-                        new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                        new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                        new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
-                        if ch2id is not None:
-                            new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                            new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                        new_i0 = np.zeros((new_dim[0], new_dim[1]))
-                        if i1id is not None:
-                            new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                        new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                        new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                        new_tm = np.zeros((new_dim[0], new_dim[1]))
-                        # fill the new array
                         if mot2_id == 0:
-                            new_spectra0[0:keep_id,:,:] = spectra0_temp[0:keep_id,:,:]
-                            new_spectra0[keep_id:,:,:] = spectra0[:,:,:]
-                            new_icr0[0:keep_id,:] = icr0_temp[0:keep_id,:]
-                            new_icr0[keep_id:,:] = icr0[:,:]
-                            new_ocr0[0:keep_id,:] = ocr0_temp[0:keep_id,:]
-                            new_ocr0[keep_id:,:] = ocr0[:,:]
+                            spectra0 = np.concatenate((spectra0_temp[:,0:keep_id,:], spectra0),axis=mot1_id)
+                            icr0 = np.concatenate((icr0_temp[:,0:keep_id], icr0), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0_temp[:,0:keep_id], ocr0), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2[0:keep_id,:,:] = spectra2_temp[0:keep_id,:,:]
-                                new_spectra2[keep_id:,:,:] = spectra2[:,:,:]
-                                new_icr2[0:keep_id,:] = icr2_temp[0:keep_id,:]
-                                new_icr2[keep_id:,:] = icr2[:,:]
-                                new_ocr2[0:keep_id,:] = ocr2_temp[0:keep_id,:]
-                                new_ocr2[keep_id:,:] = ocr2[:,:]
-                            new_i0[0:keep_id,:] = i0_temp[0:keep_id,:]
-                            new_i0[keep_id:,:] = i0[:,:]
+                                spectra2 = np.concatenate((spectra2_temp[:,0:keep_id,:,:], spectra2),axis=mot1_id)
+                                icr2 = np.concatenate((icr2_temp[:,0:keep_id], icr2), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2_temp[:,0:keep_id], ocr2), axis=mot1_id)
+                            i0 = np.concatenate((i0_temp[:,0:keep_id], i0), axis=mot1_id)
                             if i1id is not None:
-                                new_i1[0:keep_id,:] = i1_temp[0:keep_id,:]
-                                new_i1[keep_id:,:] = i1[:,:]
-                            new_mot1[0:keep_id,:] = mot1_temp[0:keep_id,:]
-                            new_mot1[keep_id:,:] = mot1[:,:]
-                            new_mot2[0:keep_id,:] = mot2_temp[0:keep_id,:]
-                            new_mot2[keep_id:,:] = mot2[:,:]
-                            new_tm[0:keep_id,:] = tm_temp[0:keep_id,:]
-                            new_tm[keep_id:,:] = tm[:,:]
+                                i1 = np.concatenate((i1_temp[:,0:keep_id], i1), axis=mot1_id)
+                            mot1 = np.concatenate((mot1_temp[:,0:keep_id], mot1), axis=mot1_id)
+                            mot2 = np.concatenate((mot2_temp[:,0:keep_id], mot2), axis=mot1_id)
+                            tm = np.concatenate((tm_temp[:,0:keep_id], tm), axis=mot1_id)
                         else:
-                            new_spectra0[:,0:keep_id,:] = spectra0_temp[:,0:keep_id,:]
-                            new_spectra0[:,keep_id:,:] = spectra0[:,:,:]
-                            new_icr0[:,0:keep_id] = icr0_temp[:,0:keep_id]
-                            new_icr0[:,keep_id:] = icr0[:,:]
-                            new_ocr0[:,0:keep_id] = ocr0_temp[:,0:keep_id]
-                            new_ocr0[:,keep_id:] = ocr0[:,:]
+                            spectra0 = np.concatenate((spectra0_temp[:,0:keep_id,:], spectra0),axis=mot1_id)
+                            icr0 = np.concatenate((icr0_temp[:,0:keep_id], icr0), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0_temp[:,0:keep_id], ocr0), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2[:,0:keep_id,:] = spectra2_temp[:,0:keep_id,:]
-                                new_spectra2[:,keep_id:,:] = spectra2[:,:,:]
-                                new_icr2[:,0:keep_id] = icr2_temp[:,0:keep_id]
-                                new_icr2[:,keep_id:] = icr2[:,:]
-                                new_ocr2[:,0:keep_id] = ocr2_temp[:,0:keep_id]
-                                new_ocr2[:,keep_id:] = ocr2[:,:]
-                            new_i0[:,0:keep_id] = i0_temp[:,0:keep_id]
-                            new_i0[:,keep_id:] = i0[:,:]
+                                spectra2 = np.concatenate((spectra2_temp[:,0:keep_id,:,:], spectra2),axis=mot1_id)
+                                icr2 = np.concatenate((icr2_temp[:,0:keep_id], icr2), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2_temp[:,0:keep_id], ocr2), axis=mot1_id)
+                            i0 = np.concatenate((i0_temp[:,0:keep_id], i0), axis=mot1_id)
                             if i1id is not None:
-                                new_i1[:,0:keep_id] = i1_temp[:,0:keep_id]
-                                new_i1[:,keep_id:] = i1[:,:]
-                            new_mot1[:,0:keep_id] = mot1_temp[:,0:keep_id]
-                            new_mot1[:,keep_id:] = mot1[:,:]
-                            new_mot2[:,0:keep_id] = mot2_temp[:,0:keep_id]
-                            new_mot2[:,keep_id:] = mot2[:,:]
-                            new_tm[:,0:keep_id] = tm_temp[:,0:keep_id]
-                            new_tm[:,keep_id:] = tm[:,:]
+                                i1 = np.concatenate((i1_temp[:,0:keep_id], i1), axis=mot1_id)
+                            mot1 = np.concatenate((mot1_temp[:,0:keep_id], mot1), axis=mot1_id)
+                            mot2 = np.concatenate((mot2_temp[:,0:keep_id], mot2), axis=mot1_id)
+                            tm = np.concatenate((tm_temp[:,0:keep_id], tm), axis=mot1_id)
             elif mot_flag == 1:
                 # as mot2 and mot2_temp are identical, it must be that mot1 changes
                 if mot1.max() < mot1_temp.min():
-                    # mot1 should come before mot1_temp
-                    new_dim = np.array(mot1.shape)
-                    new_dim[mot1_id] += mot1_temp.shape[mot1_id]
-                    new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                    new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                    new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    spectra0 = np.concatenate((spectra0, spectra0_temp),axis=mot1_id)
+                    icr0 = np.concatenate((icr0, icr0_temp), axis=mot1_id)
+                    ocr0 = np.concatenate((ocr0, ocr0_temp), axis=mot1_id)
                     if ch2id is not None:
-                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                        spectra2 = np.concatenate((spectra2, spectra2_temp),axis=mot1_id)
+                        icr2 = np.concatenate((icr2, icr2_temp), axis=mot1_id)
+                        ocr2 = np.concatenate((ocr2, ocr2_temp), axis=mot1_id)
+                    i0 = np.concatenate((i0, i0_temp), axis=mot1_id)
                     if i1id is not None:
-                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_tm = np.zeros((new_dim[0], new_dim[1]))
-                    # fill the new array and resave as .._temp
-                    if mot1_id == 0:
-                        new_spectra0[0:mot2.shape[0],:,:] = spectra0[:,:,:]
-                        new_spectra0[mot2.shape[0]:,:,:] = spectra0_temp[:,:,:]
-                        new_icr0[0:mot2.shape[0],:] = icr0[:,:]
-                        new_icr0[mot2.shape[0]:,:] = icr0_temp[:,:]
-                        new_ocr0[0:mot2.shape[0],:] = ocr0[:,:]
-                        new_ocr0[mot2.shape[0]:,:] = ocr0_temp[:,:]
-                        if ch2id is not None:
-                            new_spectra2[0:mot2.shape[0],:,:] = spectra2[:,:,:]
-                            new_spectra2[mot2.shape[0]:,:,:] = spectra2_temp[:,:,:]
-                            new_icr2[0:mot2.shape[0],:] = icr2[:,:]
-                            new_icr2[mot2.shape[0]:,:] = icr2_temp[:,:]
-                            new_ocr2[0:mot2.shape[0],:] = ocr2[:,:]
-                            new_ocr2[mot2.shape[0]:,:] = ocr2_temp[:,:]
-                        new_i0[0:mot2.shape[0],:] = i0[:,:]
-                        new_i0[mot2.shape[0]:,:] = i0_temp[:,:]
-                        if i1id is not None:
-                            new_i1[0:mot2.shape[0],:] = i1[:,:]
-                            new_i1[mot2.shape[0]:,:] = i1_temp[:,:]
-                        new_mot1[0:mot2.shape[0],:] = mot1[:,:]
-                        new_mot1[mot2.shape[0]:,:] = mot1_temp[:,:]
-                        new_mot2[0:mot2.shape[0],:] = mot2[:,:]
-                        new_mot2[mot2.shape[0]:,:] = mot2_temp[:,:]
-                        new_tm[0:mot2.shape[0],:] = tm[:,:]
-                        new_tm[mot2.shape[0]:,:] = tm_temp[:,:]
-                    else:
-                        new_spectra0[:,0:mot2.shape[0],:] = spectra0[:,:,:]
-                        new_spectra0[:,mot2.shape[0]:,:] = spectra0_temp[:,:,:]
-                        new_icr0[:,0:mot2.shape[0]] = icr0[:,:]
-                        new_icr0[:,mot2.shape[0]:] = icr0_temp[:,:]
-                        new_ocr0[:,0:mot2.shape[0]] = ocr0[:,:]
-                        new_ocr0[:,mot2.shape[0]:] = ocr0_temp[:,:]
-                        if ch2id is not None:
-                            new_spectra2[:,0:mot2.shape[0],:] = spectra2[:,:,:]
-                            new_spectra2[:,mot2.shape[0]:,:] = spectra2_temp[:,:,:]
-                            new_icr2[:,0:mot2.shape[0]] = icr2[:,:]
-                            new_icr2[:,mot2.shape[0]:] = icr2_temp[:,:]
-                            new_ocr2[:,0:mot2.shape[0]] = ocr2[:,:]
-                            new_ocr2[:,mot2.shape[0]:] = ocr2_temp[:,:]
-                        new_i0[:,0:mot2.shape[0]] = i0[:,:]
-                        new_i0[:,mot2.shape[0]:] = i0_temp[:,:]
-                        if i1id is not None:
-                            new_i1[:,0:mot2.shape[0]] = i1[:,:]
-                            new_i1[:,mot2.shape[0]:] = i1_temp[:,:]
-                        new_mot1[:,0:mot2.shape[0]] = mot1[:,:]
-                        new_mot1[:,mot2.shape[0]:] = mot1_temp[:,:]
-                        new_mot2[:,0:mot2.shape[0]] = mot2[:,:]
-                        new_mot2[:,mot2.shape[0]:] = mot2_temp[:,:]
-                        new_tm[:,0:mot2.shape[0]] = tm[:,:]
-                        new_tm[:,mot2.shape[0]:] = tm_temp[:,:]                        
+                        i1 = np.concatenate((i1, i1_temp), axis=mot1_id)
+                    mot1 = np.concatenate((mot1, mot1_temp), axis=mot1_id)
+                    mot2 = np.concatenate((mot2, mot2_temp), axis=mot1_id)
+                    tm = np.concatenate((tm, tm_temp), axis=mot1_id)
                 elif mot1_temp.max() < mot1.min():
-                    # mot1_temp should come before mot1
-                    new_dim = np.array(mot1.shape)
-                    new_dim[mot1_id] += mot1_temp.shape[mot1_id]
-                    new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                    new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                    new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                    spectra0 = np.concatenate((spectra0_temp, spectra0),axis=mot1_id)
+                    icr0 = np.concatenate((icr0_temp, icr0), axis=mot1_id)
+                    ocr0 = np.concatenate((ocr0_temp, ocr0), axis=mot1_id)
                     if ch2id is not None:
-                        new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                        new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                        new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                        spectra2 = np.concatenate((spectra2_temp, spectra2),axis=mot1_id)
+                        icr2 = np.concatenate((icr2_temp, icr2), axis=mot1_id)
+                        ocr2 = np.concatenate((ocr2_temp, ocr2), axis=mot1_id)
+                    i0 = np.concatenate((i0_temp, i0), axis=mot1_id)
                     if i1id is not None:
-                        new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                    new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                    new_tm = np.zeros((new_dim[0], new_dim[1]))
-                    # fill the new array
-                    if mot1_id == 0:
-                        new_spectra0[0:mot2.shape[0],:,:] = spectra0_temp[:,:,:]
-                        new_spectra0[mot2.shape[0]:,:,:] = spectra0[:,:,:]
-                        new_icr0[0:mot2.shape[0],:] = icr0_temp[:,:]
-                        new_icr0[mot2.shape[0]:,:] = icr0[:,:]
-                        new_ocr0[0:mot2.shape[0],:] = ocr0_temp[:,:]
-                        new_ocr0[mot2.shape[0]:,:] = ocr0[:,:]
-                        if ch2id is not None:
-                            new_spectra2[0:mot2.shape[0],:,:] = spectra2_temp[:,:,:]
-                            new_spectra2[mot2.shape[0]:,:,:] = spectra2[:,:,:]
-                            new_icr2[0:mot2.shape[0],:] = icr2_temp[:,:]
-                            new_icr2[mot2.shape[0]:,:] = icr2[:,:]
-                            new_ocr2[0:mot2.shape[0],:] = ocr2_temp[:,:]
-                            new_ocr2[mot2.shape[0]:,:] = ocr2[:,:]
-                        new_i0[0:mot2.shape[0],:] = i0_temp[:,:]
-                        new_i0[mot2.shape[0]:,:] = i0[:,:]
-                        if i1id is not None:
-                            new_i1[0:mot2.shape[0],:] = i1_temp[:,:]
-                            new_i1[mot2.shape[0]:,:] = i1[:,:]
-                        new_mot1[0:mot2.shape[0],:] = mot1_temp[:,:]
-                        new_mot1[mot2.shape[0]:,:] = mot1[:,:]
-                        new_mot2[0:mot2.shape[0],:] = mot2_temp[:,:]
-                        new_mot2[mot2.shape[0]:,:] = mot2[:,:]
-                        new_tm[0:mot2.shape[0],:] = tm_temp[:,:]
-                        new_tm[mot2.shape[0]:,:] = tm[:,:]
-                    else:
-                        new_spectra0[:,0:mot2_temp.shape[0],:] = spectra0_temp[:,:,:]
-                        new_spectra0[:,mot2_temp.shape[0]:,:] = spectra0[:,:,:]
-                        new_icr0[:,0:mot2_temp.shape[0]] = icr0_temp[:,:]
-                        new_icr0[:,mot2_temp.shape[0]:] = icr0[:,:]
-                        new_ocr0[:,0:mot2_temp.shape[0]] = ocr0_temp[:,:]
-                        new_ocr0[:,mot2_temp.shape[0]:] = ocr0[:,:]
-                        if ch2id is not None:
-                            new_spectra2[:,0:mot2_temp.shape[0],:] = spectra2_temp[:,:,:]
-                            new_spectra2[:,mot2_temp.shape[0]:,:] = spectra2[:,:,:]
-                            new_icr2[:,0:mot2_temp.shape[0]] = icr2_temp[:,:]
-                            new_icr2[:,mot2_temp.shape[0]:] = icr2[:,:]
-                            new_ocr2[:,0:mot2_temp.shape[0]] = ocr2_temp[:,:]
-                            new_ocr2[:,mot2_temp.shape[0]:] = ocr2[:,:]
-                        new_i0[:,0:mot2_temp.shape[0]] = i0_temp[:,:]
-                        new_i0[:,mot2_temp.shape[0]:] = i0[:,:]
-                        if i1id is not None:
-                            new_i1[:,0:mot2_temp.shape[0]] = i1_temp[:,:]
-                            new_i1[:,mot2_temp.shape[0]:] = i1[:,:]
-                        new_mot1[:,0:mot2_temp.shape[0]] = mot1_temp[:,:]
-                        new_mot1[:,mot2_temp.shape[0]:] = mot1[:,:]
-                        new_mot2[:,0:mot2_temp.shape[0]] = mot2_temp[:,:]
-                        new_mot2[:,mot2_temp.shape[0]:] = mot2[:,:]
-                        new_tm[:,0:mot2_temp.shape[0]] = tm_temp[:,:]
-                        new_tm[:,mot2_temp.shape[0]:] =  tm[:,:]
+                        i1 = np.concatenate((i1_temp, i1), axis=mot1_id)
+                    mot1 = np.concatenate((mot1_temp, mot1), axis=mot1_id)
+                    mot2 = np.concatenate((mot2_temp, mot2), axis=mot1_id)
+                    tm = np.concatenate((tm_temp, tm), axis=mot1_id)
                 else:
                     # there is some overlap between mot1 and mot1_temp; figure out where it overlaps and stitch like that
                     #TODO: there is the case where the new slice could fit entirely within the old one...
@@ -2514,190 +2324,69 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
                         # mot1 should come first, followed by mot1_temp
                         if mot1_id == 0:
                             keep_id = np.array(np.where(mot1[:,0] < mot1_temp.min())).max()+1 #add one as we also need last element of id's
-                            new_dim = np.array(mot1_temp.shape)
-                            new_dim[mot1_id] += keep_id
-                            new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                            new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                            new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            spectra0 = np.concatenate((spectra0[0:keep_id,:,:], spectra0_temp),axis=mot1_id)
+                            icr0 = np.concatenate((icr0[0:keep_id,:], icr0_temp), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0[0:keep_id,:], ocr0_temp), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                                spectra2 = np.concatenate((spectra2[0:keep_id,:,:], spectra2_temp),axis=mot1_id)
+                                icr2 = np.concatenate((icr2[0:keep_id,:], icr2_temp), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2[0:keep_id,:], ocr2_temp), axis=mot1_id)
+                            i0 = np.concatenate((i0[0:keep_id,:], i0_temp), axis=mot1_id)
                             if i1id is not None:
-                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_tm = np.zeros((new_dim[0], new_dim[1]))
-                            # fill the new array
-                            new_spectra0[0:keep_id,:,:] = spectra0[0:keep_id,:,:]
-                            new_spectra0[keep_id:,:,:] = spectra0_temp[:,:,:]
-                            new_icr0[0:keep_id,:] = icr0[0:keep_id,:]
-                            new_icr0[keep_id:,:] = icr0_temp[:,:]
-                            new_ocr0[0:keep_id,:] = ocr0[0:keep_id,:]
-                            new_ocr0[keep_id:,:] = ocr0_temp[:,:]
-                            if ch2id is not None:
-                                new_spectra2[0:keep_id,:,:] = spectra2[0:keep_id,:,:]
-                                new_spectra2[keep_id:,:,:] = spectra2_temp[:,:,:]
-                                new_icr2[0:keep_id,:] = icr2[0:keep_id,:]
-                                new_icr2[keep_id:,:] = icr2_temp[:,:]
-                                new_ocr2[0:keep_id,:] = ocr2[0:keep_id,:]
-                                new_ocr2[keep_id:,:] = ocr2_temp[:,:]
-                            new_i0[0:keep_id,:] = i0[0:keep_id,:]
-                            new_i0[keep_id:,:] = i0_temp[:,:]
-                            if i1id is not None:
-                                new_i1[0:keep_id,:] = i1[0:keep_id,:]
-                                new_i1[keep_id:,:] = i1_temp[:,:]
-                            new_mot1[0:keep_id,:] = mot1[0:keep_id,:]
-                            new_mot1[keep_id:,:] = mot1_temp[:,:]
-                            new_mot2[0:keep_id,:] = mot2[0:keep_id,:]
-                            new_mot2[keep_id:,:] = mot2_temp[:,:]
-                            new_tm[0:keep_id,:] = tm[0:keep_id,:]
-                            new_tm[keep_id:,:] = tm_temp[:,:]
+                                i1 = np.concatenate((i1[0:keep_id,:], i1_temp), axis=mot1_id)
+                            mot1 = np.concatenate((mot1[0:keep_id,:], mot1_temp), axis=mot1_id)
+                            mot2 = np.concatenate((mot2[0:keep_id,:], mot2_temp), axis=mot1_id)
+                            tm = np.concatenate((tm[0:keep_id,:], tm_temp), axis=mot1_id)
                         else:
                             keep_id = np.array(np.where(mot1[0,:] < mot1_temp.min())).max()+1 #add one as we also need last element of id's
-                            new_dim = np.array(mot1_temp.shape)
-                            new_dim[mot1_id] += keep_id
-                            new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                            new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                            new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            spectra0 = np.concatenate((spectra0[:,0:keep_id,:], spectra0_temp),axis=mot1_id)
+                            icr0 = np.concatenate((icr0[:,0:keep_id], icr0_temp), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0[:,0:keep_id], ocr0_temp), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                                spectra2 = np.concatenate((spectra2[:,0:keep_id,:,:], spectra2_temp),axis=mot1_id)
+                                icr2 = np.concatenate((icr2[:,0:keep_id], icr2_temp), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2[:,0:keep_id], ocr2_temp), axis=mot1_id)
+                            i0 = np.concatenate((i0[:,0:keep_id], i0_temp), axis=mot1_id)
                             if i1id is not None:
-                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_tm = np.zeros((new_dim[0], new_dim[1]))
-                            # fill the new array
-                            new_spectra0[:,0:keep_id,:] = spectra0[:,0:keep_id,:]
-                            new_spectra0[:,keep_id:,:] = spectra0_temp[:,:,:]
-                            new_icr0[:,0:keep_id] = icr0[:,0:keep_id]
-                            new_icr0[:,keep_id:] = icr0_temp[:,:]
-                            new_ocr0[:,0:keep_id] = ocr0[:,0:keep_id]
-                            new_ocr0[:,keep_id:] = ocr0_temp[:,:]
-                            if ch2id is not None:
-                                new_spectra2[:,0:keep_id,:] = spectra2[:,0:keep_id,:]
-                                new_spectra2[:,keep_id:,:] = spectra2_temp[:,:,:]
-                                new_icr2[:,0:keep_id] = icr2[:,0:keep_id]
-                                new_icr2[:,keep_id:] = icr2_temp[:,:]
-                                new_ocr2[:,0:keep_id] = ocr2[:,0:keep_id]
-                                new_ocr2[:,keep_id:] = ocr2_temp[:,:]
-                            new_i0[:,0:keep_id] = i0[:,0:keep_id]
-                            new_i0[:,keep_id:] = i0_temp[:,:]
-                            if i1id is not None:
-                                new_i1[:,0:keep_id] = i1[:,0:keep_id]
-                                new_i1[:,keep_id:] = i1_temp[:,:]
-                            new_mot1[:,0:keep_id] = mot1[:,0:keep_id]
-                            new_mot1[:,keep_id:] = mot1_temp[:,:]
-                            new_mot2[:,0:keep_id] = mot2[:,0:keep_id]
-                            new_mot2[:,keep_id:] = mot2_temp[:,:]
-                            new_tm[:,0:keep_id] = tm[:,0:keep_id]
-                            new_tm[:,keep_id:] = tm_temp[:,:]
+                                i1 = np.concatenate((i1[:,0:keep_id], i1_temp), axis=mot1_id)
+                            mot1 = np.concatenate((mot1[:,0:keep_id], mot1_temp), axis=mot1_id)
+                            mot2 = np.concatenate((mot2[:,0:keep_id], mot2_temp), axis=mot1_id)
+                            tm = np.concatenate((tm[:,0:keep_id], tm_temp), axis=mot1_id)
                     else:
                         # first mot1_temp, followed by remainder of mot1 (where no more overlap)
                         if mot1_id == 0:
                             keep_id = np.array(np.where(mot1_temp[:,0] < mot1.min())).max()+1 #add one as we also need last element of id's
-                            new_dim = np.array(mot1.shape)
-                            new_dim[mot1_id] += keep_id
-                            new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                            new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                            new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            spectra0 = np.concatenate((spectra0_temp[0:keep_id,:,:], spectra0),axis=mot1_id)
+                            icr0 = np.concatenate((icr0_temp[0:keep_id,:], icr0), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0_temp[0:keep_id,:], ocr0), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                                spectra2 = np.concatenate((spectra2_temp[0:keep_id,:,:], spectra2),axis=mot1_id)
+                                icr2 = np.concatenate((icr2_temp[0:keep_id,:], icr2), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2_temp[0:keep_id,:], ocr2), axis=mot1_id)
+                            i0 = np.concatenate((i0_temp[0:keep_id,:], i0), axis=mot1_id)
                             if i1id is not None:
-                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_tm = np.zeros((new_dim[0], new_dim[1]))
-                            # fill the new array
-                            new_spectra0[0:keep_id,:,:] = spectra0_temp[0:keep_id,:,:]
-                            new_spectra0[keep_id:,:,:] = spectra0[:,:,:]
-                            new_icr0[0:keep_id,:] = icr0_temp[0:keep_id,:]
-                            new_icr0[keep_id:,:] = icr0[:,:]
-                            new_ocr0[0:keep_id,:] = ocr0_temp[0:keep_id,:]
-                            new_ocr0[keep_id:,:] = ocr0[:,:]
-                            if ch2id is not None:
-                                new_spectra2[0:keep_id,:,:] = spectra2_temp[0:keep_id,:,:]
-                                new_spectra2[keep_id:,:,:] = spectra2[:,:,:]
-                                new_icr2[0:keep_id,:] = icr2_temp[0:keep_id,:]
-                                new_icr2[keep_id:,:] = icr2[:,:]
-                                new_ocr2[0:keep_id,:] = ocr2_temp[0:keep_id,:]
-                                new_ocr2[keep_id:,:] = ocr2[:,:]
-                            new_i0[0:keep_id,:] = i0_temp[0:keep_id,:]
-                            new_i0[keep_id:,:] = i0[:,:]
-                            if i1id is not None:
-                                new_i1[0:keep_id,:] = i1_temp[0:keep_id,:]
-                                new_i1[keep_id:,:] = i1[:,:]
-                            new_mot1[0:keep_id,:] = mot1_temp[0:keep_id,:]
-                            new_mot1[keep_id:,:] = mot1[:,:]
-                            new_mot2[0:keep_id,:] = mot2_temp[0:keep_id,:]
-                            new_mot2[keep_id:,:] = mot2[:,:]
-                            new_tm[0:keep_id,:] = tm_temp[0:keep_id,:]
-                            new_tm[keep_id:,:] = tm[:,:]
+                                i1 = np.concatenate((i1_temp[0:keep_id,:], i1), axis=mot1_id)
+                            mot1 = np.concatenate((mot1_temp[0:keep_id,:], mot1), axis=mot1_id)
+                            mot2 = np.concatenate((mot2_temp[0:keep_id,:], mot2), axis=mot1_id)
+                            tm = np.concatenate((tm_temp[0:keep_id,:], tm), axis=mot1_id)
                         else:
                             keep_id = np.array(np.where(mot1_temp[0,:] < mot1.min())).max()+1 #add one as we also need last element of id's
-                            new_dim = np.array(mot1.shape)
-                            new_dim[mot1_id] += keep_id
-                            new_spectra0 = np.zeros((new_dim[0], new_dim[1], spectra0_temp.shape[2]))
-                            new_icr0 = np.zeros((new_dim[0], new_dim[1]))
-                            new_ocr0 = np.zeros((new_dim[0], new_dim[1]))
+                            spectra0 = np.concatenate((spectra0_temp[:,0:keep_id,:], spectra0),axis=mot1_id)
+                            icr0 = np.concatenate((icr0_temp[:,0:keep_id], icr0), axis=mot1_id)
+                            ocr0 = np.concatenate((ocr0_temp[:,0:keep_id], ocr0), axis=mot1_id)
                             if ch2id is not None:
-                                new_spectra2 = np.zeros((new_dim[0], new_dim[1], spectra2_temp.shape[2]))
-                                new_icr2 = np.zeros((new_dim[0], new_dim[1]))
-                                new_ocr2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_i0 = np.zeros((new_dim[0], new_dim[1]))
+                                spectra2 = np.concatenate((spectra2_temp[:,0:keep_id,:,:], spectra2),axis=mot1_id)
+                                icr2 = np.concatenate((icr2_temp[:,0:keep_id], icr2), axis=mot1_id)
+                                ocr2 = np.concatenate((ocr2_temp[:,0:keep_id], ocr2), axis=mot1_id)
+                            i0 = np.concatenate((i0_temp[:,0:keep_id], i0), axis=mot1_id)
                             if i1id is not None:
-                                new_i1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot1 = np.zeros((new_dim[0], new_dim[1]))
-                            new_mot2 = np.zeros((new_dim[0], new_dim[1]))
-                            new_tm = np.zeros((new_dim[0], new_dim[1]))
-                            # fill the new array
-                            new_spectra0[:,0:keep_id,:] = spectra0_temp[:,0:keep_id,:]
-                            new_spectra0[:,keep_id:,:] = spectra0[:,:,:]
-                            new_icr0[:,0:keep_id] = icr0_temp[:,0:keep_id]
-                            new_icr0[:,keep_id:] = icr0[:,:]
-                            new_ocr0[:,0:keep_id] = ocr0_temp[:,0:keep_id]
-                            new_ocr0[:,keep_id:] = ocr0[:,:]
-                            if ch2id is not None:
-                                new_spectra2[:,0:keep_id,:] = spectra2_temp[:,0:keep_id,:]
-                                new_spectra2[:,keep_id:,:] = spectra2[:,:,:]
-                                new_icr2[:,0:keep_id] = icr2_temp[:,0:keep_id]
-                                new_icr2[:,keep_id:] = icr2[:,:]
-                                new_ocr2[:,0:keep_id] = ocr2_temp[:,0:keep_id]
-                                new_ocr2[:,keep_id:] = ocr2[:,:]
-                            new_i0[:,0:keep_id] = i0_temp[:,0:keep_id]
-                            new_i0[:,keep_id:] = i0[:,:]
-                            if i1id is not None:
-                                new_i1[:,0:keep_id] = i1_temp[:,0:keep_id]
-                                new_i1[:,keep_id:] = i1[:,:]
-                            new_mot1[:,0:keep_id] = mot1_temp[:,0:keep_id]
-                            new_mot1[:,keep_id:] = mot1[:,:]
-                            new_mot2[:,0:keep_id] = mot2_temp[:,0:keep_id]
-                            new_mot2[:,keep_id:] = mot2[:,:]
-                            new_tm[:,0:keep_id] = tm_temp[:,0:keep_id]
-                            new_tm[:,keep_id:] = tm[:,:]
+                                i1 = np.concatenate((i1_temp[:,0:keep_id], i1), axis=mot1_id)
+                            mot1 = np.concatenate((mot1_temp[:,0:keep_id], mot1), axis=mot1_id)
+                            mot2 = np.concatenate((mot2_temp[:,0:keep_id], mot2), axis=mot1_id)
+                            tm = np.concatenate((tm_temp[:,0:keep_id], tm), axis=mot1_id)
             else:
                 print("Error: all motor positions are identical within 1e-4.")
                 return False
-            spectra0 = new_spectra0
-            icr0 = new_icr0
-            ocr0 = new_ocr0
-            if ch2id is not None:
-                spectra2 = new_spectra2
-                icr2 = new_icr2
-                ocr2 = new_ocr2
-            i0 = new_i0
-            if i1id is not None:
-                i1 = new_i1
-            mot1 = new_mot1
-            mot2 = new_mot2
-            tm = new_tm
         
     # sort the positions line per line and adjust all other data accordingly
     if sort is True:

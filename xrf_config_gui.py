@@ -1062,7 +1062,12 @@ class Config_GUI(QWidget):
         edit = edit.split(';')
         # now go through all lines, check if they are in model
         for ed in edit:
-            if '-' not in ed: #remove all lines from this element
+            if ed == 'all': # remove all lines
+                for key in keys:
+                    del(self.ConfigDict['peaks'][key])
+                del(self.ConfigDict['peaks'])
+                self.ConfigDict['peaks'] = {}
+            elif '-' not in ed: #remove all lines from this element
                 element = ed.replace(' ','')
                 if element in keys:
                     del(self.ConfigDict['peaks'][element])
@@ -1108,6 +1113,7 @@ class Config_GUI(QWidget):
         self.ConfigDict.write(filename)
 
     def load_config(self):
+        #TODO: set Ge or Si button...
         filename = QFileDialog.getOpenFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
         self.ConfigDict.read(filename)
         # go over ConfigDict and adjust GUI accordingly

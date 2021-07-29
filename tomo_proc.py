@@ -11,36 +11,129 @@ import numpy as np
 import plotims
 
 
-def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='channel00', ncol=8, selfabs=None):
+def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='channel00', ncol=8, selfabs=None, snake=False, interp_tr=False):
     if rot_mot is None:
-        mot1 = 'mot1'
+        rotid = 'mot1'
     else:
-        mot1 = rot_mot
+        rotid = rot_mot
     
     h5f = h5py.File(h5file, 'r+')
     ims = np.array(h5f['norm/'+channel+'/ims'])
     # ims = ims[:,25:,:] #only do this if omitting certain angles from the scan...
     names = ["-".join(name.decode('utf8').split(" ")) for name in h5f['norm/'+channel+'/names']]
-    angle = np.array(h5f[mot1])[:,0]*np.pi /180 #motor positions expected in degrees, convert to rad
+    if (signal == 'i1' or signal == 'I1') and interp_tr is False:
+        if rotid == 'mot1':
+            transid = 'mot2'
+        else:
+            transid = 'mot1'
+        mot1 = np.array(h5f[transid])
+        mot2 = np.array(h5f[rotid])
+    if signal == 'i1' or signal == 'I1':
+        i1 = np.array(h5f['raw/I1'])
+        i0 = np.array(h5f['raw/I0'])
     
     proj = np.zeros((ims.shape[1],ims.shape[0],ims.shape[2]))
     # remove negative and NaN values, remove stripe artefacts, ...
     for k in range(0, ims.shape[0]):
         proj[:,k,:] = tomopy.remove_neg(tomopy.remove_nan(ims[k, :, :], 0)) #also replace all nan values and negative values with 0
     
+    # interpolate for translation motor positions (e.g. in case of rotation over virtual motor axis)
+    # TODO: could be if this option is true that snake mesh correction does not work anymore...
+    if interp_tr is True:
+        from scipy.interpolate import griddata
+        if rotid == 'mot1':
+            transid = 'mot2'
+        else:
+            transid = 'mot1'
+        mot1 = np.array(h5f[transid])
+        mot2 = np.array(h5f[rotid])
+        tr_min = np.min(mot1)
+        tr_max = np.max(mot1)
+        tr_npts = int(np.floor((tr_max-tr_min)/(mot1[0,1]-mot1[0,0])))+1
+        # create new motor grid
+        mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
+        mot1_tmp, mot2_tmp = np.mgrid[tr_min:tr_max:complex(tr_npts), mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
+        import matplotlib.pyplot as plt
+        # plt.imshow(mot1_tmp)
+        # plt.title('mot1_tmp')
+        # plt.show()
+        x = mot1.ravel()
+        y = mot2.ravel()
+        if signal == 'i1' or signal == 'I1':
+            values = i1.ravel()
+            i1 = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            print(i1.shape)
+            # plt.imshow(i1)
+            # plt.title('i1')
+            # plt.show()
+            values = i0.ravel()
+            i0 = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+        proj_tmp = np.zeros((mot1_tmp.shape[1],proj.shape[1],mot1_tmp.shape[0]))
+        for k in range(0, proj.shape[1]):
+            values = proj[:,k,:].ravel()
+            proj_tmp[:,k,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            proj_tmp[:,k,:] = tomopy.remove_neg(tomopy.remove_nan(proj_tmp[:,k,:], 0)) #also replace all nan values and negative values with 0
+        proj = proj_tmp
+        mot1 = mot1_tmp
+        mot2 = mot2_tmp
+
+    angle = mot2[:,0]*np.pi /180 #motor positions expected in degrees, convert to rad
 
     #do self-absorption correction if requested
     if selfabs is not None:
         #selfabs should contain the directory to the trained neural network (Gao Bo, 2021 10.1109/tns.2021.3079629)
-        proj = Gao_tomo_selfabscorr(selfabs, proj)
-    
+        proj = Gao_tomo_selfabscorr(selfabs, proj)    
 
     # find centre of rotation and perform reconstruction        
     if rot_centre is None:
-        rot_center = tomopy.find_center(proj[:,names.index(signal),:].reshape((proj.shape[0],1,proj.shape[2])), angle, ind=0, init=ims.shape[2]/2, tol=0.5, sinogram_order=False)
+        if signal == 'i1' or signal == 'I1':
+            from scipy.interpolate import griddata
+            # if rotid == 'mot1':
+            #     transid = 'mot2'
+            # else:
+            #     transid = 'mot1'
+            # i1 = np.array(h5f['raw/I1'])
+            # i0 = np.array(h5f['raw/I0'])
+            # mot1 = np.array(h5f[transid])
+            # mot2 = np.array(h5f[rotid])
+            # norm I1
+            i1 = (i1/i0)
+            y, x = np.histogram(i1, bins=1000)
+            normfact = x[np.where(y == np.max(y))]
+            i1[i1>normfact] = normfact 
+            i1 = i1/normfact
+    
+            i1 = tomopy.remove_neg(tomopy.remove_nan(i1, 0))
+    
+            # Interpolating image for motor position
+            if snake is True:
+                pos_low = min(mot1[:,0])
+                pos_high = max(mot1[:,0])
+                for i in range(0, mot1[:,0].size): #correct for half a pixel shift
+                    if mot1[i,0] <= np.average((pos_high,pos_low)):
+                        mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
+                    else:
+                        mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
+                mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
+                mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
+                # interpolate to the regular grid motor positions
+                mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size), mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
+                x = mot1.ravel()
+                y = mot2.ravel()
+                values = i1.ravel()
+                i1_tmp = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                i1 = i1_tmp
+                i1 = tomopy.remove_neg(tomopy.remove_nan(i1, 0))
+            i1_proj = i1.reshape((i1.shape[0], 1, i1.shape[1]))
+            i1_proj = tomopy.prep.normalize.minus_log(i1_proj)
+            i1_proj = tomopy.remove_neg(tomopy.remove_nan(i1_proj, 0))
+            i1_proj[np.isinf(i1_proj)] = 1.0
+            rot_center = tomopy.find_center(i1_proj, angle, ind=0, init=ims.shape[2]/2, tol=0.5, sinogram_order=False)
+        else:
+            rot_center = tomopy.find_center(proj[:,names.index(signal),:].reshape((proj.shape[0],1,proj.shape[2])), angle, ind=0, init=ims.shape[2]/2, tol=0.5, sinogram_order=False)
     else:
         rot_center = rot_centre
-    print("Center of rotation: ", rot_center)
+    print(h5file+" "+channel+" Center of rotation: ", rot_center)
 
 
     # proj = tomopy.prep.stripe.remove_stripe_sf(proj, size=1)
@@ -83,20 +176,20 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     try:
         h5f['raw/I1']
         h5f.close()
-        h5_i1tomo_recon(h5file, rot_centre=rot_center)
-    except Exception:
+        h5_i1tomo_recon(h5file, rot_mot=rot_mot, rot_centre=rot_center)
+    except KeyError:
         h5f.close()
      
     # plot data
     colim_opts = plotims.Collated_image_opts()
     colim_opts.ncol = ncol
     colim_opts.nrow = int(np.ceil(len(names)/colim_opts.ncol))
-    plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+'_tomo_overview.png')
+    plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+channel+'_tomo_overview.png')
     data.data = np.log10(data.data)
-    plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+'_log_tomo_overview.png')
+    plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+channel+'_log_tomo_overview.png')
 
 
-def h5_i1tomo_recon(h5file, rot_centre=None):
+def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False):
     import tomopy
     from scipy.interpolate import griddata
     import tifffile
@@ -105,47 +198,59 @@ def h5_i1tomo_recon(h5file, rot_centre=None):
     h5f = h5py.File(h5file, 'r+')
     try:
         i1 = np.array(h5f['raw/I1'])
-    except Exception:
+    except KeyError:
         # i1 = None
         h5f.close()
         return
-
+    
+    if rot_mot is None or rot_mot == 'mot1':
+        mot1id = 'mot2'
+        mot2id = 'mot1'
+    else:
+        mot1id = 'mot1'
+        mot2id = 'mot2'
+        
     if i1 is not None:
         i0 = np.array(h5f['raw/I0'])
-        mot1 = np.array(h5f['mot1'])
-        mot2 = np.array(h5f['mot2'])
+        mot1 = np.array(h5f[mot1id])
+        mot2 = np.array(h5f[mot2id])
         # norm I1
-        normfactor = i0/np.max(i0)
-        i1 = i1/normfactor
+        i1 = (i1/i0)
+        y, x = np.histogram(i1, bins=1000)
+        normfact = x[np.where(y == np.max(y))][0]
+        i1[i1>normfact] = normfact 
+        i1 = i1/normfact
+
         i1 = tomopy.remove_neg(tomopy.remove_nan(i1, 0))
-        i1 = i1/np.max(i1)
 
         # Interpolating image for motor position
-        pos_low = min(mot1[:,0])
-        pos_high = max(mot1[:,0])
-        for i in range(0, mot1[:,0].size): #correct for half a pixel shift
-            if mot1[i,0] <= np.average((pos_high,pos_low)):
-                mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
-            else:
-                mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
-        mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
-        mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
-        # interpolate to the regular grid motor positions
-        mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size), mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
-        x = mot1.ravel()
-        y = mot2.ravel()
-        values = i1.ravel()
-        i1_tmp = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-        i1 = i1_tmp
-        i1 = tomopy.remove_neg(tomopy.remove_nan(i1, 0))
+        if snake is True:
+            pos_low = min(mot1[:,0])
+            pos_high = max(mot1[:,0])
+            for i in range(0, mot1[:,0].size): #correct for half a pixel shift
+                if mot1[i,0] <= np.average((pos_high,pos_low)):
+                    mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
+                else:
+                    mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
+            mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
+            mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
+            # interpolate to the regular grid motor positions
+            mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size), mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
+            x = mot1.ravel()
+            y = mot2.ravel()
+            values = i1.ravel()
+            i1_tmp = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            i1 = i1_tmp
+            i1 = tomopy.remove_neg(tomopy.remove_nan(i1, 0))
         
         # i1 = i1[1:-1,:] #remove first and last angular line, as these are empty
         
-        angle = mot2_pos*np.pi /180 #motor positions expected in degrees, convert to rad    
+        angle = np.average(mot2, axis=1)*np.pi /180 #motor positions expected in degrees, convert to rad   
         proj = i1.reshape((i1.shape[0], 1, i1.shape[1]))
         proj = tomopy.prep.normalize.minus_log(proj)
         proj = tomopy.remove_neg(tomopy.remove_nan(proj, 0))
         proj[np.isinf(proj)] = 1.0
+        
 
         if rot_centre is None:
             try:
@@ -180,7 +285,7 @@ def h5_i1tomo_recon(h5file, rot_centre=None):
         
         # make a plot
         recon = np.flip(tomopy.remove_neg(tomopy.remove_nan(recon[0, :, :], 0)), 0)
-        Ims.plot_image(recon, 'transmission', 'gray', plt_opts=None, sb_opts=None, cb_opts=None, clim=None, save=h5file.split('.')[0]+'_i1tomo.png', subplot=None)
+        plotims.plot_image(recon, 'transmission', 'gray', plt_opts=None, sb_opts=None, cb_opts=None, clim=None, save=h5file.split('.')[0]+'_i1tomo.png', subplot=None)
 
 
 
