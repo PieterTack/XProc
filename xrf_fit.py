@@ -1759,11 +1759,11 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             # Reading the spectra files, icr and ocr
             print("Reading " +sc_id+"/"+ch0[0]+"/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/"+ch0[0]+"/"+file, 'r')
-            if ch0[1] is type str:
+            if ch0[1] is str:
                 spe0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/histogram']
                 icr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allEvent']
                 ocr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allGood']
-            elif ch0[1] is type list: #if multiple channels provided we want to add them 
+            elif ch0[1] is list: #if multiple channels provided we want to add them 
                 spe0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/histogram'])
                 icr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allEvent'])
                 ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allGood'])
@@ -1778,11 +1778,11 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             print("read")
             print("Reading " +sc_id+"/"+ch2[0]+"/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/"+ch2[0]+"/"+file, 'r')
-            if ch2[1] is type str:
+            if ch2[1] is str:
                 spe2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/histogram']
                 icr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allEvent']
                 ocr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allGood']
-            elif ch2[1] is type list: #if multiple channels provided we want to add them 
+            elif ch2[1] is list: #if multiple channels provided we want to add them 
                 spe2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/histogram'])
                 icr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allEvent'])
                 ocr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allGood'])
