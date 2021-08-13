@@ -1720,7 +1720,7 @@ def add_h5s(h5files, newfilename):
 
 ##############################################################################
 # Merges separate P06 nxs files to 1 handy h5 file containing 2D array of spectra, relevant motor positions, I0 counter, ICR, OCR and mesaurement time.
-def MergeP06Nxs(scanid, sort=True):
+def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02']):
     scanid = np.array(scanid)
     if scanid.size == 1:
         scan_suffix = '/'.join(str(scanid).split('/')[0:-2])+'/scan'+str(scanid).split("_")[-1]
@@ -1757,14 +1757,43 @@ def MergeP06Nxs(scanid, sort=True):
                 files.append(file)
         for file in files:
             # Reading the spectra files, icr and ocr
-            print("Reading " +sc_id+"/xspress3_01/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/xspress3_01/"+file, 'r')
-            spe0_arr = f['entry/instrument/xspress3/channel00/histogram']
-            icr0_arr = f['entry/instrument/xspress3/channel00/scaler/allEvent']
-            ocr0_arr = f['entry/instrument/xspress3/channel00/scaler/allGood']
-            spe2_arr = f['entry/instrument/xspress3/channel02/histogram']
-            icr2_arr = f['entry/instrument/xspress3/channel02/scaler/allEvent']
-            ocr2_arr = f['entry/instrument/xspress3/channel02/scaler/allGood']
+            print("Reading " +sc_id+"/"+ch0[0]+"/"+file +"...", end=" ")
+            f = h5py.File(sc_id+"/"+ch0[0]+"/"+file, 'r')
+            if ch0[1] is type str:
+                spe0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/histogram']
+                icr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allEvent']
+                ocr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allGood']
+            elif ch0[1] is type list: #if multiple channels provided we want to add them 
+                spe0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/histogram'])
+                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allEvent'])
+                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allGood'])
+                for ch in ch0[1][1:]:
+                    spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'])
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'])
+                spe0_arr = list(spe0_arr)
+                icr0_arr = list(icr0_arr)
+                ocr0_arr = list(ocr0_arr)
+            f.close()    
+            print("read")
+            print("Reading " +sc_id+"/"+ch2[0]+"/"+file +"...", end=" ")
+            f = h5py.File(sc_id+"/"+ch2[0]+"/"+file, 'r')
+            if ch2[1] is type str:
+                spe2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/histogram']
+                icr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allEvent']
+                ocr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allGood']
+            elif ch2[1] is type list: #if multiple channels provided we want to add them 
+                spe2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/histogram'])
+                icr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allEvent'])
+                ocr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allGood'])
+                for ch in ch2[1][1:]:
+                    spe2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'])
+                    icr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'])
+                    ocr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'])
+                spe2_arr = list(spe2_arr)
+                icr2_arr = list(icr2_arr)
+                ocr2_arr = list(ocr2_arr)
+            f.close()    
             for i in range(spe0_arr.shape[0]):
                 spectra0.append(spe0_arr[i,:])
                 icr0.append(icr0_arr[i])
@@ -1772,7 +1801,6 @@ def MergeP06Nxs(scanid, sort=True):
                 spectra2.append(spe2_arr[i,:])
                 icr2.append(icr2_arr[i])
                 ocr2.append(ocr2_arr[i])
-            f.close()
             print("read")
         for file in files:
             # Reading I0 and measurement time data
