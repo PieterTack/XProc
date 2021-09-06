@@ -1974,8 +1974,8 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             i0 = np.concatenate((np.array(i0), zeros)).reshape((ydim, xdim))
             i1 = np.concatenate((np.array(i1), zeros)).reshape((ydim, xdim))
             tm = np.concatenate((np.array(tm), zeros)).reshape((ydim, xdim))
-            mot1 = np.concatenate((np.array(mot1[0:xdim*ydim]), zeros)).reshape((ydim, xdim))
-            mot2 = np.concatenate((np.array(mot2[0:xdim*ydim]), zeros)).reshape((ydim, xdim))
+            mot1 = np.concatenate((np.array(mot1), zeros))[0:xdim*ydim].reshape((ydim, xdim))
+            mot2 = np.concatenate((np.array(mot2), zeros))[0:xdim*ydim].reshape((ydim, xdim))
             timetrig = False
         else:            
             spectra0 = np.array(spectra0)
