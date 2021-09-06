@@ -926,7 +926,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
 
 ##############################################################################
 # calculate detection limits.
-#   DL = 3*sqrt(Ip)/Ib * Conc
+#   DL = 3*sqrt(Ib)/Ip * Conc
 #   calculates 1s and 1000s DL
 #   Also calculates elemental yields (Conc/Ip [ppm/ct/s]) 
 def calc_detlim(h5file, cncfile):
@@ -991,7 +991,7 @@ def calc_detlim(h5file, cncfile):
     for i in range(0, conc0.size):
         if conc0[i] > 0:
             # detection limit corresponding to tm=1s
-            dl_1s_0.append(3.*np.sqrt(sum_fit0[i])/sum_bkg0[i] * conc0[i] *np.sqrt(tm))
+            dl_1s_0.append(3.*np.sqrt(sum_bkg0[i])/sum_fit0[i] * conc0[i] *np.sqrt(tm))
             j = len(dl_1s_0)-1
             dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
             el_yield_0.append(conc0[i]/ (sum_fit0[i]/tm))
@@ -1014,7 +1014,7 @@ def calc_detlim(h5file, cncfile):
         for i in range(0, conc2.size):
             if conc2[i] > 0:
                 # detection limit corresponding to tm=1s
-                dl_1s_2.append(3.*np.sqrt(sum_fit2[i])/sum_bkg2[i] * conc2[i] *np.sqrt(tm))
+                dl_1s_2.append(3.*np.sqrt(sum_bkg2[i])/sum_fit2[i] * conc2[i] *np.sqrt(tm))
                 j = len(dl_1s_2)-1
                 dl_1000s_2.append(dl_1s_2[j] / np.sqrt(1000.))
                 el_yield_2.append(conc2[i]/ (sum_fit2[i]/tm))
@@ -1734,7 +1734,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             sc_id = str(scanid[k])
         # file with name scanid contains info on scan command
         f = h5py.File(sc_id+'.nxs', 'r')
-        scan_cmd = str(f['scan/program_name'].attrs["scan_command"])
+        scan_cmd = str(f['scan/program_name'].attrs["scan_command"][:])
         scan_cmd = np.array(scan_cmd.strip("[]'").split(" "))
         print(' '.join(scan_cmd))
         f.close()
@@ -1759,40 +1759,58 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             # Reading the spectra files, icr and ocr
             print("Reading " +sc_id+"/"+ch0[0]+"/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/"+ch0[0]+"/"+file, 'r')
-            if ch0[1] is str:
-                spe0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/histogram']
-                icr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allEvent']
-                ocr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allGood']
-            elif ch0[1] is list: #if multiple channels provided we want to add them 
-                spe0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/histogram'])
-                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allEvent'])
-                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allGood'])
+            if type(ch0[1]) is str:
+                spe0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/histogram'][:]
+                try:
+                    icr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allEvent'][:]
+                    ocr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allGood'][:]
+                except KeyError:
+                    icr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allevent'][:]
+                    ocr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allgood'][:]
+            elif type(ch0[1]) is list: #if multiple channels provided we want to add them 
+                spe0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/histogram'][:])
+                try:
+                    icr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allEvent'][:])
+                    ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allGood'][:])
+                except KeyError:
+                    icr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allevent'][:])
+                    ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allgood'][:])
                 for ch in ch0[1][1:]:
-                    spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'])
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'])
-                spe0_arr = list(spe0_arr)
-                icr0_arr = list(icr0_arr)
-                ocr0_arr = list(ocr0_arr)
+                    spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+                    try:
+                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
+                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                    except KeyError:
+                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
+                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
             f.close()    
             print("read")
             print("Reading " +sc_id+"/"+ch2[0]+"/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/"+ch2[0]+"/"+file, 'r')
-            if ch2[1] is str:
-                spe2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/histogram']
-                icr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allEvent']
-                ocr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allGood']
-            elif ch2[1] is list: #if multiple channels provided we want to add them 
-                spe2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/histogram'])
-                icr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allEvent'])
-                ocr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allGood'])
+            if type(ch2[1]) is str:
+                spe2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/histogram'][:]
+                try:
+                    icr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allEvent'][:]
+                    ocr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allGood'][:]
+                except KeyError:
+                    icr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allevent'][:]
+                    ocr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allgood'][:]  
+            elif type(ch2[1]) is list: #if multiple channels provided we want to add them 
+                spe2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/histogram'][:])
+                try:
+                    icr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allEvent'][:])
+                    ocr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allGood'][:])
+                except KeyError:
+                    icr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allevent'][:])
+                    ocr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allgood'][:])
                 for ch in ch2[1][1:]:
-                    spe2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'])
-                    icr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'])
-                    ocr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'])
-                spe2_arr = list(spe2_arr)
-                icr2_arr = list(icr2_arr)
-                ocr2_arr = list(ocr2_arr)
+                    spe2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+                    try:
+                        icr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
+                        ocr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                    except KeyError:
+                        icr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
+                        ocr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
             f.close()    
             for i in range(spe0_arr.shape[0]):
                 spectra0.append(spe0_arr[i,:])
@@ -1806,9 +1824,9 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             # Reading I0 and measurement time data
             print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/adc01/"+file, 'r')
-            i0_arr = f['entry/data/value1']
-            i1_arr = f['entry/data/value2']
-            tm_arr = f['entry/data/exposuretime']
+            i0_arr = f['entry/data/value1'][:]
+            i1_arr = f['entry/data/value2'][:]
+            tm_arr = f['entry/data/exposuretime'][:]
             for i in range(i0_arr.shape[0]):
                 i0.append(i0_arr[i])
                 i1.append(i1_arr[i])
@@ -1817,16 +1835,23 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             print("read")
         # actual pilcgenerator files can be different structure depending on type of scan
         files = list("")
+        #TODO: we can clean this up, into 1 try block, pilctrigger can run from 01 to 05...
         try:
             for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_01")):
                 if file.endswith(".nxs"):
                     files.append(file)
             pilcid = "/pilctriggergenerator_01/"
-        except Exception:
-            for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_02")):
-                if file.endswith(".nxs"):
-                    files.append(file)
-            pilcid = "/pilctriggergenerator_02/"
+        except FileNotFoundError:
+            try:
+                for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_02")):
+                    if file.endswith(".nxs"):
+                        files.append(file)
+                pilcid = "/pilctriggergenerator_02/"
+            except FileNotFoundError:
+                for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_03")):
+                    if file.endswith(".nxs"):
+                        files.append(file)
+                pilcid = "/pilctriggergenerator_03/"
         try:
             md_dict = {}
             with open("/".join(sc_id.split("/")[0:-2])+"/scan_logbook.txt", "r") as file_handle:
@@ -1861,9 +1886,15 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                     mot1_arr = mot1a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                     mot1_name = str(scan_cmd[5])
                 except Exception:
-                    print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
-                    mot1_arr = enc_vals[0]
-                    mot1_name = enc_names[0]
+                    try:
+                        f2 = h5py.File(sc_id+'.nxs','r')
+                        mot1_arr = np.array(f2["scan/data/samy"][:])
+                        mot1_name = 'samy'
+                        f2.close()
+                    except KeyError:
+                        print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
+                        mot1_arr = enc_vals[0]
+                        mot1_name = enc_names[0]
             if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
                 mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
                 mot2_name = enc_names[enc_names.index(scan_cmd[5])]
@@ -1878,9 +1909,15 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                     mot2_arr = mot2a_contrib*(np.array(mot2a)-pivot[0])+mot2b_contrib*(np.array(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                     mot2_name = str(scan_cmd[5])
                 except Exception:
-                    print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
-                    mot2_arr = enc_vals[1]
-                    mot2_name = enc_names[1]
+                    try:
+                        f2 = h5py.File(sc_id+'.nxs','r')
+                        mot2_arr = np.array(f2["scan/data/samz"][:])
+                        mot2_name = 'samz'
+                        f2.close()
+                    except KeyError:
+                        print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
+                        mot2_arr = enc_vals[1]
+                        mot2_name = enc_names[1]
             for i in range(mot1_arr.shape[0]):
                 mot1.append(mot1_arr[i])
                 mot2.append(mot2_arr[i])
@@ -1913,8 +1950,14 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             i0 = np.array(i0).reshape((ydim, xdim))
             i1 = np.array(i1).reshape((ydim, xdim))
             tm = np.array(tm).reshape((ydim, xdim))
-            mot1 = np.array(mot1).reshape((ydim, xdim))
-            mot2 = np.array(mot2).reshape((ydim, xdim))
+            if np.array(mot1).shape[0] < xdim*ydim:
+                print("Warning: mot1 has less than "+str(xdim*ydim)+" elements; padding with zero.")
+                mot1 = np.concatenate((np.array(mot1), np.zeros(xdim*ydim-np.array(mot1).shape[0])))
+            if np.array(mot2).shape[0] < xdim*ydim:
+                print("Warning: mot2 has less than "+str(xdim*ydim)+" elements; padding with zero.")
+                mot2 = np.concatenate((np.array(mot2), np.zeros(xdim*ydim-np.array(mot2).shape[0])))
+            mot1 = np.array(mot1[0:xdim*ydim]).reshape((ydim, xdim))
+            mot2 = np.array(mot2[0:xdim*ydim]).reshape((ydim, xdim))
             timetrig = False
         elif np.array(spectra0).shape[0] < xdim*ydim:
             spectra0 = np.array(spectra0)
@@ -1931,8 +1974,8 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             i0 = np.concatenate((np.array(i0), zeros)).reshape((ydim, xdim))
             i1 = np.concatenate((np.array(i1), zeros)).reshape((ydim, xdim))
             tm = np.concatenate((np.array(tm), zeros)).reshape((ydim, xdim))
-            mot1 = np.concatenate((np.array(mot1), zeros)).reshape((ydim, xdim))
-            mot2 = np.concatenate((np.array(mot2), zeros)).reshape((ydim, xdim))
+            mot1 = np.concatenate((np.array(mot1), zeros))[0:xdim*ydim].reshape((ydim, xdim))
+            mot2 = np.concatenate((np.array(mot2), zeros))[0:xdim*ydim].reshape((ydim, xdim))
             timetrig = False
         else:            
             spectra0 = np.array(spectra0)
