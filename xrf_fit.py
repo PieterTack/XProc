@@ -314,7 +314,7 @@ def div_by_cnc(h5file, cncfile, channel=None):
 #   If keyword norm is provided, the elemental yield is corrected for the intensity of this signal
 #       the signal has to be present in both reference and XRF data fit
 #   If keyword absorb is provided, the fluorescence signal in the XRF data is corrected for absorption through sample matrix
-#       type: tuple ('element', 'cnc file')
+#       type: tuple (['element'], 'cnc file')
 #       the element will be used to find Ka and Kb line intensities and correct for their respective ratio
 #       using concentration values from the provided cnc files.
 def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False):
@@ -392,6 +392,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     file = h5py.File(h5file, 'r')
     h5_ims = np.array(file['norm/'+channel+'/ims'])
     h5_names = np.array([n.decode('utf8') for n in file['norm/'+channel+'/names']])
+    h5_sum = np.array(file['norm/'+channel+'/sum/int'])
     h5_normto = np.array(file['norm/I0'])
     h5_rawI0 = np.average(np.array(file['raw/I0']))
     h5_tm = np.average(np.array(file['raw/acquisition_time']))
@@ -403,14 +404,18 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot2 = np.array(file['mot2'])
     file.close()
     h5_ims = h5_ims / h5_normto * (h5_rawI0 / h5_tm)  #These are intensities for 1 s LT.
+    h5_sum = h5_sum / h5_normto * (np.sum(h5_rawI0)/np.sum(h5_tm))
     # remove Compt and Rayl signal from h5, as these cannot be quantified
     names = h5_names
     ims = h5_ims
+    sumint = h5_sum
     if 'Compt' in list(names):
         ims = ims[np.arange(len(names))!=list(names).index('Compt'),:,:]
+        sumint = sumint[np.arange(len(names))!=list(names).index('Compt')]
         names = names[np.arange(len(names))!=list(names).index('Compt')]
     if 'Rayl' in list(names):
         ims = ims[np.arange(len(names))!=list(names).index('Rayl'),:,:]
+        sumint = sumint[np.arange(len(names))!=list(names).index('Rayl')]
         names = names[np.arange(len(names))!=list(names).index('Rayl')]
 
     # Normalise for specified roi if required
@@ -420,6 +425,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             # print(np.nonzero(h5_ims[list(h5_names).index(norm),:,:]==0)[0])
             for i in range(0, ims.shape[0]):
                 ims[i,:,:] = ims[i,:,:] / h5_ims[list(h5_names).index(norm),:,:] #TODO: we can get some division by zero error here...
+                sumint[i] = sumint[i] / h5_sum[list(h5_names).index(norm)]
         else:
             print("ERROR: quant_with_ref: norm signal not present in h5file "+h5file)
             return False
@@ -442,24 +448,24 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 el = xraylib.SymbolToAtomicNumber(names[n].split(' ')[0])
                 line = names[n].split(' ')[1]
                 if line[0] == 'K':
-                    line = 'KL3_line' #Ka1
+                    line = xraylib.KL3_LINE #Ka1
                 elif line[0] == 'L':
-                    line = 'L3M5_line' #La1
+                    line = xraylib.L3M5_LINE #La1
                 elif line[0] == 'M':
-                    line = 'M5N7_line' #Ma1
+                    line = xraylib.M5N7_LINE #Ma1
                 for i in range(0, len(cnc.z)):
-                    mu[n] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
+                    mu[n] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
             mu_ka1 = np.zeros(len(absorb_el))
             mu_kb1 = np.zeros(len(absorb_el))
             rate_ka1 = np.zeros(len(absorb_el))
             rate_kb1 = np.zeros(len(absorb_el))
             for j in range(len(absorb_el)):
                 for i in range(0, len(cnc.z)):
-                    mu_ka1[j] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),'KL3_line')) * cnc.conc[i]/1E6
-                    mu_kb1[j] += xraylib.CS_Total(cnc.z[i], xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),'KM3_line')) * cnc.conc[i]/1E6
+                    mu_ka1[j] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KL3_LINE)) * cnc.conc[i]/1E6
+                    mu_kb1[j] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KM3_LINE)) * cnc.conc[i]/1E6
                 # determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
-                rate_ka1[j] = xraylib.RadRate(absorb_el[j], 'KL3_line')
-                rate_kb1[j] = xraylib.RadRate(absorb_el[j], 'KM3_line')
+                rate_ka1[j] = xraylib.RadRate(xraylib.SymbolToAtomicNumber(absorb_el[j]), xraylib.KL3_LINE)
+                rate_kb1[j] = xraylib.RadRate(xraylib.SymbolToAtomicNumber(absorb_el[j]), xraylib.KM3_LINE)
         except ImportError: # no xraylib, so use PyMca instead
             # calculate absorption coefficient for each element/energy in names
             mu = np.zeros(names.size)
@@ -552,6 +558,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             corr_factor = 1./np.exp(-1.*rhot[:,:] * mu[n])
             corr_factor[np.where(corr_factor > 1000.)] = 1. # points with very low correction factor are not corrected; otherwise impossibly high values are obtained
             ims[n,:,:] = ims[n,:,:] * corr_factor
+            sumint[n] = sumint[n] * np.average(corr_factor)
 
     
     # convert intensity values to concentrations
@@ -562,6 +569,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         if names[i] in ref_names:
             ref_id = list(ref_names).index(names[i])
             ims[i,:,:] = ims[i,:,:]*ref_yld[ref_id]
+            sumint[i] = sumint[i]*ref_yld[ref_id]
         else: # element not in references list, so have to interpolate...
             if h5_lt[i] == 'K':
                 line_id = [j for j, x in enumerate(ref_lt) if x == 'K']
@@ -575,8 +583,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 #   if only 1 element, simply use that same el_yield, although it will probably give very wrong estimations
                 if len(line_id) < 1:
                     ims[i,:,:] = -1
+                    sumint[i] = -1
                 else:
                     ims[i,:,:] = ims[i,:,:] * ref_yld[line_id]
+                    sumint[i] = sumint[i] * ref_yld[line_id]
             else:
                 # find ref indices of elements neighbouring h5_z[i]
                 z_id = np.searchsorted(ref_z[line_id], h5_z[i]) #h5_z[i] is between index z_id-1 and z_id
@@ -588,7 +598,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     yld_interpol = (ref_yld[line_id][z_id-1]-ref_yld[line_id][z_id-2]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id-2]) * (h5_z[i]-ref_z[line_id][z_id-2]) + ref_yld[line_id][z_id-2]
                 else: #there is an element in ref_yld with index z_id-1 and z_id
                     yld_interpol = (ref_yld[line_id][z_id-1]-ref_yld[line_id][z_id]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id]) * (h5_z[i]-ref_z[line_id][z_id]) + ref_yld[line_id][z_id]
-                ims[i,:,:] = ims[i,:,:]*yld_interpol
+                ims[i,:,:] = ims[i,:,:] * yld_interpol
+                sumint[i] = sumint[i] * yld_interpol
             
     # save quant data
     file = h5py.File(h5file, 'r+')
@@ -599,10 +610,12 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         del file['quant/'+channel+'/ratio_exp']
         del file['quant/'+channel+'/ratio_th']
         del file['quant/'+channel+'/rhot']
+        del file['quant/'+channel+'/sum/int']
     except Exception:
         pass
     file.create_dataset('quant/'+channel+'/names', data=[n.encode('utf8') for n in names])
     file.create_dataset('quant/'+channel+'/ims', data=ims, compression='gzip', compression_opts=4)
+    file.create_dataset('quant/'+channel+'/sum/int', data=sumint, compression='gzip', compression_opts=4)
     if reffiles.size > 1:
         ' '.join(reffiles)
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
@@ -1098,6 +1111,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
     filename = os.path.splitext(h5file)[0]
 
     imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
+    imsdata0.data[imsdata0.data < 0] = 0.
     if log:
         imsdata0.data = np.log10(imsdata0.data)
         filename += '_log'
@@ -1106,6 +1120,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
         if imsdata2 is None:
             chan02_flag = False
         else:
+            imsdata2.data[imsdata2.data < 0] = 0.
             chan02_flag = True
             if log:
                 imsdata2.data = np.log10(imsdata2.data)
@@ -1120,13 +1135,13 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
     nrows = int(np.ceil(len(imsdata0.names)/ncols)) # define nrows based on ncols
     colim_opts = plotims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
     
-    plotims.plot_colim(imsdata0, imsdata0.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch0_overview.png')
+    plotims.plot_colim(imsdata0, imsdata0.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch0_'+datadir+'_overview.png')
     
     if chan02_flag:
         nrows = int(np.ceil(len(imsdata2.names)/ncols)) # define nrows based on ncols
         colim_opts = plotims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
         
-        plotims.plot_colim(imsdata2, imsdata2.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch2_overview.png')
+        plotims.plot_colim(imsdata2, imsdata2.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch2_'+datadir+'_overview.png')
 
 
 ##############################################################################
@@ -1238,6 +1253,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     ims0 = np.rint(ims0)
     sum_fit0 = np.rint(sum_fit0)
     sum_bkg0 = np.rint(sum_bkg0)
+    ims0[np.isnan(ims0)] = 0.
     if chan02_flag:
         for i in range(0, ims2.shape[0]):
             ims2[i,:,:] = ims2[i,:,:]/(I0/tm) * normto
@@ -1247,6 +1263,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         ims2 = np.rint(ims2)
         sum_fit2 = np.rint(sum_fit2)
         sum_bkg2 = np.rint(sum_bkg2)
+        ims2[np.isnan(ims2)] = 0.
         
 
     # if this is snakescan, interpolate ims array for motor positions so images look nice
@@ -1254,8 +1271,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     if snake is True:
         print("Interpolating image for motor positions...", end=" ")
         if timetriggered is False:
-            pos_low = min(mot1[:,0])
-            pos_high = max(mot1[:,0])
+            pos_low = np.min(mot1[:,0])
+            pos_high = np.max(mot1[:,0])
             for i in range(0, mot1[:,0].size): #correct for half a pixel shift
                 if mot1[i,0] <= np.average((pos_high,pos_low)):
                     mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
@@ -1283,6 +1300,20 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
         x = mot1.ravel()
         y = mot2.ravel()
+
+        # plt.imshow(mot1)
+        # plt.colorbar()
+        # plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
+        # plt.close()
+        # plt.imshow(mot2)
+        # plt.colorbar()
+        # plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
+        # plt.close()
+        # plt.imshow(ims2[9,:,:])
+        # plt.colorbar()
+        # plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
+        # plt.close()
+
         for i in range(names0.size):
             values = ims0[i,:,:].ravel()
             ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
@@ -1293,6 +1324,12 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         ims0 = ims0_tmp
         ims2 = ims2_tmp
         print("Done")
+
+    # remove NaN values
+    ims0[np.isnan(ims0)] = 0.
+    if chan02_flag:
+        ims2[np.isnan(ims2)] = 0.
+
     
     # save normalised data
     print("     Writing...", end=" ")
@@ -1325,6 +1362,82 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     print("Done")
 
 
+##############################################################################
+# delete a line from a fitted dataset (can be useful when data interpolation has to occur but there are empty pixels)
+#   Note that this also removes lines from I0, I1, acquisition_time, mot1 and mot2! 
+#       If you want to recover this data one has to re-initiate processing from the raw data.
+def rm_line(h5file, lineid, axis=1):
+    import h5py
+    
+    f = h5py.File(h5file, 'r+')
+
+    # read the data and determine which data flags apply
+    i0 = np.array(f['raw/I0'])
+    try:
+        i1 = np.array(f['raw/I1'])
+        i1_flag = True
+    except KeyError:
+        i1_flag = False
+    mot1 = np.array(f['mot1'])
+    mot2 = np.array(f['mot2'])
+    mot1_name = str(f['mot1'].attrs["Name"])
+    mot2_name = str(f['mot2'].attrs["Name"])
+    tm = np.array(f['raw/acquisition_time'])
+    spectra0 = np.array(f['raw/channel00/spectra'])
+    try:
+        spectra2 = np.array(f['raw/channel02/spectra'])
+        chan02_flag = True
+    except KeyError:
+        chan02_flag = False
+    try:
+        ims0 = np.array(f['fit/channel00/ims'])
+        fit_flag = True
+        if chan02_flag:
+            ims2 = np.array(f['fit/channel02/ims'])
+    except KeyError:
+        fit_flag = False
+
+    ims0 = np.delete(ims0, lineid, axis+1)
+    ims2 = np.delete(ims2, lineid, axis+1)
+    spectra0 = np.delete(spectra0, lineid, axis)
+    spectra2 = np.delete(spectra2, lineid, axis)
+    i0 = np.delete(i0, lineid, axis)
+    i1 = np.delete(i1, lineid, axis)
+    mot1 = np.delete(mot1, lineid, axis)
+    mot2 = np.delete(mot2, lineid, axis)
+    tm = np.delete(tm, lineid, axis)
+
+    # save the data
+    print("Writing fit data to "+h5file+"...", end=" ")
+    if fit_flag:
+        del f['fit/channel00/ims']
+        f.create_dataset('fit/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
+        if chan02_flag:
+            del f['fit/channel02/ims']
+            f.create_dataset('fit/channel02/ims', data=ims2, compression='gzip', compression_opts=4)
+        
+    del f['raw/channel00/spectra']
+    del f['raw/I0']
+    del f['mot1']
+    del f['mot2']
+    del f['raw/acquisition_time']
+    f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = mot1_name
+    dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = mot2_name
+    f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
+    if i1_flag:
+        del f['raw/I1']
+        f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+    if chan02_flag:
+        del f['raw/channel02/spectra']
+        f.create_dataset('raw/channel02/spectra', data=spectra2, compression='gzip', compression_opts=4)
+        
+    f.close()
+    print('Done')
+    
 ##############################################################################
 # fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
 #   NOTE: the cfg file sscan00188_merge.h5hould use the SNIP background method! Others will fail as considered 'too slow' by the PyMca fit routine itself
@@ -1892,7 +2005,10 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                         mot1_name = 'samy'
                         f2.close()
                     except KeyError:
-                        print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
+                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
+                            print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
+                        else:
+                            print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
                         mot1_arr = enc_vals[0]
                         mot1_name = enc_names[0]
             if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
@@ -1915,7 +2031,10 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                         mot2_name = 'samz'
                         f2.close()
                     except KeyError:
-                        print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
+                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
+                            print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
+                        else:
+                            print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
                         mot2_arr = enc_vals[1]
                         mot2_name = enc_names[1]
             for i in range(mot1_arr.shape[0]):
@@ -2063,31 +2182,8 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             i1[:,i] = i1[sort_id,i]
             tm[:,i] = tm[sort_id,i]
 
-    # flip and rotate the data so images are oriented as sample on beamline (up=up, left=left, ... when looking downstream)
-    # also calculate sumspec and maxspec spectra
+    # calculate sumspec and maxspec spectra
     if timetrig is False:
-        # spectra0 = np.flip(spectra0, 0)
-        # icr0 = np.flip(icr0, 0)
-        # ocr0 = np.flip(ocr0, 0)
-        # spectra2 = np.flip(spectra2, 0)
-        # icr2 = np.flip(icr2, 0)
-        # ocr2 = np.flip(ocr2, 0)
-        # mot1 = np.flip(mot1, 0)
-        # mot2 = np.flip(mot2, 0)
-        # i0 = np.flip(i0, 0)
-        # i1 = np.flip(i1, 0)
-        # tm = np.flip(tm, 0)
-        # spectra0 = np.rot90(spectra0, 2, (0,1))
-        # icr0 = np.rot90(icr0, 2)
-        # ocr0 = np.rot90(ocr0, 2)
-        # spectra2 = np.rot90(spectra2, 2, (0,1))
-        # icr2 = np.rot90(icr2, 2)
-        # ocr2 = np.rot90(ocr2, 2)
-        # mot1 = np.rot90(mot1, 2)
-        # mot2 = np.rot90(mot2, 2)
-        # i0 = np.rot90(i0, 2)
-        # i1 = np.rot90(i1, 2)
-        # tm = np.rot90(tm, 2)
         sumspec0 = np.sum(spectra0[:], axis=(0,1))
         sumspec2 = np.sum(spectra2[:], axis=(0,1))
         maxspec0 = np.zeros(sumspec0.shape[0])

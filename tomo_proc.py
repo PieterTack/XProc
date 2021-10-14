@@ -14,20 +14,21 @@ import plotims
 def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='channel00', ncol=8, selfabs=None, snake=False, interp_tr=False):
     if rot_mot is None:
         rotid = 'mot1'
+        transid = 'mot2'
     else:
         rotid = rot_mot
+        if rotid == 'mot1':
+            transid = 'mot2'
+        else:
+            transid = 'mot1'
+
     
     h5f = h5py.File(h5file, 'r+')
     ims = np.array(h5f['norm/'+channel+'/ims'])
     # ims = ims[:,25:,:] #only do this if omitting certain angles from the scan...
     names = ["-".join(name.decode('utf8').split(" ")) for name in h5f['norm/'+channel+'/names']]
-    if (signal == 'i1' or signal == 'I1') and interp_tr is False:
-        if rotid == 'mot1':
-            transid = 'mot2'
-        else:
-            transid = 'mot1'
-        mot1 = np.array(h5f[transid])
-        mot2 = np.array(h5f[rotid])
+    mot1 = np.array(h5f[transid])
+    mot2 = np.array(h5f[rotid])
     if signal == 'i1' or signal == 'I1':
         i1 = np.array(h5f['raw/I1'])
         i0 = np.array(h5f['raw/I0'])
@@ -41,12 +42,6 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     # TODO: could be if this option is true that snake mesh correction does not work anymore...
     if interp_tr is True:
         from scipy.interpolate import griddata
-        if rotid == 'mot1':
-            transid = 'mot2'
-        else:
-            transid = 'mot1'
-        mot1 = np.array(h5f[transid])
-        mot2 = np.array(h5f[rotid])
         tr_min = np.min(mot1)
         tr_max = np.max(mot1)
         tr_npts = int(np.floor((tr_max-tr_min)/(mot1[0,1]-mot1[0,0])))+1
@@ -88,14 +83,6 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     if rot_centre is None:
         if signal == 'i1' or signal == 'I1':
             from scipy.interpolate import griddata
-            # if rotid == 'mot1':
-            #     transid = 'mot2'
-            # else:
-            #     transid = 'mot1'
-            # i1 = np.array(h5f['raw/I1'])
-            # i0 = np.array(h5f['raw/I0'])
-            # mot1 = np.array(h5f[transid])
-            # mot2 = np.array(h5f[rotid])
             # norm I1
             i1 = (i1/i0)
             y, x = np.histogram(i1, bins=1000)
@@ -152,14 +139,17 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     
     # Ring removal attempt
     # recon = tomopy.misc.corr.remove_ring(recon)
-    
-    # prepare data for imaging in plotims
-    data = plotims.ims()
-    data.data = np.zeros((recon.shape[1], recon.shape[2], recon.shape[0]))
-    for k in range(0, recon.shape[0]):
-        print
-        data.data[:,:,k] = tomopy.remove_neg(tomopy.remove_nan(np.flip(recon[k, :, :], 0)))
-    data.names = names
+  
+    # flip over vertical axis to match images better to measurement geometry
+    recon = np.flip(recon, 1)    
+  
+    # # prepare data for imaging in plotims
+    # data = plotims.ims()
+    # data.data = np.zeros((recon.shape[1], recon.shape[2], recon.shape[0]))
+    # for k in range(0, recon.shape[0]):
+    #     print
+    #     data.data[:,:,k] = tomopy.remove_neg(tomopy.remove_nan(recon[k, :, :]))
+    # data.names = names
     
     # save tomo data in h5 file
     try:
@@ -180,13 +170,14 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     except KeyError:
         h5f.close()
      
-    # plot data
-    colim_opts = plotims.Collated_image_opts()
-    colim_opts.ncol = ncol
-    colim_opts.nrow = int(np.ceil(len(names)/colim_opts.ncol))
-    plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+channel+'_tomo_overview.png')
-    data.data = np.log10(data.data)
-    plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+channel+'_log_tomo_overview.png')
+    # # plot data
+    # colim_opts = plotims.Collated_image_opts()
+    # colim_opts.ncol = ncol
+    # colim_opts.nrow = int(np.ceil(len(names)/colim_opts.ncol))
+    # data.data = np.flip(data.data, 0)
+    # plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+channel+'_tomo_overview.png')
+    # data.data = np.log10(data.data)
+    # plotims.plot_colim(data, names, 'viridis', colim_opts=colim_opts, save=h5file.split(".")[0]+channel+'_log_tomo_overview.png')
 
 
 def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False):
@@ -212,6 +203,7 @@ def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False):
         
     if i1 is not None:
         i0 = np.array(h5f['raw/I0'])
+        i0[np.where(i0 <= 0)] = np.median(i0)
         mot1 = np.array(h5f[mot1id])
         mot2 = np.array(h5f[mot2id])
         # norm I1
@@ -271,6 +263,10 @@ def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False):
         # Ring removal attempt
         # recon = tomopy.misc.corr.remove_ring(recon, thresh_max=200, thresh=200)
         # recon = tomopy.misc.corr.circ_mask(recon, 0, ratio=0.9, val=0.0, ncore=None)    
+ 
+        # flip over vertical axis to match images better to measurement geometry
+        recon = np.flip(recon, 1)    
+
     
         try:
             del h5f['tomo/I1/rotation_center']
@@ -284,7 +280,7 @@ def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False):
         h5f.close()
         
         # make a plot
-        recon = np.flip(tomopy.remove_neg(tomopy.remove_nan(recon[0, :, :], 0)), 0)
+        recon = tomopy.remove_neg(tomopy.remove_nan(recon[0, :, :], 0))
         plotims.plot_image(recon, 'transmission', 'gray', plt_opts=None, sb_opts=None, cb_opts=None, clim=None, save=h5file.split('.')[0]+'_i1tomo.png', subplot=None)
 
 
