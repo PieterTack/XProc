@@ -1624,7 +1624,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
             mcafit = ClassMcaTheory.ClassMcaTheory()
             mcafit.configure(config)
-            pool = multiprocessing.Pool()
+            pool = multiprocessing.Pool(processes=ncores)
             spec_chansum = np.sum(spectra2, axis=2)
             spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
             spec2fit = np.array(spectra2).reshape((spectra2.shape[0]*spectra2.shape[1], spectra2.shape[2]))[spec2fit_id,:]
@@ -1832,6 +1832,98 @@ def add_h5s(h5files, newfilename):
         print("Done")
 
 ##############################################################################
+# Read the spectra nexus files
+def read_P06_spectra(file, sc_id, ch):
+    if type(ch[0]) is str:
+        # Reading the spectra files, icr and ocr
+        print("Reading " +sc_id+"/"+ch[0]+"/"+file +"...", end=" ")
+        f = h5py.File(sc_id+"/"+ch[0]+"/"+file, 'r')
+        if type(ch[1]) is str:
+            spe0_arr = f['entry/instrument/xspress3/'+ch[1]+'/histogram'][:]
+            try:
+                icr0_arr = f['entry/instrument/xspress3/'+ch[1]+'/scaler/allEvent'][:]
+                ocr0_arr = f['entry/instrument/xspress3/'+ch[1]+'/scaler/allGood'][:]
+            except KeyError:
+                icr0_arr = f['entry/instrument/xspress3/'+ch[1]+'/scaler/allevent'][:]
+                ocr0_arr = f['entry/instrument/xspress3/'+ch[1]+'/scaler/allgood'][:]
+        elif type(ch[1]) is list: #if multiple channels provided we want to add them 
+            spe0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/histogram'][:])
+            try:
+                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allEvent'][:])
+                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allGood'][:])
+            except KeyError:
+                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allevent'][:])
+                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allgood'][:])
+            for ch in ch[1][1:]:
+                spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+                try:
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                except KeyError:
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
+        f.close()
+        print("read")
+    elif type(ch[0]) is list:
+        # Reading the spectra files, icr and ocr
+        print("Reading " +sc_id+"/"+ch[0][0]+"/"+file +"...", end=" ")
+        f = h5py.File(sc_id+"/"+ch[0][0]+"/"+file, 'r')
+        # read spectra and icr/ocr from first device (ch[0][0]) so we can later add the rest
+        #   as ch[0] is a list, ch[1] is also expected to be a list!
+        if type(ch[1][0]) is str:
+            spe0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/histogram'][:])
+            try:
+                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allEvent'][:])
+                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allGood'][:])
+            except KeyError:
+                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allevent'][:])
+                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allgood'][:])
+        elif type(ch[1][0]) is list: #if multiple channels provided for this device we want to add them 
+            spe0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/histogram'][:])
+            try:
+                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allEvent'][:])
+                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allGood'][:])
+            except KeyError:
+                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allevent'][:])
+                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allgood'][:])
+            for ch in ch[1][0][1:]:
+                spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+                try:
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                except KeyError:
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
+        f.close()
+        print("read")
+        # Now let's read the following spectra/devices
+        for i in range(len(ch[0][1:])):
+            dev = ch[0][i+1]
+            # Reading the spectra files, icr and ocr
+            print("Reading " +sc_id+"/"+dev+"/"+file +"...", end=" ")
+            f = h5py.File(sc_id+"/"+dev+"/"+file, 'r')
+            if type(ch[1][i+1]) is str:
+                spe0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/histogram'][:])
+                try:
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allEvent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allGood'][:])
+                except KeyError:
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allevent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allgood'][:])
+            elif type(ch[1][i+1]) is list: #if multiple channels provided for this device we want to add them 
+                for ch in ch[1][i+1][:]:
+                    spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+                    try:
+                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
+                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                    except KeyError:
+                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
+                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
+            f.close()    
+            print("read")
+    return spe0_arr, icr0_arr, ocr0_arr
+    
+##############################################################################
 # Merges separate P06 nxs files to 1 handy h5 file containing 2D array of spectra, relevant motor positions, I0 counter, ICR, OCR and mesaurement time.
 def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02']):
     scanid = np.array(scanid)
@@ -1869,62 +1961,8 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             if file.endswith(".nxs"):
                 files.append(file)
         for file in files:
-            # Reading the spectra files, icr and ocr
-            print("Reading " +sc_id+"/"+ch0[0]+"/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/"+ch0[0]+"/"+file, 'r')
-            if type(ch0[1]) is str:
-                spe0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/histogram'][:]
-                try:
-                    icr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allEvent'][:]
-                    ocr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allGood'][:]
-                except KeyError:
-                    icr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allevent'][:]
-                    ocr0_arr = f['entry/instrument/xspress3/'+ch0[1]+'/scaler/allgood'][:]
-            elif type(ch0[1]) is list: #if multiple channels provided we want to add them 
-                spe0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/histogram'][:])
-                try:
-                    icr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allEvent'][:])
-                    ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allGood'][:])
-                except KeyError:
-                    icr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allevent'][:])
-                    ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch0[1][0]+'/scaler/allgood'][:])
-                for ch in ch0[1][1:]:
-                    spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
-                    try:
-                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
-                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
-                    except KeyError:
-                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
-                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
-            f.close()    
-            print("read")
-            print("Reading " +sc_id+"/"+ch2[0]+"/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/"+ch2[0]+"/"+file, 'r')
-            if type(ch2[1]) is str:
-                spe2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/histogram'][:]
-                try:
-                    icr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allEvent'][:]
-                    ocr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allGood'][:]
-                except KeyError:
-                    icr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allevent'][:]
-                    ocr2_arr = f['entry/instrument/xspress3/'+ch2[1]+'/scaler/allgood'][:]  
-            elif type(ch2[1]) is list: #if multiple channels provided we want to add them 
-                spe2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/histogram'][:])
-                try:
-                    icr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allEvent'][:])
-                    ocr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allGood'][:])
-                except KeyError:
-                    icr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allevent'][:])
-                    ocr2_arr = np.array(f['entry/instrument/xspress3/'+ch2[1][0]+'/scaler/allgood'][:])
-                for ch in ch2[1][1:]:
-                    spe2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
-                    try:
-                        icr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
-                        ocr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
-                    except KeyError:
-                        icr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
-                        ocr2_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
-            f.close()    
+            spe0_arr, icr0_arr, ocr0_arr = read_P06_spectra(file, sc_id, ch0)
+            spe2_arr, icr2_arr, ocr2_arr = read_P06_spectra(file, sc_id, ch2)
             for i in range(spe0_arr.shape[0]):
                 spectra0.append(spe0_arr[i,:])
                 icr0.append(icr0_arr[i])
