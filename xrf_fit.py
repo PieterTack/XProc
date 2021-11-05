@@ -1107,7 +1107,7 @@ def calc_detlim(h5file, cncfile):
 ##############################################################################
 # make publish-worthy overview images of all fitted elements in h5file (including scale bars, colorbar, ...)
 # plot norm if present, otherwise plot fit/.../ims
-def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False):
     filename = os.path.splitext(h5file)[0]
 
     imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
@@ -1127,6 +1127,17 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False):
     except Exception:
         chan02_flag = False
  
+    # rotate where appropriate
+    if rotate != 0:
+        imsdata0.data = np.rot90(imsdata0.data, k=np.rint(rotate/90.), axes=(0,1))
+        if chan02_flag is True:
+            imsdata2.data = np.rot90(imsdata2.data, k=np.rint(rotate/90.), axes=(0,1))
+    # flip image horizontally
+    if fliph is True:
+        imsdata0.data = np.flip(imsdata0.data, axis=0)
+        if chan02_flag is True:
+            imsdata2.data = np.flip(imsdata2.data, axis=0)
+
     sb_opts = plotims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
     if log:
         cb_opts = plotims.Colorbar_opt(title='log. Int.;[cts]')
@@ -1151,7 +1162,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
     file = h5py.File(h5file, 'r+')
-    ims0 = np.array(file['fit/channel00/ims'])
+    ims0 = np.squeeze(np.array(file['fit/channel00/ims']))
     names0 = file['fit/channel00/names']
     sum_fit0 = np.array(file['fit/channel00/sum/int'])
     sum_bkg0 = np.array(file['fit/channel00/sum/bkg'])
@@ -1179,7 +1190,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         snake = True
         timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
     try:
-        ims2 = np.array(file['fit/channel02/ims'])
+        ims2 = np.squeeze(np.array(file['fit/channel02/ims']))
         if len(ims2.shape) == 2:
             ims2 = ims2.reshape((ims2.shape[0], ims2.shape[1], 1))
         names2 = file['fit/channel02/names']
@@ -1301,18 +1312,19 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         x = mot1.ravel()
         y = mot2.ravel()
 
-        # plt.imshow(mot1)
-        # plt.colorbar()
-        # plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
-        # plt.close()
-        # plt.imshow(mot2)
-        # plt.colorbar()
-        # plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
-        # plt.close()
-        # plt.imshow(ims2[9,:,:])
-        # plt.colorbar()
-        # plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
-        # plt.close()
+        #import matplotlib.pyplot as plt
+        #plt.imshow(mot1_tmp)
+        #plt.colorbar()
+        #plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
+        #plt.close()
+        #plt.imshow(mot2_tmp)
+        #plt.colorbar()
+        #plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
+        #plt.close()
+        #plt.imshow(ims0[8,0:255530].reshape((505,506)))
+        #plt.colorbar()
+        #plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
+        #plt.close()
 
         for i in range(names0.size):
             values = ims0[i,:,:].ravel()
@@ -2045,16 +2057,18 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                     except KeyError:
                         if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                             print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
+                            mot1_arr = enc_vals[0]
+                            mot1_name = enc_names[0]
                         else:
                             if scan_cmd[1] == 'scanz':
                                 mot1_arr = enc_vals[enc_names.index('scanw')]
-                                mot1_name = enc_vals[enc_names.index('scanw')]
+                                mot1_name = enc_names[enc_names.index('scanw')]
                             elif scan_cmd[1] == 'scany':
-                                mot1_arr = enc_vals[enc_names.index('scanv')]
-                                mot1_name = enc_vals[enc_names.index('scanv')]
-                            elif scan_cmd[1] == 'scanx':
                                 mot1_arr = enc_vals[enc_names.index('scanu')]
-                                mot1_name = enc_vals[enc_names.index('scanu')]
+                                mot1_name = enc_names[enc_names.index('scanu')]
+                            elif scan_cmd[1] == 'scanx':
+                                mot1_arr = enc_vals[enc_names.index('scanv')]
+                                mot1_name = enc_names[enc_names.index('scanv')]
                             else:
                                 print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
                                 mot1_arr = enc_vals[0]
@@ -2081,16 +2095,18 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                     except KeyError:
                         if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                             print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
+                            mot2_arr = enc_vals[1]
+                            mot2_name = enc_names[1]
                         else:
                             if scan_cmd[5] == 'scanz':
-                                mot1_arr = enc_vals[enc_names.index('scanw')]
-                                mot1_name = enc_vals[enc_names.index('scanw')]
+                                mot2_arr = enc_vals[enc_names.index('scanw')]
+                                mot2_name = enc_names[enc_names.index('scanw')]
                             elif scan_cmd[5] == 'scany':
-                                mot1_arr = enc_vals[enc_names.index('scanv')]
-                                mot1_name = enc_vals[enc_names.index('scanv')]
+                                mot2_arr = enc_vals[enc_names.index('scanu')]
+                                mot2_name = enc_names[enc_names.index('scanu')]
                             elif scan_cmd[5] == 'scanx':
-                                mot1_arr = enc_vals[enc_names.index('scanu')]
-                                mot1_name = enc_vals[enc_names.index('scanu')]
+                                mot2_arr = enc_vals[enc_names.index('scanv')]
+                                mot2_name = enc_names[enc_names.index('scanv')]
                             else:
                                 print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
                                 mot2_arr = enc_vals[1]
