@@ -1457,7 +1457,6 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
     # let's read the h5file structure and launch our fit.
     file = h5py.File(h5file, 'r+')
     spectra0 = file['raw/channel00/spectra']
-    nchannels0 = spectra0.shape[2]
     sumspec0 = file['raw/channel00/sumspec']
     icr0 = np.array(file['raw/channel00/icr'])
     ocr0 = np.array(file['raw/channel00/ocr'])
@@ -1466,9 +1465,9 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         spectra0 = np.array(spectra0).reshape((spec0_shape[0], 1, spec0_shape[1]))
         icr0 = np.array(icr0).reshape((icr0.shape[0], 1))
         ocr0 = np.array(ocr0).reshape((ocr0.shape[0], 1))
+    nchannels0 = spectra0.shape[2]
     try:
         spectra2 = file['raw/channel02/spectra']
-        nchannels2 = spectra2.shape[2]
         sumspec2 = file['raw/channel02/sumspec']
         icr2 = np.array(file['raw/channel02/icr'])
         ocr2 = np.array(file['raw/channel02/ocr'])
@@ -1476,6 +1475,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             spectra2 = np.array(spectra2).reshape((spectra2.shape[0], 1, spectra2.shape[1]))
             icr2 = np.array(icr2).reshape((icr2.shape[0], 1))
             ocr2 = np.array(ocr2).reshape((ocr2.shape[0], 1))
+        nchannels2 = spectra2.shape[2]
         chan02_flag = True
     except Exception:
         chan02_flag = False
@@ -1854,20 +1854,21 @@ def read_P06_spectra(file, sc_id, ch):
             except KeyError:
                 icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allevent'][:])
                 ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allgood'][:])
-            for ch in ch[1][1:]:
-                spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+            for chnl in ch[1][1:]:
+                spe0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
                 try:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
                 except KeyError:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
         f.close()
         print("read")
     elif type(ch[0]) is list:
         # Reading the spectra files, icr and ocr
-        print("Reading " +sc_id+"/"+ch[0][0]+"/"+file +"...", end=" ")
-        f = h5py.File(sc_id+"/"+ch[0][0]+"/"+file, 'r')
+        dev = ch[0][0]
+        print("Reading " +sc_id+"/"+dev+"/"+file +"...", end=" ")
+        f = h5py.File(sc_id+"/"+dev+"/"+file, 'r')
         # read spectra and icr/ocr from first device (ch[0][0]) so we can later add the rest
         #   as ch[0] is a list, ch[1] is also expected to be a list!
         if type(ch[1][0]) is str:
@@ -1886,18 +1887,18 @@ def read_P06_spectra(file, sc_id, ch):
             except KeyError:
                 icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allevent'][:])
                 ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allgood'][:])
-            for ch in ch[1][0][1:]:
-                spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+            for chnl in ch[1][0][1:]:
+                spe0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
                 try:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
                 except KeyError:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
+                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
+                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
         f.close()
         print("read")
         # Now let's read the following spectra/devices
-        for i in range(len(ch[0][1:])):
+        for i in range(len(ch[0])-1):
             dev = ch[0][i+1]
             # Reading the spectra files, icr and ocr
             print("Reading " +sc_id+"/"+dev+"/"+file +"...", end=" ")
@@ -1911,14 +1912,14 @@ def read_P06_spectra(file, sc_id, ch):
                     icr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allevent'][:])
                     ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allgood'][:])
             elif type(ch[1][i+1]) is list: #if multiple channels provided for this device we want to add them 
-                for ch in ch[1][i+1][:]:
-                    spe0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/histogram'][:])
+                for chnl in ch[1][i+1][:]:
+                    spe0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
                     try:
-                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allEvent'][:])
-                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allGood'][:])
+                        icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
+                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
                     except KeyError:
-                        icr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allevent'][:])
-                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch+'/scaler/allgood'][:])
+                        icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
+                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
             f.close()    
             print("read")
     return spe0_arr, icr0_arr, ocr0_arr
@@ -1970,7 +1971,6 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                 spectra2.append(spe2_arr[i,:])
                 icr2.append(icr2_arr[i])
                 ocr2.append(ocr2_arr[i])
-            print("read")
         for file in files:
             # Reading I0 and measurement time data
             print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
@@ -1988,10 +1988,10 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
         files = list("")
         #TODO: we can clean this up, into 1 try block, pilctrigger can run from 01 to 05...
         try:
-            for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_01")):
+            for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_03")):
                 if file.endswith(".nxs"):
                     files.append(file)
-            pilcid = "/pilctriggergenerator_01/"
+            pilcid = "/pilctriggergenerator_03/"
         except FileNotFoundError:
             try:
                 for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_02")):
@@ -1999,10 +1999,10 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                         files.append(file)
                 pilcid = "/pilctriggergenerator_02/"
             except FileNotFoundError:
-                for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_03")):
+                for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_01")):
                     if file.endswith(".nxs"):
                         files.append(file)
-                pilcid = "/pilctriggergenerator_03/"
+                pilcid = "/pilctriggergenerator_01/"
         try:
             md_dict = {}
             with open("/".join(sc_id.split("/")[0:-2])+"/scan_logbook.txt", "r") as file_handle:
@@ -2035,7 +2035,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                     mot1b = enc_vals[enc_names.index(mot_list[1])]
                     mot1b_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
                     mot1_arr = mot1a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
-                    mot1_name = str(scan_cmd[5])
+                    mot1_name = str(scan_cmd[1])
                 except Exception:
                     try:
                         f2 = h5py.File(sc_id+'.nxs','r')
@@ -2046,9 +2046,19 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                         if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                             print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
                         else:
-                            print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
-                        mot1_arr = enc_vals[0]
-                        mot1_name = enc_names[0]
+                            if scan_cmd[1] == 'scanz':
+                                mot1_arr = enc_vals[enc_names.index('scanw')]
+                                mot1_name = enc_vals[enc_names.index('scanw')]
+                            elif scan_cmd[1] == 'scany':
+                                mot1_arr = enc_vals[enc_names.index('scanv')]
+                                mot1_name = enc_vals[enc_names.index('scanv')]
+                            elif scan_cmd[1] == 'scanx':
+                                mot1_arr = enc_vals[enc_names.index('scanu')]
+                                mot1_name = enc_vals[enc_names.index('scanu')]
+                            else:
+                                print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
+                                mot1_arr = enc_vals[0]
+                                mot1_name = enc_names[0]
             if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
                 mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
                 mot2_name = enc_names[enc_names.index(scan_cmd[5])]
@@ -2072,9 +2082,19 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                         if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                             print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
                         else:
-                            print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
-                        mot2_arr = enc_vals[1]
-                        mot2_name = enc_names[1]
+                            if scan_cmd[5] == 'scanz':
+                                mot1_arr = enc_vals[enc_names.index('scanw')]
+                                mot1_name = enc_vals[enc_names.index('scanw')]
+                            elif scan_cmd[5] == 'scany':
+                                mot1_arr = enc_vals[enc_names.index('scanv')]
+                                mot1_name = enc_vals[enc_names.index('scanv')]
+                            elif scan_cmd[5] == 'scanx':
+                                mot1_arr = enc_vals[enc_names.index('scanu')]
+                                mot1_name = enc_vals[enc_names.index('scanu')]
+                            else:
+                                print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
+                                mot2_arr = enc_vals[1]
+                                mot2_name = enc_names[1]
             for i in range(mot1_arr.shape[0]):
                 mot1.append(mot1_arr[i])
                 mot2.append(mot2_arr[i])
