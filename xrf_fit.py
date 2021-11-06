@@ -2182,6 +2182,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             icr2 = np.asarray(icr2).reshape((ydim, xdim))
             ocr2 = np.asarray(ocr2).reshape((ydim, xdim))
         elif np.asarray(spectra2).shape[0] < xdim*ydim:
+            spectra2 = np.asarray(spectra2)
             zerosize = xdim*ydim-spectra2.shape[0]
             zeros = np.zeros((zerosize, spectra2.shape[1]))
             spectra2 = np.asarray(spectra2)
@@ -2322,7 +2323,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             maxspec2[i] = spectra2[:,i].max()
 
     # Hooray! We read all the information! Let's write it to a separate file
-    f = h5py.File(scan_suffix+"_merge.h5", 'w')
+    f = h5py.File(scan_suffix+"_merge.h5", 'r+')
     f.create_dataset('raw/channel02/spectra', data=np.squeeze(spectra2), compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel02/icr', data=np.squeeze(icr2), compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel02/ocr', data=np.squeeze(ocr2), compression='gzip', compression_opts=4)
