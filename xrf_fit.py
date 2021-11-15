@@ -26,8 +26,8 @@ class Cnc():
     def __init__(self):
         self.name = ''
         self.z = 0 # atomic number
-        self.conc = 0 # [ppm]
-        self.err = 0 # [ppm]
+        self.conc = 0 # [ppm or ug/g]
+        self.err = 0 # [ppm or ug/g]
         self.density = 0 # [mg/cm^3]
         self.mass = 0 # [mg]
         self.thickness = 0 # [micron]
@@ -323,20 +323,24 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     reffiles = np.array(reffiles)
     if reffiles.size == 1:
         reff = h5py.File(str(reffiles), 'r')
-        ref_yld = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in ppm/ct/s
+        ref_yld = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
         ref_names = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
         ref_z = [Elements.getz(n.split(" ")[0]) for n in ref_names]
         if norm is not None:
             names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
             if norm in names:
                 sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
-                tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-                I0 = np.array(reff['raw/I0'])
-                I0norm = np.array(reff['norm/I0'])
-                # correct tm for appropriate normalisation factor
-                tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
-                # print(sum_fit[names.index(norm)], tm, (sum_fit[names.index(norm)]/tm))
-                ref_yld = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld]
+                # tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
+                # I0 = np.array(reff['raw/I0'])
+                # I0norm = np.array(reff['norm/I0'])
+                # # correct tm for appropriate normalisation factor
+                # if tmnorm is True:
+                #     tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
+                # else:
+                #     tm = I0norm/np.sum(I0) #this is acquisition time corresponding to sumspec intensity
+                # # print(sum_fit[names.index(norm)], tm, (sum_fit[names.index(norm)]/tm))
+                # ref_yld = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld]
+                ref_yld = [yld*(sum_fit[names.index(norm)]) for yld in ref_yld]
             else:
                 print("ERROR: quant_with_ref: norm signal not present for reference material in "+str(reffiles))
                 return False
@@ -350,18 +354,22 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         ref_z = []
         for i in range(0, reffiles.size):
             reff = h5py.File(str(reffiles[i]), 'r')
-            ref_yld_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in ppm/ct/s
+            ref_yld_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
             ref_names_tmp = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
             if norm is not None:
                 names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
                 if norm in names:
                     sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
-                    tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-                    I0 = np.array(reff['raw/I0'])
-                    I0norm = np.array(reff['norm/I0'])
-                    # correct tm for appropriate normalisation factor
-                    tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
-                    ref_yld_tmp = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld_tmp]
+                    # tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
+                    # I0 = np.array(reff['raw/I0'])
+                    # I0norm = np.array(reff['norm/I0'])
+                    # # correct tm for appropriate normalisation factor
+                    # if tmnorm is True:
+                    #     tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
+                    # else:
+                    #     tm = I0norm/np.sum(I0) #this is acquisition time corresponding to sumspec intensity
+                    # ref_yld_tmp = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld_tmp]
+                    ref_yld_tmp = [yld*(sum_fit[names.index(norm)]) for yld in ref_yld_tmp]
                 else:
                     print("ERROR: quant_with_ref: norm signal not present for reference material in "+reffiles[i])
                     return False
@@ -634,7 +642,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         data.data[:,:,-1] = rhot[:,:]
     names = np.concatenate((names,[r'$\rho T$']))
     data.names = names
-    cb_opts = plotims.Colorbar_opt(title='Conc.;[ppm]')
+    cb_opts = plotims.Colorbar_opt(title=r'Conc.;[$\mu$g/cm²]')
     nrows = int(np.ceil(len(names)/4)) # define nrows based on ncols
     colim_opts = plotims.Collated_image_opts(ncol=4, nrow=nrows, cb=True)
     plotims.plot_colim(data, names, 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=os.path.splitext(h5file)[0]+'_ch'+channel[-1]+'_quant.png')
@@ -941,8 +949,8 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
 # calculate detection limits.
 #   DL = 3*sqrt(Ib)/Ip * Conc
 #   calculates 1s and 1000s DL
-#   Also calculates elemental yields (Conc/Ip [ppm/ct/s]) 
-def calc_detlim(h5file, cncfile):
+#   Also calculates elemental yields (Conc/Ip [(ug/cm²)/(ct/s)]) 
+def calc_detlim(h5file, cncfile, tmnorm=False):
     # read in cnc file data
     cnc = read_cnc(cncfile)
     
@@ -967,7 +975,11 @@ def calc_detlim(h5file, cncfile):
         return
     
     # correct tm for appropriate normalisation factor
-    tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is time for which DL would be calculated using values as reported
+    #   tm is time for which DL would be calculated using values as reported
+    if tmnorm is True:
+        tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm))
+    else:
+        tm = I0norm/np.sum(I0)
     names0 = np.array([n.decode('utf8') for n in names0[:]])
     if chan02_flag:
         names2 = np.array([n.decode('utf8') for n in names2[:]])
@@ -980,8 +992,8 @@ def calc_detlim(h5file, cncfile):
         el_name = names0[j].split(" ")[0]
         for i in range(0, cnc.z.size):
             if el_name == Elements.getsymbol(cnc.z[i]):
-                conc0[j] = cnc.conc[i]
-                conc0_err[j] = cnc.err[i]
+                conc0[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ug/cm²]
     if chan02_flag:
         conc2 = np.zeros(names2.size)
         conc2_err = np.zeros(names2.size)
@@ -989,8 +1001,8 @@ def calc_detlim(h5file, cncfile):
             el_name = names2[j].split(" ")[0]
             for i in range(0, cnc.z.size):
                 if el_name == Elements.getsymbol(cnc.z[i]):
-                    conc2[j] = cnc.conc[i]
-                    conc2_err[j] = cnc.err[i]
+                    conc2[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                    conc2_err[j] = (cnc.err[i]/cnc.conc[i])*conc2[j] # unit: [ug/cm²]
 
     
     # some values will be 0 (due to conc0 or conc2 being 0). Ignore these in further calculations.
@@ -1064,9 +1076,9 @@ def calc_detlim(h5file, cncfile):
     file.create_dataset('detlim/'+cncfile+'/channel00/1000s/data', data=dl_1000s_0, compression='gzip', compression_opts=4)
     file.create_dataset('detlim/'+cncfile+'/channel00/1000s/stddev', data=dl_1000s_err_0, compression='gzip', compression_opts=4)    
     dset = file.create_dataset('elyield/'+cncfile+'/channel00/yield', data=el_yield_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "ppm/ct/s"
+    dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
     dset = file.create_dataset('elyield/'+cncfile+'/channel00/stddev', data=el_yield_err_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "ppm/ct/s"
+    dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
     file.create_dataset('elyield/'+cncfile+'/channel00/names', data=[n.encode('utf8') for n in names0_mod[:]])
     if chan02_flag:
         try:
@@ -1086,9 +1098,9 @@ def calc_detlim(h5file, cncfile):
         file.create_dataset('detlim/'+cncfile+'/channel02/1000s/data', data=dl_1000s_2, compression='gzip', compression_opts=4)
         file.create_dataset('detlim/'+cncfile+'/channel02/1000s/stddev', data=dl_1000s_err_2, compression='gzip', compression_opts=4)  
         dset = file.create_dataset('elyield/'+cncfile+'/channel02/yield', data=el_yield_2, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "ppm/ct/s"
+        dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
         dset = file.create_dataset('elyield/'+cncfile+'/channel02/stddev', data=el_yield_err_2, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "ppm/ct/s"
+        dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
         file.create_dataset('elyield/'+cncfile+'/channel02/names', data=[n.encode('utf8') for n in names2_mod[:]])
     file.close()
     
@@ -1158,7 +1170,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
 ##############################################################################
 # normalise IMS images to detector deadtime and I0 values.
 #   When I0norm is supplied, a (long) int should be provided to which I0 value one should normalise. Otherwise the max of the I0 map is used.
-def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False):
+#   tmnorm: sometimes the I0 values are not representative of acquisition time, then additional normalisation for acquisition time can be performed by setting tmnorm to True
+def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False):
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
     file = h5py.File(h5file, 'r+')
@@ -1258,9 +1271,16 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
 
     # correct I0
     for i in range(0, ims0.shape[0]):
-        ims0[i,:,:] = ims0[i,:,:]/(I0/tm) * normto
-    sum_fit0 = sum_fit0/(np.sum(I0)/np.sum(tm)) * normto
-    sum_bkg0 = sum_bkg0/(np.sum(I0)/np.sum(tm)) * normto
+        if tmnorm is True:
+            ims0[i,:,:] = ims0[i,:,:]/(I0/tm) * normto
+        else:
+            ims0[i,:,:] = ims0[i,:,:]/(I0) * normto
+    if tmnorm is True:
+        sum_fit0 = sum_fit0/(np.sum(I0)/np.sum(tm)) * normto
+        sum_bkg0 = sum_bkg0/(np.sum(I0)/np.sum(tm)) * normto
+    else:
+        sum_fit0 = sum_fit0/(np.sum(I0)) * normto
+        sum_bkg0 = sum_bkg0/(np.sum(I0)) * normto
     #round to integer values
     ims0 = np.rint(ims0)
     sum_fit0 = np.rint(sum_fit0)
@@ -1268,9 +1288,16 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     ims0[np.isnan(ims0)] = 0.
     if chan02_flag:
         for i in range(0, ims2.shape[0]):
-            ims2[i,:,:] = ims2[i,:,:]/(I0/tm) * normto
-        sum_fit2 = sum_fit2/(np.sum(I0)/np.sum(tm)) * normto
-        sum_bkg2 = sum_bkg2/(np.sum(I0)/np.sum(tm)) * normto
+            if tmnorm is True:
+                ims2[i,:,:] = ims2[i,:,:]/(I0/tm) * normto
+            else:
+                ims2[i,:,:] = ims2[i,:,:]/(I0) * normto
+        if tmnorm is True:
+            sum_fit2 = sum_fit2/(np.sum(I0)/np.sum(tm)) * normto
+            sum_bkg2 = sum_bkg2/(np.sum(I0)/np.sum(tm)) * normto
+        else:
+            sum_fit2 = sum_fit2/(np.sum(I0)) * normto
+            sum_bkg2 = sum_bkg2/(np.sum(I0)) * normto
         #round to integer values
         ims2 = np.rint(ims2)
         sum_fit2 = np.rint(sum_fit2)
