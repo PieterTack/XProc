@@ -26,8 +26,8 @@ class Cnc():
     def __init__(self):
         self.name = ''
         self.z = 0 # atomic number
-        self.conc = 0 # [ppm]
-        self.err = 0 # [ppm]
+        self.conc = 0 # [ppm or ug/g]
+        self.err = 0 # [ppm or ug/g]
         self.density = 0 # [mg/cm^3]
         self.mass = 0 # [mg]
         self.thickness = 0 # [micron]
@@ -212,7 +212,7 @@ def Kmeans(rawdata, nclusters=5, el_id=None):
 # perform Kmeans clustering on a h5file dataset.
 #   a selection of elements can be given in el_id as their integer values corresponding to their array position in the dataset (first element id = 0)
 #   Before clustering data is whitened using scipy routines
-def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
+def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     # read in h5file data, with appropriate h5dir
     file = h5py.File(h5file, 'r+')
     data = np.array(file[h5dir])
@@ -231,19 +231,16 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
     
     # calculate cluster sumspectra
     #   first check if raw spectra shape is identical to clusters shape, as otherwise it's impossible to relate appropriate spectrum to pixel
-    if spectra.shape[0] == clusters.size:
-        sumspec = []
-        for i in range(nclusters):
-            sumspec.append(np.sum(np.squeeze(spectra[np.where(clusters.ravel() == i),:]), axis=0))
+    #TODO: in case of timetriggered scans cluster.ravel indices may not match the appropriate cluster point!
+    if nosumspec is not True:
+        if spectra.shape[0] == clusters.size:
+            sumspec = []
+            for i in range(nclusters):
+                sumspec.append(np.sum(np.squeeze(spectra[np.where(clusters.ravel() == i),:]), axis=0))
     
     # save the cluster image and sumspectra, as well as the elements that were clustered (el_id)
     try:
-        del file['kmeans/'+channel+'/nclusters']
-        del file['kmeans/'+channel+'/data_dir_clustered']
-        del file['kmeans/'+channel+'/ims']
-        del file['kmeans/'+channel+'/el_id']
-        for i in range(nclusters):
-            del file['kmeans/'+channel+'/sumspec_'+str(i)]
+        del file['kmeans/'+channel]
     except Exception:
         pass
     file.create_dataset('kmeans/'+channel+'/nclusters', data=nclusters)
@@ -253,9 +250,10 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None):
         file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in np.array(names)[el_id]])
     else:
         file.create_dataset('kmeans/'+channel+'/el_id', data='None')        
-    if spectra.shape[0] == clusters.size:
-        for i in range(nclusters):
-            file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.array(sumspec)[i,:], compression='gzip', compression_opts=4)    
+    if nosumspec is not True:
+        if spectra.shape[0] == clusters.size:
+            for i in range(nclusters):
+                file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.array(sumspec)[i,:], compression='gzip', compression_opts=4)    
     file.close()
     
 ##############################################################################
@@ -323,99 +321,130 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     reffiles = np.array(reffiles)
     if reffiles.size == 1:
         reff = h5py.File(str(reffiles), 'r')
-        ref_yld = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in ppm/ct/s
+        ref_yld = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
+        ref_yld_err = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/stddev']] # elemental yield errors in (ug/cm²)/(ct/s)
         ref_names = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
         ref_z = [Elements.getz(n.split(" ")[0]) for n in ref_names]
+        ref_yld_err = np.array(ref_yld_err) / np.array(ref_yld) #convert to relative error
+        conc_unit = reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield'].attrs["Unit"]
         if norm is not None:
             names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
             if norm in names:
                 sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
-                tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-                I0 = np.array(reff['raw/I0'])
-                I0norm = np.array(reff['norm/I0'])
-                # correct tm for appropriate normalisation factor
-                tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
-                # print(sum_fit[names.index(norm)], tm, (sum_fit[names.index(norm)]/tm))
-                ref_yld = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld]
+                sum_fit[np.where(sum_fit < 0)] = 0
+                # tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
+                # I0 = np.array(reff['raw/I0'])
+                # I0norm = np.array(reff['norm/I0'])
+                # # correct tm for appropriate normalisation factor
+                # if tmnorm is True:
+                #     tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
+                # else:
+                #     tm = I0norm/np.sum(I0) #this is acquisition time corresponding to sumspec intensity
+                # # print(sum_fit[names.index(norm)], tm, (sum_fit[names.index(norm)]/tm))
+                # ref_yld = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld]
+                ref_yld_err = np.sqrt(ref_yld_err*ref_yld_err + 1./sum_fit[names.index(norm)])
+                ref_yld = [yld*(sum_fit[names.index(norm)]) for yld in ref_yld]
             else:
                 print("ERROR: quant_with_ref: norm signal not present for reference material in "+str(reffiles))
                 return False
         reff.close()        
         ref_yld = np.array(ref_yld)
+        ref_yld_err = np.array(ref_yld_err)
         ref_names = np.array(ref_names)
         ref_z = np.array(ref_z)
     else:
         ref_yld = []
+        ref_yld_err = []
         ref_names = []
         ref_z = []
         for i in range(0, reffiles.size):
             reff = h5py.File(str(reffiles[i]), 'r')
-            ref_yld_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in ppm/ct/s
+            ref_yld_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
+            ref_yld_err_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/stddev']] # elemental yield errors in (ug/cm²)/(ct/s)
             ref_names_tmp = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
+            ref_yld_err_tmp = np.array(ref_yld_err_tmp) / np.array(ref_yld_tmp) #convert to relative error
+            conc_unit = reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield'].attrs["Unit"]
             if norm is not None:
                 names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
                 if norm in names:
                     sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
-                    tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-                    I0 = np.array(reff['raw/I0'])
-                    I0norm = np.array(reff['norm/I0'])
-                    # correct tm for appropriate normalisation factor
-                    tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
-                    ref_yld_tmp = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld_tmp]
+                    sum_fit[np.where(sum_fit < 0)] = 0
+                    # tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
+                    # I0 = np.array(reff['raw/I0'])
+                    # I0norm = np.array(reff['norm/I0'])
+                    # # correct tm for appropriate normalisation factor
+                    # if tmnorm is True:
+                    #     tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
+                    # else:
+                    #     tm = I0norm/np.sum(I0) #this is acquisition time corresponding to sumspec intensity
+                    # ref_yld_tmp = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld_tmp]
+                    ref_yld_err_tmp = np.sqrt(ref_yld_err_tmp*ref_yld_err_tmp + 1./sum_fit[names.index(norm)])
+                    ref_yld_tmp = [yld*(sum_fit[names.index(norm)]) for yld in ref_yld_tmp]
                 else:
                     print("ERROR: quant_with_ref: norm signal not present for reference material in "+reffiles[i])
                     return False
             for j in range(0, np.array(ref_yld_tmp).size):
                 ref_yld.append(ref_yld_tmp[j])
+                ref_yld_err.append(ref_yld_err_tmp[j])
                 ref_names.append(ref_names_tmp[j])
                 ref_z.append(Elements.getz(ref_names_tmp[j].split(" ")[0]))
             reff.close()
         # find unique line names, and determine average yield for each of them
-        ref_yld = np.array(ref_yld)
-        ref_names = np.array(ref_names)
-        ref_z = np.array(ref_z)
+        ref_yld = np.asarray(ref_yld)
+        ref_yld_err = np.asarray(ref_yld_err)
+        ref_names = np.asarray(ref_names)
+        ref_z = np.asarray(ref_z)
         unique_names, unique_id = np.unique(ref_names, return_index=True)
         unique_z = ref_z[unique_id]
         unique_yld = np.zeros(unique_z.size)
-        # unique_yld_err = np.zeros(unique_z.size)
+        unique_yld_err = np.zeros(unique_z.size)
         for j in range(0, unique_z.size):
             name_id = [i for i, x in enumerate(ref_names) if x == unique_names[j]]
             unique_yld[j] = np.average(ref_yld[name_id])
-            # unique_yld_err[j] = unique_yld[j]*np.sqrt(np.sum(np.array(ref_yld_err[name_id]/ref_yld[name_id])*np.array(ref_yld_err[name_id]/ref_yld[name_id])))
+            unique_yld_err[j] = np.sqrt(np.sum(np.asarray(ref_yld_err[name_id])*np.asarray(ref_yld_err[name_id])))
         # order the yields by atomic number
         ref_names = unique_names[np.argsort(unique_z)]
         ref_yld = unique_yld[np.argsort(unique_z)]
+        ref_yld_err = unique_yld_err[np.argsort(unique_z)]
         ref_z = unique_z[np.argsort(unique_z)]
     
     # read in h5file norm data
     #   normalise intensities to 1s acquisition time as this is the time for which we have el yields
     file = h5py.File(h5file, 'r')
-    h5_ims = np.array(file['norm/'+channel+'/ims'])
-    h5_names = np.array([n.decode('utf8') for n in file['norm/'+channel+'/names']])
-    h5_sum = np.array(file['norm/'+channel+'/sum/int'])
-    h5_normto = np.array(file['norm/I0'])
-    h5_rawI0 = np.average(np.array(file['raw/I0']))
-    h5_tm = np.average(np.array(file['raw/acquisition_time']))
+    h5_ims = np.asarray(file['norm/'+channel+'/ims'])
+    h5_names = np.asarray([n.decode('utf8') for n in file['norm/'+channel+'/names']])
+    h5_sum = np.asarray(file['norm/'+channel+'/sum/int'])
+    h5_normto = np.asarray(file['norm/I0'])
+    h5_rawI0 = np.asarray(file['raw/I0'])
+    h5_tm = np.asarray(file['raw/acquisition_time'])
     if absorb is not None:
-        h5_spectra = np.array(file['raw/'+channel+'/spectra'])
+        h5_spectra = np.asarray(file['raw/'+channel+'/spectra'])
         h5_cfg = file['fit/'+channel+'/cfg'][()].decode('utf8')
     if snake is True:
-        mot1 = np.array(file['mot1'])
-        mot2 = np.array(file['mot2'])
+        mot1 = np.asarray(file['mot1'])
+        mot2 = np.asarray(file['mot2'])
     file.close()
-    h5_ims = h5_ims / h5_normto * (h5_rawI0 / h5_tm)  #These are intensities for 1 s LT.
-    h5_sum = h5_sum / h5_normto * (np.sum(h5_rawI0)/np.sum(h5_tm))
+    h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
+    h5_sum_err = np.sqrt(h5_sum/ h5_normto * np.sum(h5_rawI0))/(h5_sum / h5_normto * np.sum(h5_rawI0))
+    h5_ims = h5_ims / (h5_normto / (h5_tm/h5_rawI0))  #These are intensities for 1 s LT.
+    h5_sum = h5_sum / (h5_normto / (np.sum(h5_tm)/np.sum(h5_rawI0)))
     # remove Compt and Rayl signal from h5, as these cannot be quantified
     names = h5_names
     ims = h5_ims
+    ims_err = h5_ims_err
     sumint = h5_sum
+    sumint_err = h5_sum_err
     if 'Compt' in list(names):
         ims = ims[np.arange(len(names))!=list(names).index('Compt'),:,:]
         sumint = sumint[np.arange(len(names))!=list(names).index('Compt')]
+        ims_err = ims_err[np.arange(len(names))!=list(names).index('Compt'),:,:]
+        sumint_err = sumint_err[np.arange(len(names))!=list(names).index('Compt')]
         names = names[np.arange(len(names))!=list(names).index('Compt')]
     if 'Rayl' in list(names):
         ims = ims[np.arange(len(names))!=list(names).index('Rayl'),:,:]
         sumint = sumint[np.arange(len(names))!=list(names).index('Rayl')]
+        ims_err = ims_err[np.arange(len(names))!=list(names).index('Rayl'),:,:]
+        sumint_err = sumint_err[np.arange(len(names))!=list(names).index('Rayl')]
         names = names[np.arange(len(names))!=list(names).index('Rayl')]
 
     # Normalise for specified roi if required
@@ -426,6 +455,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             for i in range(0, ims.shape[0]):
                 ims[i,:,:] = ims[i,:,:] / h5_ims[list(h5_names).index(norm),:,:] #TODO: we can get some division by zero error here...
                 sumint[i] = sumint[i] / h5_sum[list(h5_names).index(norm)]
+                ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:] + h5_ims_err[list(h5_names).index(norm),:,:]*h5_ims_err[list(h5_names).index(norm),:,:])
+                sumint_err[i,:,:] = np.sqrt(sumint_err[i,:,:]*sumint_err[i,:,:] + h5_sum_err[list(h5_names).index(norm),:,:]*h5_sum_err[list(h5_names).index(norm),:,:])
         else:
             print("ERROR: quant_with_ref: norm signal not present in h5file "+h5file)
             return False
@@ -498,15 +529,15 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             idx_ka1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KL3'))[-1])
             idx_kb1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KM3'))[-1])
             # remove 0 and negative value to avoid division errors. On those points set ka1/kb1 ratio == rate_ka1/rate_kb1
-            int_ka1 = np.sum(h5_spectra[:,:,int(np.round(idx_ka1-0.025/cfg[1])):int(np.round(idx_ka1+0.025/cfg[1]))], axis=2)
+            int_ka1 = np.sum(h5_spectra[:,:,int(np.round(idx_ka1-3)):int(np.round(idx_ka1+3))], axis=2)
             int_ka1[np.where(int_ka1 < 1.)] = 1.
-            int_kb1 = np.sum(h5_spectra[:,:,int(np.round(idx_kb1-0.025/cfg[1])):int(np.round(idx_kb1+0.025/cfg[1]))], axis=2)
+            int_kb1 = np.sum(h5_spectra[:,:,int(np.round(idx_kb1-3)):int(np.round(idx_kb1+3))], axis=2)
             int_kb1[np.where(int_kb1 <= 1)] = int_ka1[np.where(int_kb1 <= 1)]*(rate_kb1[j]/rate_ka1[j])
             ratio_ka1_kb1 = int_ka1 / int_kb1
             # also do not correct any point where ratio_ka1_kb1 > rate_ka1/rate_kb1
             #   these points would suggest Ka was less absorbed than Kb
             ratio_ka1_kb1[np.where(ratio_ka1_kb1 > rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j]
-            ratio_ka1_kb1[np.where(ratio_ka1_kb1 <= 0.55*rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j]
+            ratio_ka1_kb1[np.where(ratio_ka1_kb1 <= 0.55*rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j] #TODO: this value may be inappropriate...
             ratio_ka1_kb1[np.isnan(ratio_ka1_kb1)] = rate_ka1[j]/rate_kb1[j]
             # calculate corresponding layer thickness per point through matrix defined by cncfiles
             rhot[j,:,:] = (np.log(ratio_ka1_kb1[:,:]) - np.log(rate_ka1[j]/rate_kb1[j])) / (mu_kb1[j] - mu_ka1[j]) # rho*T for each pixel based on Ka1 and Kb1 emission ratio
@@ -570,6 +601,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             ref_id = list(ref_names).index(names[i])
             ims[i,:,:] = ims[i,:,:]*ref_yld[ref_id]
             sumint[i] = sumint[i]*ref_yld[ref_id]
+            ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+ref_yld_err[ref_id]*ref_yld_err[ref_id])
+            sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+ref_yld_err[ref_id]*ref_yld_err[ref_id])
         else: # element not in references list, so have to interpolate...
             if h5_lt[i] == 'K':
                 line_id = [j for j, x in enumerate(ref_lt) if x == 'K']
@@ -584,9 +617,13 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 if len(line_id) < 1:
                     ims[i,:,:] = -1
                     sumint[i] = -1
+                    ims_err[i,:,:] = 0
+                    sumint_err[i] = 0
                 else:
                     ims[i,:,:] = ims[i,:,:] * ref_yld[line_id]
                     sumint[i] = sumint[i] * ref_yld[line_id]
+                    ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+ref_yld_err[line_id]*ref_yld_err[line_id])
+                    sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+ref_yld_err[line_id]*ref_yld_err[line_id])
             else:
                 # find ref indices of elements neighbouring h5_z[i]
                 z_id = np.searchsorted(ref_z[line_id], h5_z[i]) #h5_z[i] is between index z_id-1 and z_id
@@ -594,32 +631,61 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 #   in that case, do extrapolation with next 2 or previous 2 lines, if that many present
                 if z_id == 0:
                     yld_interpol = (ref_yld[line_id][z_id+1]-ref_yld[line_id][z_id]) / (ref_z[line_id][z_id+1]-ref_z[line_id][z_id]) * (h5_z[i]-ref_z[line_id][z_id]) + ref_yld[line_id][z_id]
+                    yld_interpol_err = (ref_yld_err[line_id][z_id+1]-ref_yld_err[line_id][z_id]) / (ref_z[line_id][z_id+1]-ref_z[line_id][z_id]) * (h5_z[i]-ref_z[line_id][z_id]) + ref_yld_err[line_id][z_id]
                 elif z_id == len(ref_z[line_id]):
                     yld_interpol = (ref_yld[line_id][z_id-1]-ref_yld[line_id][z_id-2]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id-2]) * (h5_z[i]-ref_z[line_id][z_id-2]) + ref_yld[line_id][z_id-2]
+                    yld_interpol_err = (ref_yld_err[line_id][z_id-1]-ref_yld_err[line_id][z_id-2]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id-2]) * (h5_z[i]-ref_z[line_id][z_id-2]) + ref_yld_err[line_id][z_id-2]
                 else: #there is an element in ref_yld with index z_id-1 and z_id
                     yld_interpol = (ref_yld[line_id][z_id-1]-ref_yld[line_id][z_id]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id]) * (h5_z[i]-ref_z[line_id][z_id]) + ref_yld[line_id][z_id]
+                    yld_interpol_err = (ref_yld_err[line_id][z_id-1]-ref_yld_err[line_id][z_id]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id]) * (h5_z[i]-ref_z[line_id][z_id]) + ref_yld_err[line_id][z_id]
                 ims[i,:,:] = ims[i,:,:] * yld_interpol
                 sumint[i] = sumint[i] * yld_interpol
+                ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+yld_interpol_err*yld_interpol_err)
+                sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+yld_interpol_err*yld_interpol_err)
+
+    # convert relative errors to absolute errors
+    ims_err = ims_err*ims
+    sumint_err = sumint_err*sumint
             
     # save quant data
     file = h5py.File(h5file, 'r+')
     try:
-        del file['quant/'+channel+'/names']
-        del file['quant/'+channel+'/ims']
-        del file['quant/'+channel+'/refs']
-        del file['quant/'+channel+'/ratio_exp']
-        del file['quant/'+channel+'/ratio_th']
-        del file['quant/'+channel+'/rhot']
-        del file['quant/'+channel+'/sum/int']
+        del file['quant/'+channel]
+        # del file['quant/'+channel+'/names']
+        # del file['quant/'+channel+'/ims']
+        # del file['quant/'+channel+'/refs']
+        # del file['quant/'+channel+'/sum/int']
+        # del file['quant/'+channel+'/ims_stddev']
+        # del file['quant/'+channel+'/refs']
+        # del file['quant/'+channel+'/sum/int_stddev']        
+        # if absorb is None:
+        #     try:
+        #         del file['quant/'+channel+'/ratio_exp']
+        #         del file['quant/'+channel+'/ratio_th']
+        #         del file['quant/'+channel+'/rhot']
+        #     except Exception:
+        #         pass
     except Exception:
         pass
     file.create_dataset('quant/'+channel+'/names', data=[n.encode('utf8') for n in names])
-    file.create_dataset('quant/'+channel+'/ims', data=ims, compression='gzip', compression_opts=4)
-    file.create_dataset('quant/'+channel+'/sum/int', data=sumint, compression='gzip', compression_opts=4)
+    dset = file.create_dataset('quant/'+channel+'/ims', data=ims, compression='gzip', compression_opts=4)
+    dset.attrs["Unit"] = conc_unit
+    dset = file.create_dataset('quant/'+channel+'/sum/int', data=sumint, compression='gzip', compression_opts=4)
+    dset.attrs["Unit"] = conc_unit
+    dset = file.create_dataset('quant/'+channel+'/ims_stddev', data=ims_err, compression='gzip', compression_opts=4)
+    dset.attrs["Unit"] = conc_unit
+    dset = file.create_dataset('quant/'+channel+'/sum/int_stddev', data=sumint_err, compression='gzip', compression_opts=4)
+    dset.attrs["Unit"] = conc_unit
     if reffiles.size > 1:
         ' '.join(reffiles)
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
     if absorb is not None:
+        # try:
+        #     del file['quant/'+channel+'/ratio_exp']
+        #     del file['quant/'+channel+'/ratio_th']
+        #     del file['quant/'+channel+'/rhot']
+        # except Exception:
+        #     pass
         file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
         file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
         file.create_dataset('quant/'+channel+'/rhot', data=rhot, compression='gzip', compression_opts=4)
@@ -634,7 +700,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         data.data[:,:,-1] = rhot[:,:]
     names = np.concatenate((names,[r'$\rho T$']))
     data.names = names
-    cb_opts = plotims.Colorbar_opt(title='Conc.;[ppm]')
+    cb_opts = plotims.Colorbar_opt(title=r'Conc.;[$\mu$g/cm²]')
     nrows = int(np.ceil(len(names)/4)) # define nrows based on ncols
     colim_opts = plotims.Collated_image_opts(ncol=4, nrow=nrows, cb=True)
     plotims.plot_colim(data, names, 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=os.path.splitext(h5file)[0]+'_ch'+channel[-1]+'_quant.png')
@@ -646,7 +712,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
 #   includes 3sigma error bars, ...
 #   tm and ref are 1D str arrays denoting name and measurement time (including unit!) of corresponding data
 #TODO: something still wrong with element labels on top of scatter plots
-def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None):
+def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None, ytitle="Detection Limit (ppm)"):
+    tickfontsize = 22
+    titlefontsize = 26
+
     # check shape of dl. If 1D, then only single curve selected. 2D array means several DLs
     dl = np.array(dl, dtype='object')
     el_names = np.array(el_names, dtype='object')
@@ -728,27 +797,29 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             plt.bar(bar_x, dl, yerr=dl_err, label=str(ref)+'_'+str(tm), capsize=3)
             ax = plt.gca()
             ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-            ax.set_xticklabels(unique_el, fontsize=8)
+            ax.set_xticklabels(unique_el, fontsize=tickfontsize)
         else:
             plt.errorbar(el_z, dl, yerr=dl_err, label=str(ref)+'_'+str(tm), linestyle='', fmt=next(marker), capsize=3)
             ax = plt.gca()
             ax.xaxis.set_minor_locator(MultipleLocator(1))
-            plt.xlabel("Atomic Number [Z]", fontsize=14)
+            plt.xlabel("Atomic Number (Z)", fontsize=titlefontsize)
             secaxx = ax.secondary_xaxis('top')
             secaxx.set_xticks(new_z)
-            secaxx.set_xticklabels(new_labels, fontsize=8)
+            secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
             # fit curve through points and plot as dashed line in same color
             fit_par = np.polyfit(el_z, np.log(dl), 2)
             func = np.poly1d(fit_par)
             fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
             plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[0].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
             ax.get_legend().remove()
-        plt.ylabel("Detection Limit [ppm]", fontsize=14)
+        plt.ylabel(ytitle, fontsize=titlefontsize)
         plt.yscale('log')
+        plt.yticks(fontsize=tickfontsize)
+        plt.xticks(fontsize=tickfontsize)
         # add legend
         handles, labels = ax.get_legend_handles_labels() # get handles
         handles = [h[0] if isinstance(h, container.ErrorbarContainer) else h for h in handles] # remove the errorbars
-        plt.legend(handles, labels, loc='best')
+        plt.legend(handles, labels, loc='best', fontsize=titlefontsize)
         plt.show()
     elif len(dl.shape) == 2:
         # multiple dl ranges are provided. Loop over them, annotate differences between tm and ref comparissons
@@ -771,29 +842,31 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0:
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=8)
+                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
                     el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=label_prefix+str(tm[i]), linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0:
-                        plt.xlabel("Atomic Number [Z]", fontsize=14)
+                        plt.xlabel("Atomic Number (Z)", fontsize=titlefontsize)
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=8)
+                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     fit_par = np.polyfit(el_z, np.log(np.array(dl[i], dtype='float64')), 2)
                     func = np.poly1d(fit_par)
                     fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
                     plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
                     ax.get_legend().remove()
-            plt.ylabel("Detection Limit [ppm]", fontsize=14)
+            plt.ylabel(ytitle, fontsize=titlefontsize)
             plt.yscale('log')
+            plt.yticks(fontsize=tickfontsize)
+            plt.xticks(fontsize=tickfontsize)
             # add legend
             handles, labels = ax.get_legend_handles_labels() # get handles
             handles = [h[0] if isinstance(h, container.ErrorbarContainer) else h for h in handles] # remove the errorbars
-            plt.legend(handles, labels, loc='best')
+            plt.legend(handles, labels, loc='best', fontsize=titlefontsize)
             plt.show()
         elif ref is not None and ref.size > 1:
             if tm:
@@ -811,29 +884,31 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0:
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=8)
+                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
                     el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=str(ref[i])+label_suffix, linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0:
-                        plt.xlabel("Atomic Number [Z]", fontsize=14)
+                        plt.xlabel("Atomic Number (Z)", fontsize=titlefontsize)
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=8)
+                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     fit_par = np.polyfit(el_z, np.log(dl[i]), 2)
                     func = np.poly1d(fit_par)
                     fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
                     plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
                     ax.get_legend().remove()
-            plt.ylabel("Detection Limit [ppm]", fontsize=14)
+            plt.ylabel(ytitle, fontsize=titlefontsize)
             plt.yscale('log')
+            plt.yticks(fontsize=tickfontsize)
+            plt.xticks(fontsize=tickfontsize)
             # add legend
             handles, labels = ax.get_legend_handles_labels() # get handles
             handles = [h[0] if isinstance(h, container.ErrorbarContainer) else h for h in handles] # remove the errorbars
-            plt.legend(handles, labels, loc='best')
+            plt.legend(handles, labels, loc='best', fontsize=titlefontsize)
             plt.show()
         else:
             print("Error: ref and/or tm dimensions do not fit dl dimensions.")
@@ -857,29 +932,31 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0 and j == 0:
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=8)
+                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
                     el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names[i,j]])
                     plt.errorbar(el_z, dl[i,j], yerr=dl_err[i,j], label=str(ref[i])+'_'+str(tm[j]), linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0 and j == 0:
-                        plt.xlabel("Atomic Number [Z]", fontsize=14)
+                        plt.xlabel("Atomic Number (Z)", fontsize=titlefontsize)
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=8)
+                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     fit_par = np.polyfit(el_z, np.log(dl[i,j]), 2)
                     func = np.poly1d(fit_par)
                     fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
                     plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
                     ax.get_legend().remove()
-                plt.ylabel("Detection Limit [ppm]", fontsize=14)
+                plt.ylabel(ytitle, fontsize=titlefontsize)
                 plt.yscale('log')
+                plt.yticks(fontsize=tickfontsize)
+                plt.xticks(fontsize=tickfontsize)
         # add legend
         handles, labels = ax.get_legend_handles_labels() # get handles
         handles = [h[0] if isinstance(h, container.ErrorbarContainer) else h for h in handles] # remove the errorbars
-        plt.legend(handles, labels, loc='best')
+        plt.legend(handles, labels, loc='best', fontsize=titlefontsize)
         plt.show()  
     elif (len(dl.shape) == 1 and type(el_names[0]) is not type(np.str_())):
         # multiple dl ranges with different length, loop over both tm and ref
@@ -904,29 +981,31 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0 and j == 0:
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=8)
+                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
                     el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names_tmp])
                     plt.errorbar(el_z, dl_tmp, yerr=dl_err_tmp, label=str(ref[i])+'_'+str(tm_tmp[j]), linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0 and j == 0:
-                        plt.xlabel("Atomic Number [Z]", fontsize=14)
+                        plt.xlabel("Atomic Number (Z)", fontsize=titlefontsize)
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=8)
+                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     fit_par = np.polyfit(el_z, np.log(dl_tmp), 2)
                     func = np.poly1d(fit_par)
                     fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
                     plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
                     ax.get_legend().remove()
-                plt.ylabel("Detection Limit [ppm]", fontsize=14)
+                plt.ylabel(ytitle, fontsize=titlefontsize)
                 plt.yscale('log')
+                plt.yticks(fontsize=tickfontsize)
+                plt.xticks(fontsize=tickfontsize)
         # add legend
         handles, labels = ax.get_legend_handles_labels() # get handles
         handles = [h[0] if isinstance(h, container.ErrorbarContainer) else h for h in handles] # remove the errorbars
-        plt.legend(handles, labels, loc='best')
+        plt.legend(handles, labels, loc='best', fontsize=titlefontsize)
         plt.show()                
               
     else:
@@ -941,8 +1020,8 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
 # calculate detection limits.
 #   DL = 3*sqrt(Ib)/Ip * Conc
 #   calculates 1s and 1000s DL
-#   Also calculates elemental yields (Conc/Ip [ppm/ct/s]) 
-def calc_detlim(h5file, cncfile):
+#   Also calculates elemental yields (Conc/Ip [(ug/cm²)/(ct/s)]) 
+def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)"):
     # read in cnc file data
     cnc = read_cnc(cncfile)
     
@@ -967,7 +1046,11 @@ def calc_detlim(h5file, cncfile):
         return
     
     # correct tm for appropriate normalisation factor
-    tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is time for which DL would be calculated using values as reported
+    #   tm is time for which DL would be calculated using values as reported
+    if tmnorm is True:
+        tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm))
+    else:
+        tm = (I0norm/np.sum(I0)) * np.sum(tm)
     names0 = np.array([n.decode('utf8') for n in names0[:]])
     if chan02_flag:
         names2 = np.array([n.decode('utf8') for n in names2[:]])
@@ -980,8 +1063,8 @@ def calc_detlim(h5file, cncfile):
         el_name = names0[j].split(" ")[0]
         for i in range(0, cnc.z.size):
             if el_name == Elements.getsymbol(cnc.z[i]):
-                conc0[j] = cnc.conc[i]
-                conc0_err[j] = cnc.err[i]
+                conc0[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ug/cm²]
     if chan02_flag:
         conc2 = np.zeros(names2.size)
         conc2_err = np.zeros(names2.size)
@@ -989,8 +1072,8 @@ def calc_detlim(h5file, cncfile):
             el_name = names2[j].split(" ")[0]
             for i in range(0, cnc.z.size):
                 if el_name == Elements.getsymbol(cnc.z[i]):
-                    conc2[j] = cnc.conc[i]
-                    conc2_err[j] = cnc.err[i]
+                    conc2[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                    conc2_err[j] = (cnc.err[i]/cnc.conc[i])*conc2[j] # unit: [ug/cm²]
 
     
     # some values will be 0 (due to conc0 or conc2 being 0). Ignore these in further calculations.
@@ -1004,7 +1087,7 @@ def calc_detlim(h5file, cncfile):
     for i in range(0, conc0.size):
         if conc0[i] > 0:
             # detection limit corresponding to tm=1s
-            dl_1s_0.append(3.*np.sqrt(sum_bkg0[i])/sum_fit0[i] * conc0[i] *np.sqrt(tm))
+            dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/sum_fit0[i]/tm) * conc0[i])
             j = len(dl_1s_0)-1
             dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
             el_yield_0.append(conc0[i]/ (sum_fit0[i]/tm))
@@ -1027,7 +1110,7 @@ def calc_detlim(h5file, cncfile):
         for i in range(0, conc2.size):
             if conc2[i] > 0:
                 # detection limit corresponding to tm=1s
-                dl_1s_2.append(3.*np.sqrt(sum_bkg2[i])/sum_fit2[i] * conc2[i] *np.sqrt(tm))
+                dl_1s_2.append( (3.*np.sqrt(sum_bkg2[i])/sum_fit2[i]) * conc2[i] *np.sqrt(tm))
                 j = len(dl_1s_2)-1
                 dl_1000s_2.append(dl_1s_2[j] / np.sqrt(1000.))
                 el_yield_2.append(conc2[i]/ (sum_fit2[i]/tm))
@@ -1064,9 +1147,9 @@ def calc_detlim(h5file, cncfile):
     file.create_dataset('detlim/'+cncfile+'/channel00/1000s/data', data=dl_1000s_0, compression='gzip', compression_opts=4)
     file.create_dataset('detlim/'+cncfile+'/channel00/1000s/stddev', data=dl_1000s_err_0, compression='gzip', compression_opts=4)    
     dset = file.create_dataset('elyield/'+cncfile+'/channel00/yield', data=el_yield_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "ppm/ct/s"
+    dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
     dset = file.create_dataset('elyield/'+cncfile+'/channel00/stddev', data=el_yield_err_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "ppm/ct/s"
+    dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
     file.create_dataset('elyield/'+cncfile+'/channel00/names', data=[n.encode('utf8') for n in names0_mod[:]])
     if chan02_flag:
         try:
@@ -1086,9 +1169,9 @@ def calc_detlim(h5file, cncfile):
         file.create_dataset('detlim/'+cncfile+'/channel02/1000s/data', data=dl_1000s_2, compression='gzip', compression_opts=4)
         file.create_dataset('detlim/'+cncfile+'/channel02/1000s/stddev', data=dl_1000s_err_2, compression='gzip', compression_opts=4)  
         dset = file.create_dataset('elyield/'+cncfile+'/channel02/yield', data=el_yield_2, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "ppm/ct/s"
+        dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
         dset = file.create_dataset('elyield/'+cncfile+'/channel02/stddev', data=el_yield_err_2, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "ppm/ct/s"
+        dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
         file.create_dataset('elyield/'+cncfile+'/channel02/names', data=[n.encode('utf8') for n in names2_mod[:]])
     file.close()
     
@@ -1097,17 +1180,17 @@ def calc_detlim(h5file, cncfile):
     plot_detlim([dl_1s_0, dl_1000s_0],
                 [names0_mod, names0_mod],
                 tm=['1s','1000s'], ref=['DL'], 
-                dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch0_DL.png')
+                dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch0_DL.png', ytitle=plotytitle)
     if chan02_flag:
         plot_detlim([dl_1s_2, dl_1000s_2],
                     [names2_mod, names2_mod],
                     tm=['1s','1000s'], ref=['DL'], 
-                    dl_err=[dl_1s_err_2, dl_1000s_err_2], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch2_DL.png')
+                    dl_err=[dl_1s_err_2, dl_1000s_err_2], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch2_DL.png', ytitle=plotytitle)
 
 ##############################################################################
 # make publish-worthy overview images of all fitted elements in h5file (including scale bars, colorbar, ...)
 # plot norm if present, otherwise plot fit/.../ims
-def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False):
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None):
     filename = os.path.splitext(h5file)[0]
 
     imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
@@ -1139,10 +1222,11 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
             imsdata2.data = np.flip(imsdata2.data, axis=0)
 
     sb_opts = plotims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
-    if log:
-        cb_opts = plotims.Colorbar_opt(title='log. Int.;[cts]')
-    else:
-        cb_opts = plotims.Colorbar_opt(title='Int.;[cts]')
+    if cb_opts is None:
+        if log:
+            cb_opts = plotims.Colorbar_opt(title='log. Int.;[cts]')
+        else:
+            cb_opts = plotims.Colorbar_opt(title='Int.;[cts]')
     nrows = int(np.ceil(len(imsdata0.names)/ncols)) # define nrows based on ncols
     colim_opts = plotims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
     
@@ -1158,7 +1242,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
 ##############################################################################
 # normalise IMS images to detector deadtime and I0 values.
 #   When I0norm is supplied, a (long) int should be provided to which I0 value one should normalise. Otherwise the max of the I0 map is used.
-def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False):
+#   tmnorm: sometimes the I0 values are not representative of acquisition time, then additional normalisation for acquisition time can be performed by setting tmnorm to True
+def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False):
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
     file = h5py.File(h5file, 'r+')
@@ -1258,23 +1343,29 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
 
     # correct I0
     for i in range(0, ims0.shape[0]):
-        ims0[i,:,:] = ims0[i,:,:]/(I0/tm) * normto
-    sum_fit0 = sum_fit0/(np.sum(I0)/np.sum(tm)) * normto
-    sum_bkg0 = sum_bkg0/(np.sum(I0)/np.sum(tm)) * normto
-    #round to integer values
-    ims0 = np.rint(ims0)
-    sum_fit0 = np.rint(sum_fit0)
-    sum_bkg0 = np.rint(sum_bkg0)
+        if tmnorm is True:
+            ims0[i,:,:] = ims0[i,:,:]/(I0/tm) * normto
+        else:
+            ims0[i,:,:] = ims0[i,:,:]/(I0) * normto
+    if tmnorm is True:
+        sum_fit0 = sum_fit0/(np.sum(I0)/np.sum(tm)) * normto
+        sum_bkg0 = sum_bkg0/(np.sum(I0)/np.sum(tm)) * normto
+    else:
+        sum_fit0 = sum_fit0/(np.sum(I0)) * normto
+        sum_bkg0 = sum_bkg0/(np.sum(I0)) * normto
     ims0[np.isnan(ims0)] = 0.
     if chan02_flag:
         for i in range(0, ims2.shape[0]):
-            ims2[i,:,:] = ims2[i,:,:]/(I0/tm) * normto
-        sum_fit2 = sum_fit2/(np.sum(I0)/np.sum(tm)) * normto
-        sum_bkg2 = sum_bkg2/(np.sum(I0)/np.sum(tm)) * normto
-        #round to integer values
-        ims2 = np.rint(ims2)
-        sum_fit2 = np.rint(sum_fit2)
-        sum_bkg2 = np.rint(sum_bkg2)
+            if tmnorm is True:
+                ims2[i,:,:] = ims2[i,:,:]/(I0/tm) * normto
+            else:
+                ims2[i,:,:] = ims2[i,:,:]/(I0) * normto
+        if tmnorm is True:
+            sum_fit2 = sum_fit2/(np.sum(I0)/np.sum(tm)) * normto
+            sum_bkg2 = sum_bkg2/(np.sum(I0)/np.sum(tm)) * normto
+        else:
+            sum_fit2 = sum_fit2/(np.sum(I0)) * normto
+            sum_bkg2 = sum_bkg2/(np.sum(I0)) * normto
         ims2[np.isnan(ims2)] = 0.
         
 
@@ -1679,6 +1770,12 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         ims2 = peak_int2[cutid2:,:,:]
 
     # correct for deadtime  
+    # check if icr/ocr values are appropriate!
+    if np.average(ocr0/icr0) > 1.:
+        print("ERROR: ocr0/icr0 is larger than 1!")
+    if chan02_flag:
+        if np.average(ocr2/icr2) > 1.:
+            print("ERROR: ocr2/icr2 is larger than 1!")
     #TODO: something goes wrong with the dimensions in case of 1D scan.
     for i in range(names0.size):
         ims0[i,:,:] = ims0[i,:,:] * icr0/ocr0
@@ -2341,7 +2438,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
 # convert id15a bliss h5 format to our h5 structure file
 #   syntax: h5id15convert('exp_file.h5', '3.1', (160,1), mot1_name='hry', mot2_name='hrz')
 #   when scanid is an array or list of multiple elements, the images will be stitched together to 1 file
-def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i1id='fpico3', icrid='event_count_rate', ocrid='events', atol=None, sort=True):
+def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i1id='fpico3', icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
     scan_dim = np.array(scan_dim)
     scanid = np.array(scanid)
     if scan_dim.size == 1:
@@ -2691,13 +2788,15 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
             spectra0[:,i,:] = spectra0[sort_id,i,:]
             icr0[:,i] = icr0[sort_id,i]
             ocr0[:,i] = ocr0[sort_id,i]
-            spectra2[:,i,:] = spectra2[sort_id,i,:]
-            icr2[:,i] = icr2[sort_id,i]
-            ocr2[:,i] = ocr2[sort_id,i]
+            if ch2id is not None:
+                spectra2[:,i,:] = spectra2[sort_id,i,:]
+                icr2[:,i] = icr2[sort_id,i]
+                ocr2[:,i] = ocr2[sort_id,i]
             mot1[:,i] = mot1[sort_id,i]
             mot2[:,i] = mot2[sort_id,i]
             i0[:,i] = i0[sort_id,i]
-            i1[:,i] = i1[sort_id,i]
+            if i1id is not None:
+                i1[:,i] = i1[sort_id,i]
             tm[:,i] = tm[sort_id,i]
 
     # calculate maxspec and sumspec

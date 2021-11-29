@@ -11,7 +11,7 @@ import numpy as np
 import plotims
 
 
-def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='channel00', ncol=8, selfabs=None, snake=False, interp_tr=False):
+def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', datadir='norm', channel='channel00', ncol=8, selfabs=None, snake=False, interp_tr=False):
     if rot_mot is None:
         rotid = 'mot1'
         transid = 'mot2'
@@ -24,19 +24,30 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
 
     
     h5f = h5py.File(h5file, 'r+')
-    ims = np.array(h5f['norm/'+channel+'/ims'])
+    ims = np.array(h5f[datadir+'/'+channel+'/ims'])
+    try:
+        ims_err = np.array(h5f[datadir+'/'+channel+'/ims_stddev'])
+        errorflag = True
+    except KeyError:
+        ims_err = None
+        errorflag = False
     # ims = ims[:,25:,:] #only do this if omitting certain angles from the scan...
-    names = ["-".join(name.decode('utf8').split(" ")) for name in h5f['norm/'+channel+'/names']]
+    names = ["-".join(name.decode('utf8').split(" ")) for name in h5f[datadir+'/'+channel+'/names']]
     mot1 = np.array(h5f[transid])
     mot2 = np.array(h5f[rotid])
     if signal == 'i1' or signal == 'I1':
         i1 = np.array(h5f['raw/I1'])
         i0 = np.array(h5f['raw/I0'])
-    
-    proj = np.zeros((ims.shape[1],ims.shape[0],ims.shape[2]))
+
     # remove negative and NaN values, remove stripe artefacts, ...
-    for k in range(0, ims.shape[0]):
-        proj[:,k,:] = tomopy.remove_neg(tomopy.remove_nan(ims[k, :, :], 0)) #also replace all nan values and negative values with 0
+    proj = tomopy.remove_neg(tomopy.remove_nan(np.moveaxis(ims, 0, 1)))
+    if errorflag:
+        proj_err = tomopy.remove_neg(tomopy.remove_nan(np.moveaxis(ims_err, 0, 1)))
+    # proj = np.zeros((ims.shape[1],ims.shape[0],ims.shape[2]))
+    # if errorflag:
+    #     proj_err = np.zeros((ims_err.shape[1],ims_err.shape[0],ims_err.shape[2]))
+    # for k in range(0, ims.shape[0]):
+    #     proj[:,k,:] = tomopy.remove_neg(tomopy.remove_nan(ims[k, :, :], 0)) #also replace all nan values and negative values with 0
     
     # interpolate for translation motor positions (e.g. in case of rotation over virtual motor axis)
     # TODO: could be if this option is true that snake mesh correction does not work anymore...
@@ -64,11 +75,19 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
             values = i0.ravel()
             i0 = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
         proj_tmp = np.zeros((mot1_tmp.shape[1],proj.shape[1],mot1_tmp.shape[0]))
+        if errorflag:
+            proj_tmp_err = np.zeros((mot1_tmp.shape[1],proj_err.shape[1],mot1_tmp.shape[0]))
         for k in range(0, proj.shape[1]):
             values = proj[:,k,:].ravel()
             proj_tmp[:,k,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
             proj_tmp[:,k,:] = tomopy.remove_neg(tomopy.remove_nan(proj_tmp[:,k,:], 0)) #also replace all nan values and negative values with 0
+            if errorflag:
+                values = proj_err[:,k,:].ravel()
+                proj_tmp_err[:,k,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                proj_tmp_err[:,k,:] = tomopy.remove_neg(tomopy.remove_nan(proj_tmp_err[:,k,:], 0)) #also replace all nan values and negative values with 0
         proj = proj_tmp
+        if errorflag:
+            proj_err = proj_tmp_err
         mot1 = mot1_tmp
         mot2 = mot2_tmp
 
@@ -78,6 +97,7 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     if selfabs is not None:
         #selfabs should contain the directory to the trained neural network (Gao Bo, 2021 10.1109/tns.2021.3079629)
         proj = Gao_tomo_selfabscorr(selfabs, proj)    
+        #TODO: how do we propagate the error through this method?
 
     # find centre of rotation and perform reconstruction        
     if rot_centre is None:
@@ -134,6 +154,8 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     #     'extra_options': extra_options
     # }        
     recon = tomopy.recon(proj, angle, center=rot_center, algorithm='gridrec', sinogram_order=False, filter_name='shepp') #tomopy.astra, options=options)#
+    if errorflag:
+        recon_err = tomopy.recon(proj_err, angle, center=rot_center, algorithm='gridrec', sinogram_order=False, filter_name='shepp') #tomopy.astra, options=options)#
     # Algorithms: 'gridrec', 'mlem'
     # filter_name: 'shepp' (default), 'parzen'
     
@@ -142,7 +164,14 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
   
     # flip over vertical axis to match images better to measurement geometry
     recon = np.flip(recon, 1)    
-  
+    if errorflag:
+        recon_err = np.flip(recon_err, 1)    
+
+    # remove infinite values
+    recon[np.isinf(recon)] = 0.    
+    if errorflag:
+        recon_err[np.isinf(recon_err)] = 0.
+
     # # prepare data for imaging in plotims
     # data = plotims.ims()
     # data.data = np.zeros((recon.shape[1], recon.shape[2], recon.shape[0]))
@@ -153,14 +182,19 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', channel='
     
     # save tomo data in h5 file
     try:
-        del h5f['tomo/'+channel+'/rotation_center']
-        del h5f['tomo/'+channel+'/ims']
-        del h5f['tomo/'+channel+'/names']
+        del h5f['tomo/'+channel]
+        # del h5f['tomo/'+channel+'/rotation_center']
+        # del h5f['tomo/'+channel+'/ims']
+        # del h5f['tomo/'+channel+'/names']
+        # if errorflag:
+        #     del h5f['tomo/'+channel+'/ims_stddev']
     except Exception:
         pass
     h5f.create_dataset('tomo/'+channel+'/rotation_center', data=rot_center, compression='gzip', compression_opts=4)
     h5f.create_dataset('tomo/'+channel+'/ims', data=recon, compression='gzip', compression_opts=4)
-    h5f.create_dataset('tomo/'+channel+'/names', data=h5f['norm/'+channel+'/names'])
+    if errorflag:
+        h5f.create_dataset('tomo/'+channel+'/ims_stddev', data=recon_err, compression='gzip', compression_opts=4)
+    h5f.create_dataset('tomo/'+channel+'/names', data=h5f[datadir+'/'+channel+'/names'])
     
     # check if I1 tag is present, to also reconstruct the transmission tomo image
     try:
@@ -207,13 +241,15 @@ def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False):
         mot1 = np.array(h5f[mot1id])
         mot2 = np.array(h5f[mot2id])
         # norm I1
-        i1 = (i1/i0)
+        i1 = (i1/i0)   #TODO: should use np.log here....
         y, x = np.histogram(i1, bins=1000)
         normfact = x[np.where(y == np.max(y))][0]
         i1[i1>normfact] = normfact 
         i1 = i1/normfact
 
-        i1 = tomopy.remove_neg(tomopy.remove_nan(i1, 0))
+
+        # i1 = tomopy.remove_neg(tomopy.remove_nan(i1, 0))
+        i1 = tomopy.remove_nan(i1, 0)
 
         # Interpolating image for motor position
         if snake is True:
