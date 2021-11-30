@@ -232,7 +232,7 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     # calculate cluster sumspectra
     #   first check if raw spectra shape is identical to clusters shape, as otherwise it's impossible to relate appropriate spectrum to pixel
     #TODO: in case of timetriggered scans cluster.ravel indices may not match the appropriate cluster point!
-    if nosumspec is not True:
+    if nosumspec is False:
         if spectra.shape[0] == clusters.size:
             sumspec = []
             for i in range(nclusters):
@@ -250,7 +250,7 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
         file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in np.array(names)[el_id]])
     else:
         file.create_dataset('kmeans/'+channel+'/el_id', data='None')        
-    if nosumspec is not True:
+    if nosumspec is False:
         if spectra.shape[0] == clusters.size:
             for i in range(nclusters):
                 file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.array(sumspec)[i,:], compression='gzip', compression_opts=4)    
@@ -414,6 +414,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     h5_ims = np.asarray(file['norm/'+channel+'/ims'])
     h5_names = np.asarray([n.decode('utf8') for n in file['norm/'+channel+'/names']])
     h5_sum = np.asarray(file['norm/'+channel+'/sum/int'])
+    h5_sum_bkg = np.asarray(file['norm/'+channel+'/sum/bkg'])
     h5_normto = np.asarray(file['norm/I0'])
     h5_rawI0 = np.asarray(file['raw/I0'])
     h5_tm = np.asarray(file['raw/acquisition_time'])
@@ -425,7 +426,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot2 = np.asarray(file['mot2'])
     file.close()
     h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
-    h5_sum_err = np.sqrt(h5_sum/ h5_normto * np.average(h5_rawI0))/(h5_sum / h5_normto * np.average(h5_rawI0))
+    h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ h5_normto * np.average(h5_rawI0))/(h5_sum / h5_normto * np.average(h5_rawI0))
     h5_ims = h5_ims / (h5_normto * (h5_tm/h5_rawI0))  #These are intensities for 1 s LT.
     h5_sum = h5_sum / (h5_normto * (np.average(h5_tm)/np.average(h5_rawI0)))
     # remove Compt and Rayl signal from h5, as these cannot be quantified
@@ -1092,12 +1093,12 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
             dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
             el_yield_0.append(conc0[i]/ (sum_fit0[i]/tm))
             # calculate DL errors (based on standard error propagation)
-            dl_1s_err_0.append(np.sqrt((np.sqrt(sum_fit0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i])/sum_fit0[i]) +
+            dl_1s_err_0.append(np.sqrt((np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i]) +
                                      (np.sqrt(sum_bkg0[i])/sum_bkg0[i])*(np.sqrt(sum_bkg0[i])/sum_bkg0[i]) +
                                      (conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i])) * dl_1s_0[j])
             dl_1000s_err_0.append(dl_1s_err_0[j] / dl_1s_0[j] * dl_1000s_0[j])
             el_yield_err_0.append(np.sqrt((conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i]) + 
-                                          (np.sqrt(sum_fit0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i])/sum_fit0[i]))*el_yield_0[j])
+                                          (np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i]))*el_yield_0[j])
             names0_mod.append(names0[i])
     if chan02_flag:
         names2_mod = []
@@ -1115,12 +1116,12 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
                 dl_1000s_2.append(dl_1s_2[j] / np.sqrt(1000.))
                 el_yield_2.append(conc2[i]/ (sum_fit2[i]/tm))
                 # calculate DL errors (based on standard error propagation)
-                dl_1s_err_2.append(np.sqrt((np.sqrt(sum_fit2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i])/sum_fit2[i]) +
+                dl_1s_err_2.append(np.sqrt((np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i]) +
                                          (np.sqrt(sum_bkg2[i])/sum_bkg2[i])*(np.sqrt(sum_bkg2[i])/sum_bkg2[i]) +
                                          (conc2_err[i]/conc2[i])*(conc2_err[i]/conc2[i])) * dl_1s_2[j])
                 dl_1000s_err_2.append(dl_1s_err_2[j] / dl_1s_2[j] * dl_1000s_2[j])
                 el_yield_err_2.append(np.sqrt((conc2_err[i]/conc2[i])*(conc2_err[i]/conc2[i]) + 
-                                              (np.sqrt(sum_fit2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i])/sum_fit2[i]))*el_yield_2[j])
+                                              (np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i]))*el_yield_2[j])
                 names2_mod.append(names2[i])
     
     # save DL data to file
