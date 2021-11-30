@@ -425,9 +425,9 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot2 = np.asarray(file['mot2'])
     file.close()
     h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
-    h5_sum_err = np.sqrt(h5_sum/ h5_normto * np.sum(h5_rawI0))/(h5_sum / h5_normto * np.sum(h5_rawI0))
-    h5_ims = h5_ims / (h5_normto / (h5_tm/h5_rawI0))  #These are intensities for 1 s LT.
-    h5_sum = h5_sum / (h5_normto / (np.sum(h5_tm)/np.sum(h5_rawI0)))
+    h5_sum_err = np.sqrt(h5_sum/ h5_normto * np.average(h5_rawI0))/(h5_sum / h5_normto * np.average(h5_rawI0))
+    h5_ims = h5_ims / (h5_normto * (h5_tm/h5_rawI0))  #These are intensities for 1 s LT.
+    h5_sum = h5_sum / (h5_normto * (np.average(h5_tm)/np.average(h5_rawI0)))
     # remove Compt and Rayl signal from h5, as these cannot be quantified
     names = h5_names
     ims = h5_ims
@@ -1048,9 +1048,9 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     # correct tm for appropriate normalisation factor
     #   tm is time for which DL would be calculated using values as reported
     if tmnorm is True:
-        tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm))
+        tm = np.average(tm) * I0norm/(np.average(I0)/np.average(tm))
     else:
-        tm = (I0norm/np.sum(I0)) * np.sum(tm)
+        tm = (I0norm/np.average(I0)) * np.average(tm)
     names0 = np.array([n.decode('utf8') for n in names0[:]])
     if chan02_flag:
         names2 = np.array([n.decode('utf8') for n in names2[:]])
@@ -1348,11 +1348,11 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         else:
             ims0[i,:,:] = ims0[i,:,:]/(I0) * normto
     if tmnorm is True:
-        sum_fit0 = sum_fit0/(np.sum(I0)/np.sum(tm)) * normto
-        sum_bkg0 = sum_bkg0/(np.sum(I0)/np.sum(tm)) * normto
+        sum_fit0 = sum_fit0/(np.average(I0)/np.average(tm)) * normto
+        sum_bkg0 = sum_bkg0/(np.average(I0)/np.average(tm)) * normto
     else:
-        sum_fit0 = sum_fit0/(np.sum(I0)) * normto
-        sum_bkg0 = sum_bkg0/(np.sum(I0)) * normto
+        sum_fit0 = sum_fit0/(np.average(I0)) * normto
+        sum_bkg0 = sum_bkg0/(np.average(I0)) * normto
     ims0[np.isnan(ims0)] = 0.
     if chan02_flag:
         for i in range(0, ims2.shape[0]):
@@ -1361,11 +1361,11 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             else:
                 ims2[i,:,:] = ims2[i,:,:]/(I0) * normto
         if tmnorm is True:
-            sum_fit2 = sum_fit2/(np.sum(I0)/np.sum(tm)) * normto
-            sum_bkg2 = sum_bkg2/(np.sum(I0)/np.sum(tm)) * normto
+            sum_fit2 = sum_fit2/(np.average(I0)/np.average(tm)) * normto
+            sum_bkg2 = sum_bkg2/(np.average(I0)/np.average(tm)) * normto
         else:
-            sum_fit2 = sum_fit2/(np.sum(I0)) * normto
-            sum_bkg2 = sum_bkg2/(np.sum(I0)) * normto
+            sum_fit2 = sum_fit2/(np.average(I0)) * normto
+            sum_bkg2 = sum_bkg2/(np.average(I0)) * normto
         ims2[np.isnan(ims2)] = 0.
         
 
