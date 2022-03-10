@@ -1778,9 +1778,15 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         if np.average(ocr2/icr2) > 1.:
             print("ERROR: ocr2/icr2 is larger than 1!")
     #TODO: something goes wrong with the dimensions in case of 1D scan.
+    if icr0.shape[0] > ims0.shape[1]:
+        icr0 = icr0[0:ims0.shape[1],:]
+        ocr0 = ocr0[0:ims0.shape[1],:]
     for i in range(names0.size):
         ims0[i,:,:] = ims0[i,:,:] * icr0/ocr0
     if chan02_flag:
+        if icr2.shape[0] > ims2.shape[1]:
+            icr2 = icr2[0:ims0.shape[1],:]
+            ocr2 = ocr2[0:ims0.shape[1],:]
         for i in range(names2.size):        
             ims2[i,:,:] = ims2[i,:,:] * icr2/ocr2
     sum_fit0 = np.array(sum_fit0)*np.sum(icr0)/np.sum(ocr0)
