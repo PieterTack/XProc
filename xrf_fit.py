@@ -1280,7 +1280,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     if len(ims0.shape) == 2:
         cmd = str(np.array(file['cmd'])).split(' ')
         ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
-        print(np.squeeze(I0).shape)
         I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
         tm = tm.reshape((np.squeeze(tm).shape[0], 1))
         mot1 = mot1.reshape((np.squeeze(mot1).shape[0], 1))
