@@ -1119,7 +1119,7 @@ class Config_GUI(QWidget):
         # go over ConfigDict and adjust GUI accordingly
         if self.ConfigDict['fit']['scatterflag'] == 1:
             self.fit_scatter.setChecked(True)
-            self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy'][0]))
+            self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
             if len(self.ConfigDict['attenuators']['Matrix']) == 8:
                 self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][7]))
             else:
@@ -1128,8 +1128,8 @@ class Config_GUI(QWidget):
                 self.ConfigDict['attenuators']['Matrix'].append(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5])
         else:
             self.fit_scatter.setChecked(False)
-            if self.ConfigDict['fit']['energy'][0] is not None:
-                self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy'][0]))
+            if self.ConfigDict['fit']['energy'][:] is not None:
+                self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
             else:
                 self.raylE.setText("{:.3f}".format(20.))
                 self.ConfigDict['fit']['energy'] = [20.]
@@ -1165,7 +1165,6 @@ class Config_GUI(QWidget):
         self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.dettype.setCurrentText(self.ConfigDict['detector']['detele']) #Si or Ge; 'detene' tab appears not used directly...
-        self.fitres = None
         if self.ConfigDict['peaks'] != {}:
             # order the library in order of increasing atomic number...
             sortedpeaks = {}
@@ -1177,6 +1176,7 @@ class Config_GUI(QWidget):
             self.ConfigDict['peaks'] = sortedpeaks
         # self.update_plot()
         self.update_plot(update=False) #redraw the original plot, with KLM lines
+        self.fitres = None
         self.adjust_fittree(self.fittree)
 
     def do_refit(self):                    

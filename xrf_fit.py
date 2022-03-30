@@ -8,7 +8,6 @@ from PyMca5.PyMca import FastXRFLinearFit
 from PyMca5.PyMcaPhysics.xrf import ClassMcaTheory
 from PyMca5.PyMcaPhysics.xrf import Elements
 from PyMca5.PyMcaIO import ConfigDict
-import plotims
 import numpy as np
 from scipy.interpolate import griddata
 import h5py
@@ -152,7 +151,7 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
     
     # if kmeans option selected, follow up with Kmeans clustering on the PCA clusters
     if kmeans is True:
-        clusters, dist = Kmeans(scores, nclusters=nclusters, el_id=None)
+        clusters, centroids = Kmeans(scores, nclusters=nclusters, el_id=None)
         
         # calculate cluster sumspectra
         #   first check if raw spectra shape is identical to clusters shape, as otherwise it's impossible to relate appropriate spectrum to pixel
@@ -181,8 +180,8 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
     file.close()    
 
 ##############################################################################
-def Kmeans(rawdata, nclusters=5, el_id=None):
-    from scipy.cluster.vq import kmeans, whiten, vq
+def Kmeans(rawdata, nclusters=5, el_id=None, whiten=True):
+    from scipy.cluster.vq import kmeans2, whiten
 
     if rawdata.ndim == 3:
         # assumes first dim is the elements
@@ -196,18 +195,16 @@ def Kmeans(rawdata, nclusters=5, el_id=None):
 
     # first whiten data (normalises it)
     data[np.isnan(data)] = 0.
-    data = whiten(data) #data should not contain any NaN or infinite values
+    if whiten is True:
+        data = whiten(data) #data should not contain any NaN or infinite values
 
     # then do kmeans
-    centroids, distortion = kmeans(data, nclusters, iter=100)
+    centroids, clusters = kmeans2(data, nclusters, iter=100, minit='points')
     
-    # now we know the centroids (or 'code book') we can find back which observation pairs to which centroid
-    clusters, distortion = vq(data, centroids)
-
     if rawdata.ndim == 3:
         clusters = clusters.reshape(rawdata.shape[1], rawdata.shape[2])
     
-    return clusters, distortion
+    return clusters, centroids
 ##############################################################################
 # perform Kmeans clustering on a h5file dataset.
 #   a selection of elements can be given in el_id as their integer values corresponding to their array position in the dataset (first element id = 0)
@@ -227,7 +224,7 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     spectra = spectra.reshape((spectra.shape[0]*spectra.shape[1], spectra.shape[2]))
     
     # perform Kmeans clustering
-    clusters, dist = Kmeans(data, nclusters=nclusters, el_id=el_id)
+    clusters, centroids = Kmeans(data, nclusters=nclusters, el_id=el_id)
     
     # calculate cluster sumspectra
     #   first check if raw spectra shape is identical to clusters shape, as otherwise it's impossible to relate appropriate spectrum to pixel
@@ -253,7 +250,8 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     if nosumspec is False:
         if spectra.shape[0] == clusters.size:
             for i in range(nclusters):
-                file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.array(sumspec)[i,:], compression='gzip', compression_opts=4)    
+                dset = file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.array(sumspec)[i,:], compression='gzip', compression_opts=4)    
+                dset.attrs["NPixels"] = np.asarray(np.where(clusters.ravel() == i)).size
     file.close()
     
 ##############################################################################
@@ -316,6 +314,9 @@ def div_by_cnc(h5file, cncfile, channel=None):
 #       the element will be used to find Ka and Kb line intensities and correct for their respective ratio
 #       using concentration values from the provided cnc files.
 def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False):
+    import plotims
+
+
     # first let's go over the reffiles and calculate element yields
     #   distinguish between K and L lines while doing this
     reffiles = np.array(reffiles)
@@ -348,10 +349,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 print("ERROR: quant_with_ref: norm signal not present for reference material in "+str(reffiles))
                 return False
         reff.close()        
-        ref_yld = np.array(ref_yld)
-        ref_yld_err = np.array(ref_yld_err)
-        ref_names = np.array(ref_names)
-        ref_z = np.array(ref_z)
+        ref_yld = np.asarray(ref_yld)
+        ref_yld_err = np.asarray(ref_yld_err)
+        ref_names = np.asarray(ref_names)
+        ref_z = np.asarray(ref_z)
     else:
         ref_yld = []
         ref_yld_err = []
@@ -367,19 +368,16 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             if norm is not None:
                 names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
                 if norm in names:
-                    sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
-                    sum_fit[np.where(sum_fit < 0)] = 0
-                    # tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-                    # I0 = np.array(reff['raw/I0'])
-                    # I0norm = np.array(reff['norm/I0'])
-                    # # correct tm for appropriate normalisation factor
-                    # if tmnorm is True:
-                    #     tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
-                    # else:
-                    #     tm = I0norm/np.sum(I0) #this is acquisition time corresponding to sumspec intensity
-                    # ref_yld_tmp = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld_tmp]
-                    ref_yld_err_tmp = np.sqrt(ref_yld_err_tmp*ref_yld_err_tmp + 1./sum_fit[names.index(norm)])
-                    ref_yld_tmp = [yld*(sum_fit[names.index(norm)]) for yld in ref_yld_tmp]
+                    ref_sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
+                    ref_sum_bkg = np.array(reff['norm/'+channel+'/sum/bkg'])
+                    ref_rawI0 = np.sum(np.array(reff['raw/I0']))
+                    ref_sum_fit[np.where(ref_sum_fit < 0)] = 0
+                    ref_sum_bkg[np.where(ref_sum_bkg < 0)] = 0
+                    ref_normto = np.array(reff['norm/I0'])
+                    ref_sum_fit = ref_sum_fit / ref_normto
+                    ref_sum_bkg = ref_sum_bkg / ref_normto
+                    ref_yld_err_tmp = np.sqrt(ref_yld_err_tmp*ref_yld_err_tmp + np.sqrt((ref_sum_fit[names.index(norm)]+2.*ref_sum_bkg[names.index(norm)])*ref_rawI0)/(ref_sum_fit[names.index(norm)]*ref_rawI0))
+                    ref_yld_tmp = [yld*(ref_sum_fit[names.index(norm)]) for yld in ref_yld_tmp]
                 else:
                     print("ERROR: quant_with_ref: norm signal not present for reference material in "+reffiles[i])
                     return False
@@ -426,9 +424,9 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot2 = np.asarray(file['mot2'])
     file.close()
     h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
-    h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ h5_normto * np.average(h5_rawI0))/(h5_sum / h5_normto * np.average(h5_rawI0))
-    h5_ims = h5_ims / (h5_normto * (h5_tm/h5_rawI0))  #These are intensities for 1 s LT.
-    h5_sum = h5_sum / (h5_normto * (np.average(h5_tm)/np.average(h5_rawI0)))
+    h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ h5_normto * np.sum(h5_rawI0))/(h5_sum / h5_normto * np.sum(h5_rawI0))
+    h5_ims = (h5_ims / h5_normto)  #These are intensities for 1 I0 count.
+    h5_sum = (h5_sum / h5_normto)
     # remove Compt and Rayl signal from h5, as these cannot be quantified
     names = h5_names
     ims = h5_ims
@@ -457,7 +455,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 ims[i,:,:] = ims[i,:,:] / h5_ims[list(h5_names).index(norm),:,:] #TODO: we can get some division by zero error here...
                 sumint[i] = sumint[i] / h5_sum[list(h5_names).index(norm)]
                 ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:] + h5_ims_err[list(h5_names).index(norm),:,:]*h5_ims_err[list(h5_names).index(norm),:,:])
-                sumint_err[i,:,:] = np.sqrt(sumint_err[i,:,:]*sumint_err[i,:,:] + h5_sum_err[list(h5_names).index(norm),:,:]*h5_sum_err[list(h5_names).index(norm),:,:])
+                sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i] + h5_sum_err[list(h5_names).index(norm)]*h5_sum_err[list(h5_names).index(norm)])
         else:
             print("ERROR: quant_with_ref: norm signal not present in h5file "+h5file)
             return False
@@ -643,6 +641,11 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 sumint[i] = sumint[i] * yld_interpol
                 ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+yld_interpol_err*yld_interpol_err)
                 sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+yld_interpol_err*yld_interpol_err)
+
+    # check which relative errors are largest: sumint_err or np.average(ims_err) or np.std(ims)/np.average(ims)
+    #   then use this error as the sumint_err
+    for i in range(sumint_err.size):
+        sumint_err[i] = np.max(np.array([sumint_err[i], np.average(ims_err[i,:,:]), np.std(ims[i,:,:])/np.average(ims[i,:,:])]))
 
     # convert relative errors to absolute errors
     ims_err = ims_err*ims
@@ -1047,34 +1050,49 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
         return
     
     # correct tm for appropriate normalisation factor
-    #   tm is time for which DL would be calculated using values as reported
+    #   tm is time for which DL would be calculated using values as reported, taking into account the previous normalisation factor
+    tm = np.sum(tm)
     if tmnorm is True:
-        tm = np.average(tm) * I0norm/(np.average(I0)/np.average(tm))
+        normfactor = I0norm/(np.sum(I0)*np.sum(tm))
     else:
-        tm = (I0norm/np.average(I0)) * np.average(tm)
+        normfactor = I0norm/np.sum(I0)
+    
+    # undo normalisation on intensities as performed during norm_xrf_batch
+    #   in order to get intensities matching the current tm value
     names0 = np.array([n.decode('utf8') for n in names0[:]])
+    sum_bkg0 = sum_bkg0/normfactor
+    sum_fit0 = sum_fit0/normfactor
     if chan02_flag:
         names2 = np.array([n.decode('utf8') for n in names2[:]])
-    
+        sum_bkg2 = sum_bkg2/normfactor
+        sum_fit2 = sum_fit2/normfactor
     # prune cnc.conc array to appropriate elements according to names0 and names2
     #   creates arrays of size names0 and names2, where 0 values in conc0 and conc2 represent elements not stated in cnc_files.
     conc0 = np.zeros(names0.size)
     conc0_err = np.zeros(names0.size)
+    conc0_air = np.zeros(names0.size)
+    conc0_air_err = np.zeros(names0.size)
     for j in range(0, names0.size):
         el_name = names0[j].split(" ")[0]
         for i in range(0, cnc.z.size):
             if el_name == Elements.getsymbol(cnc.z[i]):
-                conc0[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
-                conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ug/cm²]
+                conc0_air[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                conc0_air_err[j] = (cnc.err[i]/cnc.conc[i])*conc0_air[j] # unit: [ug/cm²]
+                conc0[j] = cnc.conc[i] # unit: [ppm]
+                conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ppm]
     if chan02_flag:
         conc2 = np.zeros(names2.size)
         conc2_err = np.zeros(names2.size)
+        conc2_air = np.zeros(names2.size)
+        conc2_air_err = np.zeros(names2.size)
         for j in range(0, names2.size):
             el_name = names2[j].split(" ")[0]
             for i in range(0, cnc.z.size):
                 if el_name == Elements.getsymbol(cnc.z[i]):
-                    conc2[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
-                    conc2_err[j] = (cnc.err[i]/cnc.conc[i])*conc2[j] # unit: [ug/cm²]
+                    conc2_air[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                    conc2_air_err[j] = (cnc.err[i]/cnc.conc[i])*conc2_air[j] # unit: [ug/cm²]
+                    conc2[j] = cnc.conc[i] # unit: [ppm]
+                    conc2_err[j] = (cnc.err[i]/cnc.conc[i])*conc2[j] # unit: [ppm]
 
     
     # some values will be 0 (due to conc0 or conc2 being 0). Ignore these in further calculations.
@@ -1088,16 +1106,17 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     for i in range(0, conc0.size):
         if conc0[i] > 0:
             # detection limit corresponding to tm=1s
-            dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/sum_fit0[i]/tm) * conc0[i])
+            dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/(sum_fit0[i]/tm)) * conc0[i])
             j = len(dl_1s_0)-1
             dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
-            el_yield_0.append(conc0[i]/ (sum_fit0[i]/tm))
+            # el_yield_0.append(conc0_air[i]/ (sum_fit0[i]/tm))
+            el_yield_0.append(conc0_air[i]/ (sum_fit0[i]*normfactor/I0norm)) # element yield expressed as conc/I0count
             # calculate DL errors (based on standard error propagation)
             dl_1s_err_0.append(np.sqrt((np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i]) +
                                      (np.sqrt(sum_bkg0[i])/sum_bkg0[i])*(np.sqrt(sum_bkg0[i])/sum_bkg0[i]) +
                                      (conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i])) * dl_1s_0[j])
             dl_1000s_err_0.append(dl_1s_err_0[j] / dl_1s_0[j] * dl_1000s_0[j])
-            el_yield_err_0.append(np.sqrt((conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i]) + 
+            el_yield_err_0.append(np.sqrt((conc0_air_err[i]/conc0_air[i])*(conc0_air_err[i]/conc0_air[i]) + 
                                           (np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i]))*el_yield_0[j])
             names0_mod.append(names0[i])
     if chan02_flag:
@@ -1111,19 +1130,18 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
         for i in range(0, conc2.size):
             if conc2[i] > 0:
                 # detection limit corresponding to tm=1s
-                dl_1s_2.append( (3.*np.sqrt(sum_bkg2[i])/sum_fit2[i]) * conc2[i] *np.sqrt(tm))
+                dl_1s_2.append( (3.*np.sqrt(sum_bkg2[i]/tm)/(sum_fit2[i]/tm)) * conc2[i])
                 j = len(dl_1s_2)-1
                 dl_1000s_2.append(dl_1s_2[j] / np.sqrt(1000.))
-                el_yield_2.append(conc2[i]/ (sum_fit2[i]/tm))
+                el_yield_2.append(conc2_air[i]/ (sum_fit2[i]/tm))
                 # calculate DL errors (based on standard error propagation)
                 dl_1s_err_2.append(np.sqrt((np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i]) +
                                          (np.sqrt(sum_bkg2[i])/sum_bkg2[i])*(np.sqrt(sum_bkg2[i])/sum_bkg2[i]) +
                                          (conc2_err[i]/conc2[i])*(conc2_err[i]/conc2[i])) * dl_1s_2[j])
                 dl_1000s_err_2.append(dl_1s_err_2[j] / dl_1s_2[j] * dl_1000s_2[j])
-                el_yield_err_2.append(np.sqrt((conc2_err[i]/conc2[i])*(conc2_err[i]/conc2[i]) + 
+                el_yield_err_2.append(np.sqrt((conc2_air_err[i]/conc2_air[i])*(conc2_air_err[i]/conc2_air[i]) + 
                                               (np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i]))*el_yield_2[j])
                 names2_mod.append(names2[i])
-    
     # save DL data to file
     cncfile = cncfile.split("/")[-1]
     try:
@@ -1192,6 +1210,7 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
 # make publish-worthy overview images of all fitted elements in h5file (including scale bars, colorbar, ...)
 # plot norm if present, otherwise plot fit/.../ims
 def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None):
+    import plotims
     filename = os.path.splitext(h5file)[0]
 
     imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
@@ -1345,28 +1364,28 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     # correct I0
     for i in range(0, ims0.shape[0]):
         if tmnorm is True:
-            ims0[i,:,:] = ims0[i,:,:]/(I0/tm) * normto
+            ims0[i,:,:] = ims0[i,:,:]/(I0*tm) * normto
         else:
             ims0[i,:,:] = ims0[i,:,:]/(I0) * normto
     if tmnorm is True:
-        sum_fit0 = sum_fit0/(np.average(I0)/np.average(tm)) * normto
-        sum_bkg0 = sum_bkg0/(np.average(I0)/np.average(tm)) * normto
+        sum_fit0 = sum_fit0/(np.sum(I0)*np.sum(tm)) * normto
+        sum_bkg0 = sum_bkg0/(np.sum(I0)*np.sum(tm)) * normto
     else:
-        sum_fit0 = sum_fit0/(np.average(I0)) * normto
-        sum_bkg0 = sum_bkg0/(np.average(I0)) * normto
+        sum_fit0 = (sum_fit0/np.sum(I0)) * normto
+        sum_bkg0 = (sum_bkg0/np.sum(I0)) * normto
     ims0[np.isnan(ims0)] = 0.
     if chan02_flag:
         for i in range(0, ims2.shape[0]):
             if tmnorm is True:
-                ims2[i,:,:] = ims2[i,:,:]/(I0/tm) * normto
+                ims2[i,:,:] = ims2[i,:,:]/(I0*tm) * normto
             else:
                 ims2[i,:,:] = ims2[i,:,:]/(I0) * normto
         if tmnorm is True:
-            sum_fit2 = sum_fit2/(np.average(I0)/np.average(tm)) * normto
-            sum_bkg2 = sum_bkg2/(np.average(I0)/np.average(tm)) * normto
+            sum_fit2 = sum_fit2/(np.sum(I0)*np.sum(tm)) * normto
+            sum_bkg2 = sum_bkg2/(np.sum(I0)*np.sum(tm)) * normto
         else:
-            sum_fit2 = sum_fit2/(np.average(I0)) * normto
-            sum_bkg2 = sum_bkg2/(np.average(I0)) * normto
+            sum_fit2 = (sum_fit2/np.sum(I0)) * normto
+            sum_bkg2 = (sum_bkg2/np.sum(I0)) * normto
         ims2[np.isnan(ims2)] = 0.
         
 
