@@ -29,7 +29,6 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', datadir='
         ims_err = np.array(h5f[datadir+'/'+channel+'/ims_stddev'])
         errorflag = True
     except KeyError:
-        ims_err = None
         errorflag = False
     # ims = ims[:,25:,:] #only do this if omitting certain angles from the scan...
     names = ["-".join(name.decode('utf8').split(" ")) for name in h5f[datadir+'/'+channel+'/names']]
