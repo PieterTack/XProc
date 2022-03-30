@@ -415,7 +415,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     h5_sum_bkg = np.asarray(file['norm/'+channel+'/sum/bkg'])
     h5_normto = np.asarray(file['norm/I0'])
     h5_rawI0 = np.asarray(file['raw/I0'])
-    h5_tm = np.asarray(file['raw/acquisition_time'])
+    # h5_tm = np.asarray(file['raw/acquisition_time'])
     if absorb is not None:
         h5_spectra = np.asarray(file['raw/'+channel+'/spectra'])
         h5_cfg = file['fit/'+channel+'/cfg'][()].decode('utf8')
