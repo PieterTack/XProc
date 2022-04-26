@@ -417,8 +417,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     # define data as per second if tmnorm is requested
     if tmnorm is True:
         tm = h5_normto/h5_rawI0[:]
-        h5_ims_err = np.sqrt(h5_ims / tm)/(h5_ims / tm)
-        h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ np.sum(tm))/(h5_sum / np.sum(tm))
+        h5_ims_err = np.sqrt(h5_ims / tm * h5_tm)/(h5_ims / tm * h5_tm)
+        h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ np.sum(tm) * np.sum(h5_tm)) / (h5_sum / np.sum(tm) * np.sum(h5_tm))
    else:
         tm = h5_tm[:]*h5_normto/h5_rawI0[:]
         h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
@@ -596,8 +596,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     for i in range(0, names.size):
         if names[i] in ref_names:
             ref_id = list(ref_names).index(names[i])
-            ims[i,:,:] = ims[i,:,:]*ref_yld[ref_id]
-            sumint[i] = sumint[i]*ref_yld[ref_id]
+            ims[i,:,:] = ims[i,:,:]/ref_yld[ref_id]
+            sumint[i] = sumint[i]/ref_yld[ref_id]
             ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+ref_yld_err[ref_id]*ref_yld_err[ref_id])
             sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+ref_yld_err[ref_id]*ref_yld_err[ref_id])
         else: # element not in references list, so have to interpolate...
@@ -617,8 +617,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     ims_err[i,:,:] = 0
                     sumint_err[i] = 0
                 else:
-                    ims[i,:,:] = ims[i,:,:] * ref_yld[line_id]
-                    sumint[i] = sumint[i] * ref_yld[line_id]
+                    ims[i,:,:] = ims[i,:,:] / ref_yld[line_id]
+                    sumint[i] = sumint[i] / ref_yld[line_id]
                     ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+ref_yld_err[line_id]*ref_yld_err[line_id])
                     sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+ref_yld_err[line_id]*ref_yld_err[line_id])
             else:
@@ -635,8 +635,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 else: #there is an element in ref_yld with index z_id-1 and z_id
                     yld_interpol = (ref_yld[line_id][z_id-1]-ref_yld[line_id][z_id]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id]) * (h5_z[i]-ref_z[line_id][z_id]) + ref_yld[line_id][z_id]
                     yld_interpol_err = (ref_yld_err[line_id][z_id-1]-ref_yld_err[line_id][z_id]) / (ref_z[line_id][z_id-1]-ref_z[line_id][z_id]) * (h5_z[i]-ref_z[line_id][z_id]) + ref_yld_err[line_id][z_id]
-                ims[i,:,:] = ims[i,:,:] * yld_interpol
-                sumint[i] = sumint[i] * yld_interpol
+                ims[i,:,:] = ims[i,:,:] / yld_interpol
+                sumint[i] = sumint[i] / yld_interpol
                 ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+yld_interpol_err*yld_interpol_err)
                 sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+yld_interpol_err*yld_interpol_err)
 
@@ -653,20 +653,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     file = h5py.File(h5file, 'r+')
     try:
         del file['quant/'+channel]
-        # del file['quant/'+channel+'/names']
-        # del file['quant/'+channel+'/ims']
-        # del file['quant/'+channel+'/refs']
-        # del file['quant/'+channel+'/sum/int']
-        # del file['quant/'+channel+'/ims_stddev']
-        # del file['quant/'+channel+'/refs']
-        # del file['quant/'+channel+'/sum/int_stddev']        
-        # if absorb is None:
-        #     try:
-        #         del file['quant/'+channel+'/ratio_exp']
-        #         del file['quant/'+channel+'/ratio_th']
-        #         del file['quant/'+channel+'/rhot']
-        #     except Exception:
-        #         pass
     except Exception:
         pass
     file.create_dataset('quant/'+channel+'/names', data=[n.encode('utf8') for n in names])
@@ -682,12 +668,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         ' '.join(reffiles)
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
     if absorb is not None:
-        # try:
-        #     del file['quant/'+channel+'/ratio_exp']
-        #     del file['quant/'+channel+'/ratio_th']
-        #     del file['quant/'+channel+'/rhot']
-        # except Exception:
-        #     pass
         file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
         file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
         file.create_dataset('quant/'+channel+'/rhot', data=rhot, compression='gzip', compression_opts=4)
