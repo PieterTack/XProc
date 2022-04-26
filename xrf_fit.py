@@ -419,7 +419,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         tm = h5_normto/h5_rawI0[:]
         h5_ims_err = np.sqrt(h5_ims / tm * h5_tm)/(h5_ims / tm * h5_tm)
         h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ np.sum(tm) * np.sum(h5_tm)) / (h5_sum / np.sum(tm) * np.sum(h5_tm))
-   else:
+    else:
         tm = h5_tm[:]*h5_normto/h5_rawI0[:]
         h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
         h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ h5_normto * np.sum(h5_rawI0))/(h5_sum / h5_normto * np.sum(h5_rawI0))
