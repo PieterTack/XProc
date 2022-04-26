@@ -313,7 +313,7 @@ def div_by_cnc(h5file, cncfile, channel=None):
 #       type: tuple (['element'], 'cnc file')
 #       the element will be used to find Ka and Kb line intensities and correct for their respective ratio
 #       using concentration values from the provided cnc files.
-def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False):
+def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, tmnorm=False):
     import plotims
 
 
@@ -333,16 +333,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             if norm in names:
                 sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
                 sum_fit[np.where(sum_fit < 0)] = 0
-                # tm = np.array(reff['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-                # I0 = np.array(reff['raw/I0'])
-                # I0norm = np.array(reff['norm/I0'])
-                # # correct tm for appropriate normalisation factor
-                # if tmnorm is True:
-                #     tm = np.sum(tm) * I0norm/(np.sum(I0)/np.sum(tm)) #this is acquisition time corresponding to sumspec intensity
-                # else:
-                #     tm = I0norm/np.sum(I0) #this is acquisition time corresponding to sumspec intensity
-                # # print(sum_fit[names.index(norm)], tm, (sum_fit[names.index(norm)]/tm))
-                # ref_yld = [yld*(sum_fit[names.index(norm)]/tm) for yld in ref_yld]
                 ref_yld_err = np.sqrt(ref_yld_err*ref_yld_err + 1./sum_fit[names.index(norm)])
                 ref_yld = [yld*(sum_fit[names.index(norm)]) for yld in ref_yld]
             else:
@@ -415,7 +405,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     h5_sum_bkg = np.asarray(file['norm/'+channel+'/sum/bkg'])
     h5_normto = np.asarray(file['norm/I0'])
     h5_rawI0 = np.asarray(file['raw/I0'])
-    # h5_tm = np.asarray(file['raw/acquisition_time'])
+    h5_tm = np.asarray(file['raw/acquisition_time'])
     if absorb is not None:
         h5_spectra = np.asarray(file['raw/'+channel+'/spectra'])
         h5_cfg = file['fit/'+channel+'/cfg'][()].decode('utf8')
@@ -423,10 +413,18 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot1 = np.asarray(file['mot1'])
         mot2 = np.asarray(file['mot2'])
     file.close()
-    h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
-    h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ h5_normto * np.sum(h5_rawI0))/(h5_sum / h5_normto * np.sum(h5_rawI0))
-    h5_ims = (h5_ims / h5_normto)  #These are intensities for 1 I0 count.
-    h5_sum = (h5_sum / h5_normto)
+
+    # define data as per second if tmnorm is requested
+    if tmnorm is True:
+        tm = h5_normto/h5_rawI0[:]
+        h5_ims_err = np.sqrt(h5_ims / tm)/(h5_ims / tm)
+        h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ np.sum(tm))/(h5_sum / np.sum(tm))
+   else:
+        tm = h5_tm[:]*h5_normto/h5_rawI0[:]
+        h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
+        h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ h5_normto * np.sum(h5_rawI0))/(h5_sum / h5_normto * np.sum(h5_rawI0))
+    h5_ims = (h5_ims / tm)  #These are intensities normalised for I0 and acqtime
+    h5_sum = (h5_sum / np.sum(tm))
     # remove Compt and Rayl signal from h5, as these cannot be quantified
     names = h5_names
     ims = h5_ims
@@ -1024,7 +1022,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
 # calculate detection limits.
 #   DL = 3*sqrt(Ib)/Ip * Conc
 #   calculates 1s and 1000s DL
-#   Also calculates elemental yields (Conc/Ip [(ug/cm²)/(ct/s)]) 
+#   Also calculates elemental yields (Ip/conc [(ct/s)/(ug/cm²)]) 
 def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)"):
     # read in cnc file data
     cnc = read_cnc(cncfile)
@@ -1051,21 +1049,16 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     
     # correct tm for appropriate normalisation factor
     #   tm is time for which DL would be calculated using values as reported, taking into account the previous normalisation factor
-    tm = np.sum(tm)
     if tmnorm is True:
-        normfactor = I0norm/(np.sum(I0)*np.sum(tm))
+        tm = I0norm/np.sum(I0)
     else:
-        normfactor = I0norm/np.sum(I0)
+        tm = np.sum(tm)*I0norm/np.sum(I0)
     
     # undo normalisation on intensities as performed during norm_xrf_batch
-    #   in order to get intensities matching the current tm value
+    #   in order to get intensities matching the current tm value (i.e. equal to raw fit values)
     names0 = np.array([n.decode('utf8') for n in names0[:]])
-    sum_bkg0 = sum_bkg0/normfactor
-    sum_fit0 = sum_fit0/normfactor
     if chan02_flag:
         names2 = np.array([n.decode('utf8') for n in names2[:]])
-        sum_bkg2 = sum_bkg2/normfactor
-        sum_fit2 = sum_fit2/normfactor
     # prune cnc.conc array to appropriate elements according to names0 and names2
     #   creates arrays of size names0 and names2, where 0 values in conc0 and conc2 represent elements not stated in cnc_files.
     conc0 = np.zeros(names0.size)
@@ -1109,8 +1102,7 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
             dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/(sum_fit0[i]/tm)) * conc0[i])
             j = len(dl_1s_0)-1
             dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
-            # el_yield_0.append(conc0_air[i]/ (sum_fit0[i]/tm))
-            el_yield_0.append(conc0_air[i]/ (sum_fit0[i]*normfactor/I0norm)) # element yield expressed as conc/I0count
+            el_yield_0.append((sum_fit0[i]/tm) / conc0_air[i]) # element yield expressed as cps/conc
             # calculate DL errors (based on standard error propagation)
             dl_1s_err_0.append(np.sqrt((np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i]) +
                                      (np.sqrt(sum_bkg0[i])/sum_bkg0[i])*(np.sqrt(sum_bkg0[i])/sum_bkg0[i]) +
@@ -1133,7 +1125,7 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
                 dl_1s_2.append( (3.*np.sqrt(sum_bkg2[i]/tm)/(sum_fit2[i]/tm)) * conc2[i])
                 j = len(dl_1s_2)-1
                 dl_1000s_2.append(dl_1s_2[j] / np.sqrt(1000.))
-                el_yield_2.append(conc2_air[i]/ (sum_fit2[i]/tm))
+                el_yield_2.append((sum_fit2[i]/tm) / conc2_air[i]) # element yield expressed as cps/conc
                 # calculate DL errors (based on standard error propagation)
                 dl_1s_err_2.append(np.sqrt((np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i]) +
                                          (np.sqrt(sum_bkg2[i])/sum_bkg2[i])*(np.sqrt(sum_bkg2[i])/sum_bkg2[i]) +
@@ -1166,9 +1158,9 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     file.create_dataset('detlim/'+cncfile+'/channel00/1000s/data', data=dl_1000s_0, compression='gzip', compression_opts=4)
     file.create_dataset('detlim/'+cncfile+'/channel00/1000s/stddev', data=dl_1000s_err_0, compression='gzip', compression_opts=4)    
     dset = file.create_dataset('elyield/'+cncfile+'/channel00/yield', data=el_yield_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
+    dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
     dset = file.create_dataset('elyield/'+cncfile+'/channel00/stddev', data=el_yield_err_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
+    dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
     file.create_dataset('elyield/'+cncfile+'/channel00/names', data=[n.encode('utf8') for n in names0_mod[:]])
     if chan02_flag:
         try:
@@ -1188,9 +1180,9 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
         file.create_dataset('detlim/'+cncfile+'/channel02/1000s/data', data=dl_1000s_2, compression='gzip', compression_opts=4)
         file.create_dataset('detlim/'+cncfile+'/channel02/1000s/stddev', data=dl_1000s_err_2, compression='gzip', compression_opts=4)  
         dset = file.create_dataset('elyield/'+cncfile+'/channel02/yield', data=el_yield_2, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
+        dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
         dset = file.create_dataset('elyield/'+cncfile+'/channel02/stddev', data=el_yield_err_2, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "(ug/cm²)/(ct/s)"
+        dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
         file.create_dataset('elyield/'+cncfile+'/channel02/names', data=[n.encode('utf8') for n in names2_mod[:]])
     file.close()
     
