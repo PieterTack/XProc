@@ -313,7 +313,7 @@ def div_by_cnc(h5file, cncfile, channel=None):
 #       type: tuple (['element'], 'cnc file')
 #       the element will be used to find Ka and Kb line intensities and correct for their respective ratio
 #       using concentration values from the provided cnc files.
-def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, tmnorm=False):
+def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False):
     import plotims
 
 
@@ -327,7 +327,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         ref_names = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
         ref_z = [Elements.getz(n.split(" ")[0]) for n in ref_names]
         ref_yld_err = np.array(ref_yld_err) / np.array(ref_yld) #convert to relative error
-        conc_unit = reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield'].attrs["Unit"]
         if norm is not None:
             names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
             if norm in names:
@@ -354,7 +353,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             ref_yld_err_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/stddev']] # elemental yield errors in (ug/cm²)/(ct/s)
             ref_names_tmp = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
             ref_yld_err_tmp = np.array(ref_yld_err_tmp) / np.array(ref_yld_tmp) #convert to relative error
-            conc_unit = reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield'].attrs["Unit"]
             if norm is not None:
                 names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
                 if norm in names:
@@ -400,12 +398,11 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     #   normalise intensities to 1s acquisition time as this is the time for which we have el yields
     file = h5py.File(h5file, 'r')
     h5_ims = np.asarray(file['norm/'+channel+'/ims'])
+    h5_ims_err = np.asarray(file['norm/'+channel+'/ims_stddev'])/h5_ims[:]
     h5_names = np.asarray([n.decode('utf8') for n in file['norm/'+channel+'/names']])
     h5_sum = np.asarray(file['norm/'+channel+'/sum/int'])
-    h5_sum_bkg = np.asarray(file['norm/'+channel+'/sum/bkg'])
+    h5_sum_err = np.asarray(file['norm/'+channel+'/sum/int_stddev'])/h5_sum[:]
     h5_normto = np.asarray(file['norm/I0'])
-    h5_rawI0 = np.asarray(file['raw/I0'])
-    h5_tm = np.asarray(file['raw/acquisition_time'])
     if absorb is not None:
         h5_spectra = np.asarray(file['raw/'+channel+'/spectra'])
         h5_cfg = file['fit/'+channel+'/cfg'][()].decode('utf8')
@@ -414,17 +411,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot2 = np.asarray(file['mot2'])
     file.close()
 
-    # define data as per second if tmnorm is requested
-    if tmnorm is True:
-        tm = h5_normto/h5_rawI0[:]
-        h5_ims_err = np.sqrt(h5_ims / tm * h5_tm)/(h5_ims / tm * h5_tm)
-        h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ np.sum(tm) * np.sum(h5_tm)) / (h5_sum / np.sum(tm) * np.sum(h5_tm))
-    else:
-        tm = h5_tm[:]*h5_normto/h5_rawI0[:]
-        h5_ims_err = np.sqrt(h5_ims / h5_normto * h5_rawI0)/(h5_ims / h5_normto * h5_rawI0)
-        h5_sum_err = np.sqrt( (h5_sum+2*h5_sum_bkg)/ h5_normto * np.sum(h5_rawI0))/(h5_sum / h5_normto * np.sum(h5_rawI0))
-    h5_ims = (h5_ims / tm)  #These are intensities normalised for I0 and acqtime
-    h5_sum = (h5_sum / np.sum(tm))
+    h5_ims = (h5_ims / h5_normto)  #These are intensities for 1 I0 count.
+    h5_sum = (h5_sum / h5_normto)
     # remove Compt and Rayl signal from h5, as these cannot be quantified
     names = h5_names
     ims = h5_ims
@@ -542,17 +530,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         rhot[np.where(rhot < 0.)] = 0. #negative rhot values do not make sense
         rhot[np.isnan(rhot)] = 0.
         rhot = np.amax(rhot, axis=0)
-        # print(np.min(rhot), np.average(rhot), np.max(rhot))
-        # print(mu_ka1, mu_kb1, mu, names)
-        # plt.imshow(rhot)
-        # plt.colorbar()
-        # plt.savefig('fit/test.png', bbox_inches='tight', pad_inches=0)
-        # plt.close()
-        # # cluster the rhot image and average rhot values per cluster
-        # nclrs = 5
-        # clrs, _ = Kmeans(rhot.reshape(1, rhot.shape[0], rhot.shape[1]), nclusters=nclrs, el_id=0)
-        # for i in range(nclrs):
-        #     rhot[np.where(clrs == i)] = np.average(rhot[np.where(clrs == i)])
         
         # if this is snakescan, interpolate ims array for motor positions so images look nice
         #   this assumes that mot1 was the continuously moving motor
@@ -576,12 +553,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             print("Done")
         rhot[np.where(rhot < 0.)] = 0. #negative rhot values do not make sense
         rhot[np.isnan(rhot)] = 0.
-        # import scipy.ndimage as ndimage
-        # rhot = ndimage.gaussian_filter(rhot, sigma=(2, 2), order=0)
-        # fit a line through rhot for each row, and use these fitted rhot values
-        # for i in range(0, rhot.shape[0]):
-        #     fit = np.polyfit(np.arange(rhot.shape[1]), rhot[i,:], 1)
-        #     rhot[i,:] = np.arange(rhot.shape[1])*fit[0] + fit[1]
         for n in range(0, names.size):
             corr_factor = 1./np.exp(-1.*rhot[:,:] * mu[n])
             corr_factor[np.where(corr_factor > 1000.)] = 1. # points with very low correction factor are not corrected; otherwise impossibly high values are obtained
@@ -655,6 +626,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         del file['quant/'+channel]
     except Exception:
         pass
+    conc_unit = "ug/cm²"
     file.create_dataset('quant/'+channel+'/names', data=[n.encode('utf8') for n in names])
     dset = file.create_dataset('quant/'+channel+'/ims', data=ims, compression='gzip', compression_opts=4)
     dset.attrs["Unit"] = conc_unit
@@ -1012,10 +984,14 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     try:
         sum_fit0 = np.array(file['norm/channel00/sum/int'])
         sum_bkg0 = np.array(file['norm/channel00/sum/bkg'])
+        sum_fit0_err = np.array(file['norm/channel00/sum/int_stddev'])/sum_fit0
+        sum_bkg0_err = np.array(file['norm/channel00/sum/bkg_stddev'])/sum_bkg0
         names0 = file['norm/channel00/names']
         try:
             sum_fit2 = np.array(file['norm/channel02/sum/int'])
             sum_bkg2 = np.array(file['norm/channel02/sum/bkg'])
+            sum_fit2_err = np.array(file['norm/channel02/sum/int_stddev'])/sum_fit2
+            sum_bkg2_err = np.array(file['norm/channel02/sum/bkg_stddev'])/sum_bkg2
             names2 = file['norm/channel02/names']
             chan02_flag = True
         except Exception:
@@ -1029,16 +1005,21 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     
     # correct tm for appropriate normalisation factor
     #   tm is time for which DL would be calculated using values as reported, taking into account the previous normalisation factor
+    tm = np.sum(tm)
     if tmnorm is True:
-        tm = I0norm/np.sum(I0)
+        normfactor = I0norm/(np.sum(I0)*tm)
     else:
-        tm = np.sum(tm)*I0norm/np.sum(I0)
-    
+        normfactor = I0norm/np.sum(I0)
+        
     # undo normalisation on intensities as performed during norm_xrf_batch
     #   in order to get intensities matching the current tm value (i.e. equal to raw fit values)
     names0 = np.array([n.decode('utf8') for n in names0[:]])
+    sum_bkg0 = sum_bkg0/normfactor
+    sum_fit0 = sum_fit0/normfactor
     if chan02_flag:
         names2 = np.array([n.decode('utf8') for n in names2[:]])
+        sum_bkg2 = sum_bkg2/normfactor
+        sum_fit2 = sum_fit2/normfactor
     # prune cnc.conc array to appropriate elements according to names0 and names2
     #   creates arrays of size names0 and names2, where 0 values in conc0 and conc2 represent elements not stated in cnc_files.
     conc0 = np.zeros(names0.size)
@@ -1082,14 +1063,12 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
             dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/(sum_fit0[i]/tm)) * conc0[i])
             j = len(dl_1s_0)-1
             dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
-            el_yield_0.append((sum_fit0[i]/tm) / conc0_air[i]) # element yield expressed as cps/conc
+            el_yield_0.append((sum_fit0[i]*normfactor/I0norm) / conc0_air[i]) # element yield expressed as cps/conc
             # calculate DL errors (based on standard error propagation)
-            dl_1s_err_0.append(np.sqrt((np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i]) +
-                                     (np.sqrt(sum_bkg0[i])/sum_bkg0[i])*(np.sqrt(sum_bkg0[i])/sum_bkg0[i]) +
+            dl_1s_err_0.append(np.sqrt(sum_fit0_err[i]**2 + sum_bkg0_err[i]**2 +
                                      (conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i])) * dl_1s_0[j])
             dl_1000s_err_0.append(dl_1s_err_0[j] / dl_1s_0[j] * dl_1000s_0[j])
-            el_yield_err_0.append(np.sqrt((conc0_air_err[i]/conc0_air[i])*(conc0_air_err[i]/conc0_air[i]) + 
-                                          (np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i])*(np.sqrt(sum_fit0[i]+2*sum_bkg0[i])/sum_fit0[i]))*el_yield_0[j])
+            el_yield_err_0.append(np.sqrt((conc0_air_err[i]/conc0_air[i])*(conc0_air_err[i]/conc0_air[i]) + sum_fit0_err[i]**2)*el_yield_0[j])
             names0_mod.append(names0[i])
     if chan02_flag:
         names2_mod = []
@@ -1105,14 +1084,12 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
                 dl_1s_2.append( (3.*np.sqrt(sum_bkg2[i]/tm)/(sum_fit2[i]/tm)) * conc2[i])
                 j = len(dl_1s_2)-1
                 dl_1000s_2.append(dl_1s_2[j] / np.sqrt(1000.))
-                el_yield_2.append((sum_fit2[i]/tm) / conc2_air[i]) # element yield expressed as cps/conc
+                el_yield_2.append((sum_fit2[i]*normfactor/I0norm) / conc2_air[i]) # element yield expressed as cps/conc
                 # calculate DL errors (based on standard error propagation)
-                dl_1s_err_2.append(np.sqrt((np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i]) +
-                                         (np.sqrt(sum_bkg2[i])/sum_bkg2[i])*(np.sqrt(sum_bkg2[i])/sum_bkg2[i]) +
+                dl_1s_err_2.append(np.sqrt(sum_fit2_err[i]**2 + sum_bkg2_err[i]**2 +
                                          (conc2_err[i]/conc2[i])*(conc2_err[i]/conc2[i])) * dl_1s_2[j])
                 dl_1000s_err_2.append(dl_1s_err_2[j] / dl_1s_2[j] * dl_1000s_2[j])
-                el_yield_err_2.append(np.sqrt((conc2_air_err[i]/conc2_air[i])*(conc2_air_err[i]/conc2_air[i]) + 
-                                              (np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i])*(np.sqrt(sum_fit2[i]+2*sum_bkg2[i])/sum_fit2[i]))*el_yield_2[j])
+                el_yield_err_2.append(np.sqrt((conc2_air_err[i]/conc2_air[i])*(conc2_air_err[i]/conc2_air[i]) +sum_fit2_err[i]**2)*el_yield_2[j])
                 names2_mod.append(names2[i])
     # save DL data to file
     cncfile = cncfile.split("/")[-1]
@@ -1334,6 +1311,12 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         
 
     # correct I0
+    ims0[ims0 < 0] = 0.
+    sum_fit0[sum_fit0 < 0] = 0.
+    sum_bkg0[sum_bkg0 < 0] = 0.
+    ims0_err = np.nan_to_num(np.sqrt(ims0)/ims0)
+    sum_fit0_err = np.nan_to_num(np.sqrt(sum_fit0[:]+2*sum_bkg0[:])/sum_fit0[:])
+    sum_bkg0_err = np.nan_to_num(np.sqrt(sum_bkg0[:])/sum_bkg0[:])
     for i in range(0, ims0.shape[0]):
         if tmnorm is True:
             ims0[i,:,:] = ims0[i,:,:]/(I0*tm) * normto
@@ -1347,6 +1330,12 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         sum_bkg0 = (sum_bkg0/np.sum(I0)) * normto
     ims0[np.isnan(ims0)] = 0.
     if chan02_flag:
+        ims2[ims2 < 0] = 0.
+        sum_fit2[sum_fit2 < 0] = 0.
+        sum_bkg2[sum_bkg2 < 0] = 0.
+        ims2_err = np.nan_to_num(np.sqrt(ims2)/ims2)
+        sum_fit2_err = np.nan_to_num(np.sqrt(sum_fit2[:]+2*sum_bkg2[:])/sum_fit2[:])
+        sum_bkg2_err = np.nan_to_num(np.sqrt(sum_bkg2[:])/sum_bkg2[:])
         for i in range(0, ims2.shape[0]):
             if tmnorm is True:
                 ims2[i,:,:] = ims2[i,:,:]/(I0*tm) * normto
@@ -1376,8 +1365,10 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
             mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
             ims0_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
+            ims0_err_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
             if chan02_flag:
                 ims2_tmp = np.zeros((ims2.shape[0], ims2.shape[1], ims2.shape[2]))
+                ims2_err_tmp = np.zeros((ims2.shape[0], ims2.shape[1], ims2.shape[2]))
         if timetriggered is True:
             # correct positions for half pixel shift
             mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
@@ -1388,8 +1379,10 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 mot1_pos = mot1_pos - (mot1_pos[0] - mot1[0,0])
                 mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
             ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
+            ims0_err_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
             if chan02_flag:
                 ims2_tmp = np.zeros((ims2.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
+                ims2_err_tmp = np.zeros((ims2.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
         # interpolate to the regular grid motor positions
         mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size),
                 mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
@@ -1413,47 +1406,46 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         for i in range(names0.size):
             values = ims0[i,:,:].ravel()
             ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+        ims0 = np.nan_to_num(ims0_tmp)
+        ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
         if chan02_flag:
             for i in range(names2.size):
                 values = ims2[i,:,:].ravel()
                 ims2_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-        ims0 = ims0_tmp
-        ims2 = ims2_tmp
+                ims2_err_tmp[i,:,:] = griddata((x, y), ims2_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            ims2 = np.nan_to_num(ims2_tmp)
+            ims2_err = np.nan_to_num(ims2_err_tmp)*ims2
         print("Done")
 
-    # remove NaN values
-    ims0[np.isnan(ims0)] = 0.
-    if chan02_flag:
-        ims2[np.isnan(ims2)] = 0.
-
-    
+  
     # save normalised data
     print("     Writing...", end=" ")
     try:
         del file['norm/I0']
-        del file['norm/channel00/ims']
-        del file['norm/channel00/names']
-        del file['norm/channel00/sum/int']
-        del file['norm/channel00/sum/bkg']
-    except Exception:
+        del file['norm/channel00']
+    except KeyError:
         pass
     file.create_dataset('norm/I0', data=normto)
     file.create_dataset('norm/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
+    file.create_dataset('norm/channel00/ims_stddev', data=ims0_err, compression='gzip', compression_opts=4)
     file.create_dataset('norm/channel00/names', data=names0)
     file.create_dataset('norm/channel00/sum/int', data=sum_fit0, compression='gzip', compression_opts=4)
     file.create_dataset('norm/channel00/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
+    file.create_dataset('norm/channel00/sum/int_stddev', data=sum_fit0*sum_fit0_err, compression='gzip', compression_opts=4)
+    file.create_dataset('norm/channel00/sum/bkg_stddev', data=sum_bkg0*sum_bkg0_err, compression='gzip', compression_opts=4)
     if chan02_flag:
         try:
-            del file['norm/channel02/ims']
-            del file['norm/channel02/names']
-            del file['norm/channel02/sum/int']
-            del file['norm/channel02/sum/bkg']
-        except Exception:
+            del file['norm/channel02']
+        except KeyError:
             pass
         file.create_dataset('norm/channel02/ims', data=ims2, compression='gzip', compression_opts=4)
+        file.create_dataset('norm/channel02/ims_stddev', data=ims2_err, compression='gzip', compression_opts=4)
         file.create_dataset('norm/channel02/names', data=names2)
         file.create_dataset('norm/channel02/sum/int', data=sum_fit2, compression='gzip', compression_opts=4)
         file.create_dataset('norm/channel02/sum/bkg', data=sum_bkg2, compression='gzip', compression_opts=4)
+        file.create_dataset('norm/channel02/sum/int_stddev', data=sum_fit2*sum_fit2_err, compression='gzip', compression_opts=4)
+        file.create_dataset('norm/channel02/sum/bkg_stddev', data=sum_bkg2*sum_bkg2_err, compression='gzip', compression_opts=4)
     file.close()
     print("Done")
 
