@@ -1,6 +1,7 @@
 # xrf_proc
 Program with data stream for XRF analysis, including fitting, normalisation, quantification, absorption corrections and imaging.
 The repository can be easily installed using the following command in a (unix) terminal:
+
 `git clone https://www.github.com/PieterTack/xrf_proc`
 
 ## Data processing using xrf_proc and plotims
