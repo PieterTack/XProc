@@ -2176,10 +2176,15 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                     mot2_name = str(scan_cmd[5])
                 except Exception:
                     try:
-                        f2 = h5py.File(sc_id+'.nxs','r')
-                        mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
-                        mot2_name = str(scan_cmd[5])
-                        f2.close()
+                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                            print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
+                            mot2_arr = enc_vals[1]
+                            mot2_name = enc_names[1]
+                        else:
+                            f2 = h5py.File(sc_id+'.nxs','r')
+                            mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
+                            mot2_name = str(scan_cmd[5])
+                            f2.close()
                     except KeyError:
                         if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
                             print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
