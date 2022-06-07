@@ -2434,7 +2434,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
 # convert id15a bliss h5 format to our h5 structure file
 #   syntax: h5id15convert('exp_file.h5', '3.1', (160,1), mot1_name='hry', mot2_name='hrz')
 #   when scanid is an array or list of multiple elements, the images will be stitched together to 1 file
-def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i1id='fpico3', icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
+def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
     scan_dim = np.array(scan_dim)
     scanid = np.array(scanid)
     if scan_dim.size == 1:
@@ -2457,10 +2457,18 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
     # read h5id15 file(s)
     for j in range(0, scanid.size):
         if scanid.size == 1:
+            if i0corid is not None:
+                i0cor_dir = str(scanid).split('.')[0]+'.2/measurement/'+i0corid
+            if i1corid is not None:
+                i1cor_dir = str(scanid).split('.')[0]+'.2/measurement/'+i1corid
             sc_id = str(scanid)
             sc_dim = scan_dim
             file = h5id15[0]
         else:
+            if i0corid is not None:
+                i0cor_dir = scanid[j].split('.')[0]+'.2/measurement/'+i0corid
+            if i0corid is not None:
+                i1cor_dir = scanid[j].split('.')[0]+'.2/measurement/'+i1corid
             sc_id = str(scanid[j])
             file = h5id15[j]
             if scan_dim.size > 2:
@@ -2484,8 +2492,14 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
                 icr2 = np.array(f[sc_id+'/measurement/'+ch2id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 ocr2 = np.array(f[sc_id+'/measurement/'+ch2id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0 = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if i0corid is not None:
+                i0cor = np.average(np.array(f[i0cor_dir][:]))
+                i0 = i0/np.average(i0) * i0cor
             if i1id is not None:
                 i1 = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                if i1corid is not None:
+                    i1cor = np.average(np.array(f[i1cor_dir][:]))
+                    i1 = i1/np.average(i1) * i1cor
             mot1 = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             mot2 = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             tm = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
@@ -2520,8 +2534,14 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
                 icr2_temp = np.array(f[sc_id+'/measurement/'+ch2id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 ocr2_temp = np.array(f[sc_id+'/measurement/'+ch2id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0_temp = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if i0corid is not None:
+                i0cor = np.average(np.array(f[i0cor_dir][:]))
+                i0_temp = i0_temp/np.average(i0_temp) * i0cor
             if i1id is not None:
                 i1_temp = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                if i1corid is not None:
+                    i1cor = np.average(np.array(f[i1cor_dir][:]))
+                    i1_temp = i1_temp/np.average(i1_temp) * i1cor
             mot1_temp = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             mot2_temp = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             tm_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
