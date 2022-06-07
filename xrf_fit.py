@@ -1226,8 +1226,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     mot1_name = str(file['mot1'].attrs["Name"])
     mot2 = np.array(file['mot2'])
     mot2_name = str(file['mot2'].attrs["Name"])
+    cmd = str(np.array(file['cmd'])).split(' ')
     if len(ims0.shape) == 2:
-        cmd = str(np.array(file['cmd'])).split(' ')
         ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
         I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
         tm = tm.reshape((np.squeeze(tm).shape[0], 1))
@@ -1241,7 +1241,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             mot1 = mot1[0:ims0.shape[1],:]
         if mot2.shape[0] > ims0.shape[1]:
             mot2 = mot2[0:ims0.shape[1],:]
-        if cmd[0] != "b'timescanc":
+        if cmd[0] != "b'timescanc" and cmd[0] != "b'dscan" and cmd[0] != "timescanc" and cmd[0] != "dscan":
+            print(cmd[0])
             snake = True
             timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
     try:
@@ -2176,10 +2177,15 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
                     mot2_name = str(scan_cmd[5])
                 except Exception:
                     try:
-                        f2 = h5py.File(sc_id+'.nxs','r')
-                        mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
-                        mot2_name = str(scan_cmd[5])
-                        f2.close()
+                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                            print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
+                            mot2_arr = enc_vals[1]
+                            mot2_name = enc_names[1]
+                        else:
+                            f2 = h5py.File(sc_id+'.nxs','r')
+                            mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
+                            mot2_name = str(scan_cmd[5])
+                            f2.close()
                     except KeyError:
                         if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
                             print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
