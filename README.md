@@ -141,18 +141,29 @@ Functions can then be used following, e.g.:
 
 Due to differences in beamline data formats, typically separate “conversion” functions are required for different beamlines. Currently, the following functions are supported:
 
->	`h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', atol=None)`
+>	`h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True)`
 >	* h5id15: (string) beamline stored h5 data file location, e.g. ‘id15/NIST_611_0001.h5’. A list of strings can be supplied to combine different measurements into 1 file, in which case the scanid argument should also be a list of identical length.
 >	* scanid: (string) the identifier of the relevant scan in the h5 file, typically the scan number followed by .1, e.g. ‘4.1’. A list of strings can be supplied to combine different scans into 1 file, in which case all scanid’s are obtained from the same h5id15 file.
 >	* scan_dim: (tuple) the scan dimensions, i.e. (10,10) for a 10×10 mapping
 >	* mot1_name: [optional] (string) the name of mot1, the least moving motor, default: ‘hry’
 >	* mot2_name: [optional] (string) the name of mot2, the most moving motor, default: ‘hrz’
+>	* ch0id: [optional] (string) the detector identifier mnemonic for channel00
+>	* ch2id: [optional] (string) the detector identifier mnemonic for channel02
+>	* i0id: [optional] (string) the identifier mnemonic for I0
+>	* i0corid: [optional] (string) If not None (default), the identifier mnemonic for the signal with which I0 should be corrected
+>	* i1id: [optional] (string) the identifier mnemonic for I1
+>	* i1corid: [optional] (string) If not None (default), the identifier mnemonic for the signal with which I1 should be corrected
+>	* icrid: [optional] (string) the identifier mnemonic for the detector ICR data
+>	* ocrid: [optional] (string) the identifier mnemonic for the detector OCR data
 >	* atol: [optional] (float) the absolute tolerance parameter as used by the numpy.allclose() function to determine the motor incremental direction. Default: None, which corresponds to 1e-4.
+>	* sort: [optional] (Boolean) if True (default) the data is sorted based on the corresponding motor positions
 >	* Returns False on error, on success stores data in a new h5 file.
 
->	`MergeP06Nxs(scanid, sort=True)`
+>	`MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02'])`
 >	* Scanid: (string) general scan directory path, e.g. '/data4/202010_p06_brenker/data/orl0/scan_00142'. A list of strings can be supplied to combine multiple scans into a single file.
 >	* Sort: [optional] (Boolean) if True, the data is ordered based on the sorting of mot1 and mot2. Sorting is required in order to obtain appropriate image results in case of e.g. snake scans. However, in some cases it is better to omit sorting in the merge step, and only do it after the fitting procedure (during data normalisation step), e.g. in the case of scans that are time triggered instead of motor position triggered.
+>	* ch0: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel00. Each list item can be another list in the case when multiple detectors should be summed for channel00 in the merged file (e.g. ch0 = ['xspress3_01', ['channel00','channel02']])
+>	* ch2: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel02. Each list item can be another list in the case when multiple detectors should be summed for channel02 in the merged file (e.g. ch2 = ['xspress3_01', ['channel00','channel02']])
 >	* Returns False on error, on success stores data in a new h5 file with suffix ‘_merge.h5’
 
 #### Fitting XRF data
