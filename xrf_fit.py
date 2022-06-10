@@ -1212,7 +1212,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
 # normalise IMS images to detector deadtime and I0 values.
 #   When I0norm is supplied, a (long) int should be provided to which I0 value one should normalise. Otherwise the max of the I0 map is used.
 #   tmnorm: sometimes the I0 values are not representative of acquisition time, then additional normalisation for acquisition time can be performed by setting tmnorm to True
-def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False):
+def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, halfpixshift=True):
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
     file = h5py.File(h5file, 'r+')
@@ -1356,13 +1356,14 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     if snake is True:
         print("Interpolating image for motor positions...", end=" ")
         if timetriggered is False:
-            pos_low = np.min(mot1[:,0])
-            pos_high = np.max(mot1[:,0])
-            for i in range(0, mot1[:,0].size): #correct for half a pixel shift
-                if mot1[i,0] <= np.average((pos_high,pos_low)):
-                    mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
-                else:
-                    mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
+            if halfpixshift is True:
+                pos_low = np.min(mot1[:,0])
+                pos_high = np.max(mot1[:,0])
+                for i in range(0, mot1[:,0].size): #correct for half a pixel shift
+                    if mot1[i,0] <= np.average((pos_high,pos_low)):
+                        mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
+                    else:
+                        mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
             mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
             mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
             ims0_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
@@ -1371,8 +1372,9 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 ims2_tmp = np.zeros((ims2.shape[0], ims2.shape[1], ims2.shape[2]))
                 ims2_err_tmp = np.zeros((ims2.shape[0], ims2.shape[1], ims2.shape[2]))
         if timetriggered is True:
-            # correct positions for half pixel shift
-            mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
+            if halfpixshift is True:
+                # correct positions for half pixel shift
+                mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
             # based on cmd determine regular grid positions
             mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(cmd[4]))
             mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(cmd[8])) 
@@ -2457,18 +2459,10 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
     # read h5id15 file(s)
     for j in range(0, scanid.size):
         if scanid.size == 1:
-            if i0corid is not None:
-                i0cor_dir = str(scanid).split('.')[0]+'.2/measurement/'+i0corid
-            if i1corid is not None:
-                i1cor_dir = str(scanid).split('.')[0]+'.2/measurement/'+i1corid
             sc_id = str(scanid)
             sc_dim = scan_dim
             file = h5id15[0]
         else:
-            if i0corid is not None:
-                i0cor_dir = scanid[j].split('.')[0]+'.2/measurement/'+i0corid
-            if i0corid is not None:
-                i1cor_dir = scanid[j].split('.')[0]+'.2/measurement/'+i1corid
             sc_id = str(scanid[j])
             file = h5id15[j]
             if scan_dim.size > 2:
@@ -2493,25 +2487,49 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
                 ocr2 = np.array(f[sc_id+'/measurement/'+ch2id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0 = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             if i0corid is not None:
-                i0cor = np.average(np.array(f[i0cor_dir][:]))
+                try:
+                    i0cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
+                except KeyError:
+                    try:
+                        i0cor = np.average(np.array(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
+                    except KeyError:
+                        print("***ERROR: no viable i0cor value obtained. Set to 1.")
+                        i0cor = 1.
                 i0 = i0/np.average(i0) * i0cor
             if i1id is not None:
                 i1 = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 if i1corid is not None:
-                    i1cor = np.average(np.array(f[i1cor_dir][:]))
+                    try:
+                        i1cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
+                    except KeyError:
+                        try:
+                            i1cor = np.average(np.array(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
+                        except KeyError:
+                            print("***ERROR: no viable i1cor value obtained. Set to 1.")
+                            i1cor = 1.
                     i1 = i1/np.average(i1) * i1cor
-            mot1 = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            mot2 = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            try:
+                mot1 = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot2 = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            except KeyError:
+                mot1 = np.array(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
+                mot2 = np.array(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
             tm = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             f.close()
 
             # find direction in which mot1 and mot2 increase  #TODO: this probably fails in case of line scans...
-            if np.allclose(mot1[0,:], mot1[1,:], atol=atol):
-                mot1_id = 1
+            if mot1.size > 1:
+                if np.allclose(mot1[0,:], mot1[1,:], atol=atol):
+                    mot1_id = 1
+                else:
+                    mot1_id = 0
             else:
                 mot1_id = 0
-            if np.allclose(mot2[0,:], mot2[1,:], atol=atol):
-                mot2_id = 1
+            if mot2.size > 1:
+                if np.allclose(mot2[0,:], mot2[1,:], atol=atol):
+                    mot2_id = 1
+                else:
+                    mot2_id = 0
             else:
                 mot2_id = 0
 
@@ -2535,15 +2553,33 @@ def h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch
                 ocr2_temp = np.array(f[sc_id+'/measurement/'+ch2id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0_temp = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             if i0corid is not None:
-                i0cor = np.average(np.array(f[i0cor_dir][:]))
+                try:
+                    i0cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
+                except KeyError:
+                    try:
+                        i0cor = np.average(np.array(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
+                    except KeyError:
+                        print("***ERROR: no viable i0cor value obtained. Set to 1.")
+                        i0cor = 1.
                 i0_temp = i0_temp/np.average(i0_temp) * i0cor
             if i1id is not None:
                 i1_temp = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 if i1corid is not None:
-                    i1cor = np.average(np.array(f[i1cor_dir][:]))
+                    try:
+                        i1cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
+                    except KeyError:
+                        try:
+                            i1cor = np.average(np.array(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
+                        except KeyError:
+                            print("***ERROR: no viable i1cor value obtained. Set to 1.")
+                            i1cor = 1.
                     i1_temp = i1_temp/np.average(i1_temp) * i1cor
-            mot1_temp = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            mot2_temp = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            try:
+                mot1_temp = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot2_temp = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            except KeyError:
+                mot1_temp = np.array(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
+                mot2_temp = np.array(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
             tm_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             f.close()
 
