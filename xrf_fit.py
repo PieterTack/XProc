@@ -1158,14 +1158,13 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
 ##############################################################################
 # make publish-worthy overview images of all fitted elements in h5file (including scale bars, colorbar, ...)
 # plot norm if present, otherwise plot fit/.../ims
-def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None):
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None, clim=None):
     import plotims
     filename = os.path.splitext(h5file)[0]
 
     imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
     imsdata0.data[imsdata0.data < 0] = 0.
     if log:
-        imsdata0.data = np.log10(imsdata0.data)
         filename += '_log'
     try:
         imsdata2 = plotims.read_h5(h5file, datadir+'/channel02/ims')
@@ -1174,8 +1173,6 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
         else:
             imsdata2.data[imsdata2.data < 0] = 0.
             chan02_flag = True
-            if log:
-                imsdata2.data = np.log10(imsdata2.data)
     except Exception:
         chan02_flag = False
  
@@ -1189,6 +1186,15 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
         imsdata0.data = np.flip(imsdata0.data, axis=0)
         if chan02_flag is True:
             imsdata2.data = np.flip(imsdata2.data, axis=0)
+            
+    # set plot options (color limits, clim) if appropriate
+    if clim is not None:
+        lowlim = np.min(imsdata0.data[:])+clim[0]*(np.max(imsdata0.data[:])-np.min(imsdata0.data[:]))
+        uplim = np.min(imsdata0.data[:])+clim[1]*(np.max(imsdata0.data[:])-np.min(imsdata0.data[:]))
+        if log:
+            lowlim = np.log10(lowlim)
+            uplim = np.log10(uplim)
+        plt_opts = plotims.Plot_opts(clim=[lowlim, uplim])
 
     sb_opts = plotims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
     if cb_opts is None:
@@ -1198,14 +1204,31 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
             cb_opts = plotims.Colorbar_opt(title='Int.;[cts]')
     nrows = int(np.ceil(len(imsdata0.names)/ncols)) # define nrows based on ncols
     colim_opts = plotims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
+
+    if log:
+        imsdata0.data = np.log10(imsdata0.data)
+
     
-    plotims.plot_colim(imsdata0, imsdata0.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch0_'+datadir+'_overview.png')
+    plotims.plot_colim(imsdata0, imsdata0.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png')
     
     if chan02_flag:
+        # set plot options (color limits, clim) if appropriate
+        if clim is not None:
+            lowlim = np.min(imsdata2.data[:])+clim[0]*(np.max(imsdata2.data[:])-np.min(imsdata2.data[:]))
+            uplim = np.min(imsdata2.data[:])+clim[1]*(np.max(imsdata2.data[:])-np.min(imsdata2.data[:]))
+            if log:
+                lowlim = np.log10(lowlim)
+                uplim = np.log10(uplim)
+            plt_opts = plotims.Plot_opts(clim=[lowlim, uplim])
+
+
         nrows = int(np.ceil(len(imsdata2.names)/ncols)) # define nrows based on ncols
         colim_opts = plotims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
+
+        if log:
+            imsdata2.data = np.log10(imsdata2.data)
         
-        plotims.plot_colim(imsdata2, imsdata2.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch2_'+datadir+'_overview.png')
+        plotims.plot_colim(imsdata2, imsdata2.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch2_'+datadir+'_overview.png')
 
 
 ##############################################################################
@@ -1670,29 +1693,36 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         mcafit.configure(config)
         if ncores is None or ncores == -1 or ncores == 0:
             ncores = multiprocessing.cpu_count()-1
-        print("Using "+str(ncores)+" cores...")
-        pool = multiprocessing.Pool(processes=ncores)
         spec_chansum = np.sum(spectra0, axis=2)
         spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
         spec2fit = np.array(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))[spec2fit_id,:]
-        results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
-        results = list(results)
-        groups = list(groups)
-        if groups[0] is None: #first element could be None, so let's search for first not-None item.
-            for i in range(0, np.array(groups, dtype='object').shape[0]):
-                if groups[i] is not None:
-                    groups[0] = groups[i]
-                    break
-        none_id = [i for i, x in enumerate(results) if x is None]
-        if none_id != []:
-            for i in range(0, np.array(none_id).size):
-                results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
-        peak_int0 = np.zeros((spectra0.shape[0]*spectra0.shape[1], np.array(groups[0]).shape[0]))
-        peak_int0[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
-        peak_int0 = np.moveaxis(peak_int0.reshape((spectra0.shape[0], spectra0.shape[1], np.array(groups[0]).shape[0])),-1,0)
-        peak_int0[np.isnan(peak_int0)] = 0.
-        pool.close()
-        pool.join()
+        if spectra0.shape[0]*spectra0.shape[1] > 1:
+            print("Using "+str(ncores)+" cores...")
+            pool = multiprocessing.Pool(processes=ncores)
+            results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
+            results = list(results)
+            groups = list(groups)
+            if groups[0] is None: #first element could be None, so let's search for first not-None item.
+                for i in range(0, np.array(groups, dtype='object').shape[0]):
+                    if groups[i] is not None:
+                        groups[0] = groups[i]
+                        break
+            none_id = [i for i, x in enumerate(results) if x is None]
+            if none_id != []:
+                for i in range(0, np.array(none_id).size):
+                    results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
+            peak_int0 = np.zeros((spectra0.shape[0]*spectra0.shape[1], np.array(groups[0]).shape[0]))
+            peak_int0[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
+            peak_int0 = np.moveaxis(peak_int0.reshape((spectra0.shape[0], spectra0.shape[1], np.array(groups[0]).shape[0])),-1,0)
+            peak_int0[np.isnan(peak_int0)] = 0.
+            pool.close()
+            pool.join()
+        else:
+            mcafit.setData(range(0,nchannels0), spectra0[0,0,:])
+            mcafit.estimate()
+            fitresult0, result0 = mcafit.startfit(digest=1)
+            peak_int0 = [result0[peak]["fitarea"] for peak in result0["groups"]]
+            
         
         #fit sumspec
         mcafit.setData(range(0,nchannels0), sumspec0)
@@ -1715,28 +1745,34 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
             mcafit = ClassMcaTheory.ClassMcaTheory()
             mcafit.configure(config)
-            pool = multiprocessing.Pool(processes=ncores)
             spec_chansum = np.sum(spectra2, axis=2)
             spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
             spec2fit = np.array(spectra2).reshape((spectra2.shape[0]*spectra2.shape[1], spectra2.shape[2]))[spec2fit_id,:]
-            results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
-            results = list(results)
-            groups = list(groups)
-            if groups[0] is None: #first element could be None, so let's search for first not-None item.
-                for i in range(0, np.array(groups, dtype='object').shape[0]):
-                    if groups[i] is not None:
-                        groups[0] = groups[i]
-                        break
-            none_id = [i for i, x in enumerate(results) if x is None]
-            if none_id != []:
-                for i in range(0, np.array(none_id).size):
-                    results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
-            peak_int2 = np.zeros((spectra2.shape[0]*spectra2.shape[1], np.array(groups[0]).shape[0]))
-            peak_int2[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
-            peak_int2 = np.moveaxis(peak_int2.reshape((spectra2.shape[0], spectra2.shape[1], np.array(groups[0]).shape[0])),-1,0)
-            peak_int2[np.isnan(peak_int2)] = 0.
-            pool.close()
-            pool.join()
+            if spectra2.shape[0]*spectra2.shape[1] > 1:
+                pool = multiprocessing.Pool(processes=ncores)
+                results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
+                results = list(results)
+                groups = list(groups)
+                if groups[0] is None: #first element could be None, so let's search for first not-None item.
+                    for i in range(0, np.array(groups, dtype='object').shape[0]):
+                        if groups[i] is not None:
+                            groups[0] = groups[i]
+                            break
+                none_id = [i for i, x in enumerate(results) if x is None]
+                if none_id != []:
+                    for i in range(0, np.array(none_id).size):
+                        results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
+                peak_int2 = np.zeros((spectra2.shape[0]*spectra2.shape[1], np.array(groups[0]).shape[0]))
+                peak_int2[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
+                peak_int2 = np.moveaxis(peak_int2.reshape((spectra2.shape[0], spectra2.shape[1], np.array(groups[0]).shape[0])),-1,0)
+                peak_int2[np.isnan(peak_int2)] = 0.
+                pool.close()
+                pool.join()
+            else:
+                mcafit.setData(range(0,nchannels0), spectra2[0,0,:])
+                mcafit.estimate()
+                fitresult2, result2 = mcafit.startfit(digest=1)
+                peak_int2 = [result2[peak]["fitarea"] for peak in result2["groups"]]
 
             #fit sumspec
             mcafit.setData(range(0,nchannels2), sumspec2)
