@@ -198,13 +198,17 @@ When calling this routine, make sure h5file is not accessed by any other program
 Xrf_proc also has convenient, built-in functions to plot and save the (normalised) fitted data images. 
 Data is plotted in a collated image, with intensity and scale bars. The viridis colour scale is used.
 
->	`hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False)`
+>	`hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None, clim=None)`
 >	* h5file: (string) The uniformly structured h5 file path containing the data to plot.
 >	* datadir: (string) The data directory within the h5 file containing the information to plot, e.g. ‘norm’
 >	* ncols: (int) The amount of columns to distribute the elemental distribution images in on the collated image.
 >	* pix_size: (float) The size of a single pixel along the horizontal direction of the scan, in µm.
 >	* scl_size: (float) The size of the scale bare to draw on the images along the horizontal direction of the scan, in µm.
 >	* log: [optional] (Boolean) True to plot the intensity as a log10 scale. False (default) for a linear scale.
+>	* rotate: [optional] (int) default is 0 (no rotation). An amount of degrees (rounded to the nearest 90) with which the image should be rotated, following the numpy.rot90() function.
+>	* fliph: [optional] (Boolean) Default is False, set True to flip the image horizontally. This operation is performed after rotation, when requested.
+>	* cb_opts: [optional] (plotims.Colorbar_opt class). When None (default) the default colorbar settings of plotims are used.
+>	* clim: [optional] (list of 2 floats) Default is None. If not None, the image intensities will be limited between the fractions defined by clim as follows: [lower limit, upper limit]. It is advised to use values between 0 and 1, e.g. clim=[0.1, 0.9] to limit the image values between min+0.1*(max-min) and min+0.9*(max-min)
 
 The function automatically plots channel00 detector channel. If present, also plots the channel02. Images are stored as .png files with suffix ‘_ch0_overview.png’ and ‘_ch2_overview.png’ respectively, optionally preceded by ‘_log’ in case of log scaling.
 
