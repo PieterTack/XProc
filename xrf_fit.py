@@ -1189,12 +1189,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
             
     # set plot options (color limits, clim) if appropriate
     if clim is not None:
-        lowlim = np.min(imsdata0.data[:])+clim[0]*(np.max(imsdata0.data[:])-np.min(imsdata0.data[:]))
-        uplim = np.min(imsdata0.data[:])+clim[1]*(np.max(imsdata0.data[:])-np.min(imsdata0.data[:]))
-        if log:
-            lowlim = np.log10(lowlim)
-            uplim = np.log10(uplim)
-        plt_opts = plotims.Plot_opts(clim=[lowlim, uplim])
+        plt_opts = plotims.Plot_opts(clim=clim)
 
     sb_opts = plotims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
     if cb_opts is None:
@@ -1214,12 +1209,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
     if chan02_flag:
         # set plot options (color limits, clim) if appropriate
         if clim is not None:
-            lowlim = np.min(imsdata2.data[:])+clim[0]*(np.max(imsdata2.data[:])-np.min(imsdata2.data[:]))
-            uplim = np.min(imsdata2.data[:])+clim[1]*(np.max(imsdata2.data[:])-np.min(imsdata2.data[:]))
-            if log:
-                lowlim = np.log10(lowlim)
-                uplim = np.log10(uplim)
-            plt_opts = plotims.Plot_opts(clim=[lowlim, uplim])
+            plt_opts = plotims.Plot_opts(clim=clim)
 
 
         nrows = int(np.ceil(len(imsdata2.names)/ncols)) # define nrows based on ncols
