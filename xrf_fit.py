@@ -1190,6 +1190,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
     # set plot options (color limits, clim) if appropriate
     if clim is not None:
         plt_opts = plotims.Plot_opts(clim=clim)
+    else:
+        plt_opts = None
 
     sb_opts = plotims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
     if cb_opts is None:
@@ -1210,6 +1212,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
         # set plot options (color limits, clim) if appropriate
         if clim is not None:
             plt_opts = plotims.Plot_opts(clim=clim)
+        else:
+            plt_opts = None
 
 
         nrows = int(np.ceil(len(imsdata2.names)/ncols)) # define nrows based on ncols
