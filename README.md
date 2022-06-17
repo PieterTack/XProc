@@ -8,12 +8,12 @@ The repository can be easily installed using the following command in a (unix) t
 ### Using xrf_proc
 Xrf_proc is a python based API that should be used for XRF spectral integration (making use of PyMca5 routines), and subsequent data processing.
 Relies on the following packages:
-* PyMca5
+* PyMca5 v5.3 or higher
 * plotims (https://github.com/PieterTack/plotims)
 * numpy
 * scipy
 * h5py
-* matplotlib
+* matplotlib v3.1 or higher
 
 optional:
 * tomopy (required for ct reconstruction)
