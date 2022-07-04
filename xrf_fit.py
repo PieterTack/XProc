@@ -1244,12 +1244,19 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     mot2 = np.array(file['mot2'])
     mot2_name = str(file['mot2'].attrs["Name"])
     cmd = str(np.array(file['cmd'])).split(' ')
-    if len(ims0.shape) == 2:
-        ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
-        I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
-        tm = tm.reshape((np.squeeze(tm).shape[0], 1))
-        mot1 = mot1.reshape((np.squeeze(mot1).shape[0], 1))
-        mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
+    if len(ims0.shape) == 2 or len(ims0.shape) == 1:
+        if len(ims0.shape) == 2:
+            ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
+            I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
+            tm = tm.reshape((np.squeeze(tm).shape[0], 1))
+            mot1 = mot1.reshape((np.squeeze(mot1).shape[0], 1))
+            mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
+        else:
+            ims0 = ims0.reshape((ims0.shape[0],1, 1))
+            I0 = I0.reshape((I0.shape[0], 1))
+            tm = tm.reshape((tm.shape[0], 1))
+            mot1 = mot1.reshape((mot1.shape[0], 1))
+            mot2 = mot2.reshape((mot2.shape[0], 1))
         if I0.shape[0] > ims0.shape[1]:
             I0 = I0[0:ims0.shape[1],:]
         if tm.shape[0] > ims0.shape[1]:
@@ -1258,14 +1265,17 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             mot1 = mot1[0:ims0.shape[1],:]
         if mot2.shape[0] > ims0.shape[1]:
             mot2 = mot2[0:ims0.shape[1],:]
-        if cmd[0] != "b'timescanc" and cmd[0] != "b'dscan" and cmd[0] != "timescanc" and cmd[0] != "dscan":
+        if cmd[0] != "b'timescanc" and cmd[0] != "b'dscan" and cmd[0] != "timescanc" and cmd[0] != "dscan" and cmd[0] != "c" and cmd[0] != "b'c":
             print(cmd[0])
             snake = True
             timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
+
     try:
         ims2 = np.squeeze(np.array(file['fit/channel02/ims']))
         if len(ims2.shape) == 2:
             ims2 = ims2.reshape((ims2.shape[0], ims2.shape[1], 1))
+        elif len(ims2.shape) == 1:
+            ims2 = ims2.reshape((ims2.shape[0],1,1))
         names2 = file['fit/channel02/names']
         sum_fit2 = np.array(file['fit/channel02/sum/int'])
         sum_bkg2 = np.array(file['fit/channel02/sum/bkg'])
@@ -1715,7 +1725,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             mcafit.setData(range(0,nchannels0), spectra0[0,0,:])
             mcafit.estimate()
             fitresult0, result0 = mcafit.startfit(digest=1)
-            peak_int0 = [result0[peak]["fitarea"] for peak in result0["groups"]]
+            peak_int0 = np.asarray([result0[peak]["fitarea"] for peak in result0["groups"]])
+            peak_int0 = peak_int0.reshape((peak_int0.shape[0],1,1))
             
         
         #fit sumspec
@@ -1766,7 +1777,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
                 mcafit.setData(range(0,nchannels0), spectra2[0,0,:])
                 mcafit.estimate()
                 fitresult2, result2 = mcafit.startfit(digest=1)
-                peak_int2 = [result2[peak]["fitarea"] for peak in result2["groups"]]
+                peak_int2 = np.asarray([result2[peak]["fitarea"] for peak in result2["groups"]])
+                peak_int2 = peak_int2.reshape((peak_int2.shape[0],1,1))
 
             #fit sumspec
             mcafit.setData(range(0,nchannels2), sumspec2)
