@@ -470,15 +470,15 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 elif line[0] == 'M':
                     line = xraylib.M5N7_LINE #Ma1
                 for i in range(0, len(cnc.z)):
-                    mu[n] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
+                    mu[n] += xraylib.CS_Total(int(cnc.z[i]), xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
             mu_ka1 = np.zeros(len(absorb_el))
             mu_kb1 = np.zeros(len(absorb_el))
             rate_ka1 = np.zeros(len(absorb_el))
             rate_kb1 = np.zeros(len(absorb_el))
             for j in range(len(absorb_el)):
                 for i in range(0, len(cnc.z)):
-                    mu_ka1[j] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KL3_LINE)) * cnc.conc[i]/1E6
-                    mu_kb1[j] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KM3_LINE)) * cnc.conc[i]/1E6
+                    mu_ka1[j] += xraylib.CS_Total(int(cnc.z[i]), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KL3_LINE)) * cnc.conc[i]/1E6
+                    mu_kb1[j] += xraylib.CS_Total(int(cnc.z[i]), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KM3_LINE)) * cnc.conc[i]/1E6
                 # determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
                 rate_ka1[j] = xraylib.RadRate(xraylib.SymbolToAtomicNumber(absorb_el[j]), xraylib.KL3_LINE)
                 rate_kb1[j] = xraylib.RadRate(xraylib.SymbolToAtomicNumber(absorb_el[j]), xraylib.KM3_LINE)
