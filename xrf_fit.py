@@ -409,7 +409,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         if len(h5_spectra.shape) == 2:
             h5_spectra = h5_spectra.reshape((h5_spectra.shape[0], 1, h5_spectra.shape[1]))
         elif len(h5_spectra.shape) == 1:
-            h5_spectra = h5_spectra.reshape((1, 1, h5_spectra.shape[1]))
+            h5_spectra = h5_spectra.reshape((1, 1, h5_spectra.shape[0]))
     if snake is True:
         mot1 = np.asarray(file['mot1'])
         mot2 = np.asarray(file['mot2'])
