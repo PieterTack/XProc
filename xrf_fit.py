@@ -406,6 +406,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     if absorb is not None:
         h5_spectra = np.asarray(file['raw/'+channel+'/spectra'])
         h5_cfg = file['fit/'+channel+'/cfg'][()].decode('utf8')
+        if len(h5_spectra.shape) == 2:
+            h5_spectra = h5_spectra.reshape((h5_spectra.shape[0], 1, h5_spectra.shape[1]))
+        elif len(h5_spectra.shape) == 1:
+            h5_spectra = h5_spectra.reshape((1, 1, h5_spectra.shape[0]))
     if snake is True:
         mot1 = np.asarray(file['mot1'])
         mot2 = np.asarray(file['mot2'])
@@ -470,15 +474,15 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 elif line[0] == 'M':
                     line = xraylib.M5N7_LINE #Ma1
                 for i in range(0, len(cnc.z)):
-                    mu[n] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
+                    mu[n] += xraylib.CS_Total(int(cnc.z[i]), xraylib.LineEnergy(el, line)) * cnc.conc[i]/1E6
             mu_ka1 = np.zeros(len(absorb_el))
             mu_kb1 = np.zeros(len(absorb_el))
             rate_ka1 = np.zeros(len(absorb_el))
             rate_kb1 = np.zeros(len(absorb_el))
             for j in range(len(absorb_el)):
                 for i in range(0, len(cnc.z)):
-                    mu_ka1[j] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KL3_LINE)) * cnc.conc[i]/1E6
-                    mu_kb1[j] += xraylib.CS_Total(cnc.z[i].astype(int), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KM3_LINE)) * cnc.conc[i]/1E6
+                    mu_ka1[j] += xraylib.CS_Total(int(cnc.z[i]), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KL3_LINE)) * cnc.conc[i]/1E6
+                    mu_kb1[j] += xraylib.CS_Total(int(cnc.z[i]), xraylib.LineEnergy(xraylib.SymbolToAtomicNumber(absorb_el[j]),xraylib.KM3_LINE)) * cnc.conc[i]/1E6
                 # determine the theoretical Ka - Kb ratio of the chosen element (absorb[0])
                 rate_ka1[j] = xraylib.RadRate(xraylib.SymbolToAtomicNumber(absorb_el[j]), xraylib.KL3_LINE)
                 rate_kb1[j] = xraylib.RadRate(xraylib.SymbolToAtomicNumber(absorb_el[j]), xraylib.KM3_LINE)
@@ -511,8 +515,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         for j in range(len(absorb_el)):
             # calculate Ka-Kb ratio for each experimental spectrum
                 # Ka1 and Kb1 channel number
-            idx_ka1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KL3'))[-1])
-            idx_kb1 = max(np.where(np.arange(h5_spectra.shape[2])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KM3'))[-1])
+            idx_ka1 = max(np.where(np.arange(h5_spectra.shape[-1])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KL3'))[-1])
+            idx_kb1 = max(np.where(np.arange(h5_spectra.shape[-1])*cfg[1]+cfg[0] <= Elements.getxrayenergy(absorb_el[j],'KM3'))[-1])
             # remove 0 and negative value to avoid division errors. On those points set ka1/kb1 ratio == rate_ka1/rate_kb1
             int_ka1 = np.sum(h5_spectra[:,:,int(np.round(idx_ka1-3)):int(np.round(idx_ka1+3))], axis=2)
             int_ka1[np.where(int_ka1 < 1.)] = 1.
