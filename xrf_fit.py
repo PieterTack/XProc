@@ -1726,7 +1726,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         # channel00
         config = ConfigDict.ConfigDict()
         config.read(cfg0)
-        config['fit']['use_limit'] = 1 # makmot1e sure the limits of the configuration will be taken
+        config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
         mcafit = ClassMcaTheory.ClassMcaTheory()
         mcafit.configure(config)
         if ncores is None or ncores == -1 or ncores == 0:
@@ -1775,7 +1775,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             if names0[i] == 'A'+str(i):
                 cutid0 = i+1
         sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
-        sum_bkg0 = [result0_sum[peak]["statmot1istics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
+        sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
 
         if chan02_flag:
             # channel02
