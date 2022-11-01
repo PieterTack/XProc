@@ -1233,7 +1233,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
 # normalise IMS images to detector deadtime and I0 values.
 #   When I0norm is supplied, a (long) int should be provided to which I0 value one should normalise. Otherwise the max of the I0 map is used.
 #   tmnorm: sometimes the I0 values are not representative of acquisition time, then additional normalisation for acquisition time can be performed by setting tmnorm to True
-def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, halfpixshift=True):
+def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, halfpixshift=True, mot2nosort=False):
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
     file = h5py.File(h5file, 'r+')
@@ -1266,9 +1266,13 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         if tm.shape[0] > ims0.shape[1]:
             tm = tm[0:ims0.shape[1],:]
         if mot1.shape[0] > ims0.shape[1]:
-            mot1 = mot1[0:ims0.shape[1],:]
+            mot1 = mot1[0:ims0.shape[1],:]            
         if mot2.shape[0] > ims0.shape[1]:
             mot2 = mot2[0:ims0.shape[1],:]
+        if ims0.shape[1] > mot1.shape[0]:
+            ims0 = ims0[:,0:mot1.shape[0],:]      
+            I0 = I0[0:mot1.shape[0],:]
+            tm = tm[0:mot1.shape[0],:]            
         if cmd[0] != "b'timescanc" and cmd[0] != "b'dscan" and cmd[0] != "timescanc" and cmd[0] != "dscan" and cmd[0] != "c" and cmd[0] != "b'c":
             print(cmd[0])
             snake = True
@@ -1280,6 +1284,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             ims2 = ims2.reshape((ims2.shape[0], ims2.shape[1], 1))
         elif len(ims2.shape) == 1:
             ims2 = ims2.reshape((ims2.shape[0],1,1))
+            if ims2.shape[1] > mot1.shape[0]:
+                ims2 = ims2[:,0:mot1.shape[0],:]            
         names2 = file['fit/channel02/names']
         sum_fit2 = np.array(file['fit/channel02/sum/int'])
         sum_bkg2 = np.array(file['fit/channel02/sum/bkg'])
@@ -1312,15 +1318,16 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             if chan02_flag:
                 ims2[:,i,:] = ims2[:,i,sort_id]
         # To make sure (especially when merging scans) sort mot2 as well
-        for i in range(mot2[0,:].size):
-            sort_id = np.argsort(mot2[:,i])
-            ims0[:,:,i] = ims0[:,sort_id,i]
-            mot1[:,i] = mot1[sort_id,i]
-            mot2[:,i] = mot2[sort_id,i]
-            I0[:,i] = I0[sort_id,i]
-            tm[:,i] = tm[sort_id,i]
-            if chan02_flag:
-                ims2[:,:,i] = ims2[:,sort_id,i]
+        if mot2nosort is not True:
+            for i in range(mot2[0,:].size):
+                sort_id = np.argsort(mot2[:,i])
+                ims0[:,:,i] = ims0[:,sort_id,i]
+                mot1[:,i] = mot1[sort_id,i]
+                mot2[:,i] = mot2[sort_id,i]
+                I0[:,i] = I0[sort_id,i]
+                tm[:,i] = tm[sort_id,i]
+                if chan02_flag:
+                    ims2[:,:,i] = ims2[:,sort_id,i]
         try:
             del file['fit/channel00/ims']
             del file['raw/I0']
@@ -1423,31 +1430,35 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         x = mot1.ravel()
         y = mot2.ravel()
 
-        #import matplotlib.pyplot as plt
-        #plt.imshow(mot1_tmp)
-        #plt.colorbar()
-        #plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
-        #plt.close()
-        #plt.imshow(mot2_tmp)
-        #plt.colorbar()
-        #plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
-        #plt.close()
-        #plt.imshow(ims0[8,0:255530].reshape((505,506)))
-        #plt.colorbar()
-        #plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
-        #plt.close()
+        # import matplotlib.pyplot as plt
+        # plt.imshow(mot1_tmp)
+        # plt.colorbar()
+        # plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
+        # plt.close()
+        # plt.imshow(mot2_tmp)
+        # plt.colorbar()
+        # plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
+        # plt.close()
+        # plt.imshow(ims0[8,0:255530].reshape((505,506)))
+        # plt.colorbar()
+        # plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
+        # plt.close()
 
         for i in range(names0.size):
             values = ims0[i,:,:].ravel()
-            ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-            ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            # ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            # ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+            ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='nearest').T
+            ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
         ims0 = np.nan_to_num(ims0_tmp)
         ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
         if chan02_flag:
             for i in range(names2.size):
                 values = ims2[i,:,:].ravel()
-                ims2_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-                ims2_err_tmp[i,:,:] = griddata((x, y), ims2_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                # ims2_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                # ims2_err_tmp[i,:,:] = griddata((x, y), ims2_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                ims2_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='nearest').T
+                ims2_err_tmp[i,:,:] = griddata((x, y), ims2_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
             ims2 = np.nan_to_num(ims2_tmp)
             ims2_err = np.nan_to_num(ims2_err_tmp)*ims2
         print("Done")
@@ -1506,9 +1517,13 @@ def rm_line(h5file, lineid, axis=1):
     mot2_name = str(f['mot2'].attrs["Name"])
     tm = np.array(f['raw/acquisition_time'])
     spectra0 = np.array(f['raw/channel00/spectra'])
+    icr0 = np.array(f['raw/channel00/icr'])
+    ocr0 = np.array(f['raw/channel00/ocr'])
     try:
         spectra2 = np.array(f['raw/channel02/spectra'])
         chan02_flag = True
+        icr2 = np.array(f['raw/channel02/icr'])
+        ocr2 = np.array(f['raw/channel02/ocr'])
     except KeyError:
         chan02_flag = False
     try:
@@ -1519,18 +1534,25 @@ def rm_line(h5file, lineid, axis=1):
     except KeyError:
         fit_flag = False
 
-    ims0 = np.delete(ims0, lineid, axis+1)
-    ims2 = np.delete(ims2, lineid, axis+1)
+    if fit_flag:
+        ims0 = np.delete(ims0, lineid, axis+1)
     spectra0 = np.delete(spectra0, lineid, axis)
-    spectra2 = np.delete(spectra2, lineid, axis)
+    icr0 = np.delete(icr0, lineid, axis)
+    ocr0 = np.delete(ocr0, lineid, axis)
     i0 = np.delete(i0, lineid, axis)
     i1 = np.delete(i1, lineid, axis)
     mot1 = np.delete(mot1, lineid, axis)
     mot2 = np.delete(mot2, lineid, axis)
     tm = np.delete(tm, lineid, axis)
+    if chan02_flag:
+        if fit_flag:
+            ims2 = np.delete(ims2, lineid, axis+1)
+        spectra2 = np.delete(spectra2, lineid, axis)
+        icr2 = np.delete(icr2, lineid, axis)
+        ocr2 = np.delete(ocr2, lineid, axis)
 
     # save the data
-    print("Writing fit data to "+h5file+"...", end=" ")
+    print("Writing truncated data to "+h5file+"...", end=" ")
     if fit_flag:
         del f['fit/channel00/ims']
         f.create_dataset('fit/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
@@ -1539,11 +1561,15 @@ def rm_line(h5file, lineid, axis=1):
             f.create_dataset('fit/channel02/ims', data=ims2, compression='gzip', compression_opts=4)
         
     del f['raw/channel00/spectra']
+    del f['raw/channel00/icr']
+    del f['raw/channel00/ocr']
     del f['raw/I0']
     del f['mot1']
     del f['mot2']
     del f['raw/acquisition_time']
     f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
     dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
     dset.attrs['Name'] = mot1_name
@@ -1555,7 +1581,11 @@ def rm_line(h5file, lineid, axis=1):
         f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
     if chan02_flag:
         del f['raw/channel02/spectra']
+        del f['raw/channel02/icr']
+        del f['raw/channel02/ocr']
         f.create_dataset('raw/channel02/spectra', data=spectra2, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel02/icr', data=icr2, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel02/ocr', data=ocr2, compression='gzip', compression_opts=4)
         
     f.close()
     print('Done')
@@ -2075,7 +2105,7 @@ def read_P06_spectra(file, sc_id, ch):
     
 ##############################################################################
 # Merges separate P06 nxs files to 1 handy h5 file containing 2D array of spectra, relevant motor positions, I0 counter, ICR, OCR and mesaurement time.
-def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02']):
+def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02'], readas1d=False):
     scanid = np.array(scanid)
     if scanid.size == 1:
         scan_suffix = '/'.join(str(scanid).split('/')[0:-2])+'/scan'+str(scanid).split("_")[-1]
@@ -2280,7 +2310,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
         ydim = 1
         if scan_cmd.shape[0] > 7:
             ydim = int(scan_cmd[8])+1
-        if np.asarray(spectra0).shape[0] == xdim*ydim:
+        if np.asarray(spectra0).shape[0] == xdim*ydim and readas1d is not True:
             spectra0 = np.asarray(spectra0)
             spectra0 = spectra0.reshape((ydim, xdim, spectra0.shape[1]))
             icr0 = np.asarray(icr0).reshape((ydim, xdim))
@@ -2297,7 +2327,7 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             mot1 = np.asarray(mot1[0:xdim*ydim]).reshape((ydim, xdim))
             mot2 = np.asarray(mot2[0:xdim*ydim]).reshape((ydim, xdim))
             timetrig = False
-        elif np.asarray(spectra0).shape[0] < xdim*ydim:
+        elif np.asarray(spectra0).shape[0] < xdim*ydim and readas1d is not True:
             spectra0 = np.asarray(spectra0)
             zerosize = xdim*ydim-spectra0.shape[0]
             zeros = np.zeros((zerosize, spectra0.shape[1]))
@@ -2326,12 +2356,12 @@ def MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspres
             sort = False
             timetrig = True
         if ch2 is not None:
-            if np.asarray(spectra2).shape[0] == xdim*ydim:
+            if np.asarray(spectra2).shape[0] == xdim*ydim and readas1d is not True:
                 spectra2 = np.asarray(spectra2)
                 spectra2 = spectra2.reshape((ydim, xdim, spectra2.shape[1]))
                 icr2 = np.asarray(icr2).reshape((ydim, xdim))
                 ocr2 = np.asarray(ocr2).reshape((ydim, xdim))
-            elif np.asarray(spectra2).shape[0] < xdim*ydim:
+            elif np.asarray(spectra2).shape[0] < xdim*ydim and readas1d is not True:
                 spectra2 = np.asarray(spectra2)
                 zerosize = xdim*ydim-spectra2.shape[0]
                 zeros = np.zeros((zerosize, spectra2.shape[1]))
