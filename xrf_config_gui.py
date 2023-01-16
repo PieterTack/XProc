@@ -29,9 +29,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import QApplication, QWidget, QDialog
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
-from PyQt5.QtWidgets import QCheckBox, QPushButton, QLabel, QCheckBox, \
-    QLineEdit, QTabWidget, QFileDialog, QComboBox, QTreeWidget, QTreeWidgetItem, \
-    QScrollArea
+from PyQt5.QtWidgets import QCheckBox, QPushButton, QLabel, QScrollArea, \
+    QLineEdit, QTabWidget, QFileDialog, QComboBox, QTreeWidget, QTreeWidgetItem
     
 
 class Poll_h5dir():
