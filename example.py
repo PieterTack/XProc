@@ -62,11 +62,12 @@ def tomo_reconstruction():
 #%%
 def correlation_plots():
     import h5py
+    import numpy as np
     
     f = h5py.File('dir/preppedfile.h5','r')
     data = np.moveaxis(np.array(f['tomo/channel02/slices']),0,-1)
     data[np.isnan(data)] = 0.
-    names = [n.decode('utf8') for n in f['tomo/channel02/names']]
+    names = [n.decode('utf8') for n in f['tomo/channel01/names']]
     f.close()
     print([names[i] for i in [1,2,3,4,5,6,8,9,14]])
     Ims.plot_correl(data, names, el_id=[1,2,3,4,5,6,8,9,14], save='dir/preppedfile_correlation.png')
