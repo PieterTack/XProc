@@ -24,11 +24,10 @@ Install using:
 pip install numpy
 pip install scipy
 pip install h5py
-pip install PySide2
 pip install PyMca5
 pip install PyQt5
 conda install -c conda-forge tomopy
-conda install -c conda-forge xraylib=4.1.0
+conda install -c conda-forge xraylib
 ```
 
 #### Uniform h5 file structure
@@ -46,7 +45,7 @@ For convenient data processing, it is advised to use a uniform data structure. U
 			- `ocr`	nD array of outgoing count rates/point
 			- `spectra`	(n+1)D array containing the spectra for each point. Shape: M×N×C (C=#detector channels)
 			- `sumspec`	the sum spectrum of all measurement points
-		- `channel02` [optional] the same structure of channel00 is applied here for channel02 if a second detector channel was available.
+		- `channel01` [optional] the same structure of channel00 is applied here for channel02 if a second detector channel was available.
 	- `mot1`	nD array containing mot1 motor positions (snakemesh motor)
 	- `mot2`	nD array containing mot2 motor positions
 
@@ -60,7 +59,7 @@ For convenient data processing, it is advised to use a uniform data structure. U
 			- `sum`
 				- `bkg`	background intensities for each integrated line of the sum spectrum, as defined by the fitting algorithm. For PyMca this is the background in the range of 3-sigma around the centre peak value
 				- `int`	peak intensities for each line from the sum spectrum
-		- `channel02` [optional]
+		- `channel01` [optional]
 	- `norm`	contains normalised data. Normalisation here includes corrections for I0, acquisition time, detector dead time. Normalisations for e.g. Compton intensity or self-absorption are preserved for the quantification step.
 		- `I0`		I0 value to which each data point is normalised
 		- `channel00`
@@ -84,7 +83,7 @@ For convenient data processing, it is advised to use a uniform data structure. U
 					- `data`	array containing the detection limits for 1s live time acquisition time as calculated from the sum spectrum data
 					- `stddev`	absolute 1-sigma standard error on the detection limits
 				- `names`	string array containing the element lines’ names (e.g. ‘Fe K’), the string is encoded as a ‘utf8’ for writing, so use `[n.decode(‘utf8’) for n in names]` to use in python scripts
-			- `channel02` [optional]
+			- `channel01` [optional]
 		- `unit`		The unit in which all detection limits and errors are expressed (default: ppm)
 	- `elyield`	contains the elemental yields for a given reference material and fluorescence line. (typical unit: ppm/ct/s)
 		- `<cncfile>`		the name of the used cnc file
@@ -92,7 +91,7 @@ For convenient data processing, it is advised to use a uniform data structure. U
 				- `names`	string array containing the element lines’ names (e.g. ‘Fe K’)
 				- `stddev`	absolute 1-sigma standard error on the elemental yield
 				- `yield`	array containing the elemental yields. The corresponding unit is defined as an attribute (typically ppm/ct/s)
-			- `channel02` [optional]
+			- `channel01` [optional]
 	- `quant`	contains the quantified data
 		- `channel<XX>`
 			- `ims`		(n+1)D array of quantified peak intensities for each measurement point. Shape: C×M×N (C=#lines)
@@ -137,7 +136,7 @@ import xrf_fit as Fit
 ```
   
 Functions can then be used following, e.g.:
-`Fit.h5id15convert(arg1)`
+`Fit.ReformID15H5(arg1)`
 
 Due to differences in beamline data formats, typically separate “conversion” functions are required for different beamlines. Currently, the following functions are supported:
 
@@ -159,7 +158,7 @@ Due to differences in beamline data formats, typically separate “conversion”
 >	* sort: [optional] (Boolean) if True (default) the data is sorted based on the corresponding motor positions
 >	* Returns False on error, on success stores data in a new h5 file.
 
->	`MergeP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02'])`
+>	`ReformP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02'])`
 >	* Scanid: (string) general scan directory path, e.g. '/data4/202010_p06_brenker/data/orl0/scan_00142'. A list of strings can be supplied to combine multiple scans into a single file.
 >	* Sort: [optional] (Boolean) if True, the data is ordered based on the sorting of mot1 and mot2. Sorting is required in order to obtain appropriate image results in case of e.g. snake scans. However, in some cases it is better to omit sorting in the merge step, and only do it after the fitting procedure (during data normalisation step), e.g. in the case of scans that are time triggered instead of motor position triggered.
 >	* ch0: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel00. Each list item can be another list in the case when multiple detectors should be summed for channel00 in the merged file (e.g. ch0 = ['xspress3_01', ['channel00','channel02']])
@@ -322,13 +321,13 @@ import plotims as Ims
 
 
 def prepare_p06():
-    Fit.MergeP06Nxs('dir/ref/scan_00001')
-    Fit.MergeP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
+    Fit.ReformP06Nxs('dir/ref/scan_00001')
+    Fit.ReformP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
 
 
 def prepare_id15():
-    Fit.h5id15convert('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
-    Fit.h5id15convert('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
+    Fit.ReformID15H5('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
+    Fit.ReformID15H5('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
 #%%
 def fast_process():
     # fit the spectra usin linear fast fit (cfg file must be SNIP background!)
@@ -364,18 +363,18 @@ def precise_process():
 def tomo_reconstruction():
     import tomo_proc
     
-    # calculate tomographic reconstruction for 'channel02' signal of 'norm' data
+    # calculate tomographic reconstruction for 'channel01' signal of 'norm' data
     #       estimate centre of rotation value based from 'Sr-K' signal
     #       display final reconstruction images in collimated overview style with 8 colums
-    tomo_proc.h5_tomo_proc('dir/preppedfile.h5', rot_mot='mot2', channel='channel02', signal='Sr-K', rot_centre=None, ncol=8)
+    tomo_proc.h5_tomo_proc('dir/preppedfile.h5', rot_mot='mot2', channel='channel01', signal='Sr-K', rot_centre=None, ncol=8)
 #%%
 def correlation_plots():
     import h5py
     
     f = h5py.File('dir/preppedfile.h5','r')
-    data = np.moveaxis(np.array(f['tomo/channel02/slices']),0,-1)
+    data = np.moveaxis(np.array(f['tomo/channel01/slices']),0,-1)
     data[np.isnan(data)] = 0.
-    names = [n.decode('utf8') for n in f['tomo/channel02/names']]
+    names = [n.decode('utf8') for n in f['tomo/channel01/names']]
     f.close()
     print([names[i] for i in [1,2,3,4,5,6,8,9,14]])
     Ims.plot_correl(data, names, el_id=[1,2,3,4,5,6,8,9,14], save='dir/preppedfile_correlation.png')
