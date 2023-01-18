@@ -1821,7 +1821,7 @@ def Pymca_fit(spectra, mcafit, verbose=None):
 
 ##############################################################################
 # Read the Delta Premium handheld CSV files and restructure as H5 for further processing
-def ReformDeltaCsv(csvfile):
+def ConvDeltaCsv(csvfile):
     import pandas as pd
     
     file = pd.read_csv(csvfile, header=None)
@@ -2012,7 +2012,7 @@ def read_P06_spectra(file, sc_id, ch):
     
 ##############################################################################
 # Merges separate P06 nxs files to 1 handy h5 file containing 2D array of spectra, relevant motor positions, I0 counter, ICR, OCR and mesaurement time.
-def ReformP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=['xspress3_01','channel02'], readas1d=False):
+def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=['xspress3_01','channel02'], readas1d=False):
     scanid = np.array(scanid)
     if scanid.size == 1:
         scan_suffix = '/'.join(str(scanid).split('/')[0:-2])+'/scan'+str(scanid).split("_")[-1]
@@ -2436,7 +2436,7 @@ def ReformP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=['xspre
 # convert id15a bliss h5 format to our h5 structure file
 #   syntax: h5id15convert('exp_file.h5', '3.1', (160,1), mot1_name='hry', mot2_name='hrz')
 #   when scanid is an array or list of multiple elements, the images will be stitched together to 1 file
-def ReformID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
+def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
     scan_dim = np.array(scan_dim)
     scanid = np.array(scanid)
     if scan_dim.size == 1:

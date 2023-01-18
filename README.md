@@ -132,22 +132,22 @@ In order to use the xrf_proc python functions, one has to include them in your m
 ```
 import sys
 sys.path.insert(1, ‘</data_directory/contaning/xrf_fit>’)
-import xrf_fit as Fit
+import xrf_proc as Fit
 ```
   
 Functions can then be used following, e.g.:
-`Fit.ReformID15H5(arg1)`
+`Fit.ConvID15H5(arg1)`
 
 Due to differences in beamline data formats, typically separate “conversion” functions are required for different beamlines. Currently, the following functions are supported:
 
->	`h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch2id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True)`
+>	`h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True)`
 >	* h5id15: (string) beamline stored h5 data file location, e.g. ‘id15/NIST_611_0001.h5’. A list of strings can be supplied to combine different measurements into 1 file, in which case the scanid argument should also be a list of identical length.
 >	* scanid: (string) the identifier of the relevant scan in the h5 file, typically the scan number followed by .1, e.g. ‘4.1’. A list of strings can be supplied to combine different scans into 1 file, in which case all scanid’s are obtained from the same h5id15 file.
 >	* scan_dim: (tuple) the scan dimensions, i.e. (10,10) for a 10×10 mapping
 >	* mot1_name: [optional] (string) the name of mot1, the least moving motor, default: ‘hry’
 >	* mot2_name: [optional] (string) the name of mot2, the most moving motor, default: ‘hrz’
 >	* ch0id: [optional] (string) the detector identifier mnemonic for channel00
->	* ch2id: [optional] (string) the detector identifier mnemonic for channel02
+>	* ch1id: [optional] (string) the detector identifier mnemonic for channel01
 >	* i0id: [optional] (string) the identifier mnemonic for I0
 >	* i0corid: [optional] (string) If not None (default), the identifier mnemonic for the signal with which I0 should be corrected
 >	* i1id: [optional] (string) the identifier mnemonic for I1
@@ -158,11 +158,11 @@ Due to differences in beamline data formats, typically separate “conversion”
 >	* sort: [optional] (Boolean) if True (default) the data is sorted based on the corresponding motor positions
 >	* Returns False on error, on success stores data in a new h5 file.
 
->	`ReformP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02'])`
+>	`ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02'])`
 >	* Scanid: (string) general scan directory path, e.g. '/data4/202010_p06_brenker/data/orl0/scan_00142'. A list of strings can be supplied to combine multiple scans into a single file.
 >	* Sort: [optional] (Boolean) if True, the data is ordered based on the sorting of mot1 and mot2. Sorting is required in order to obtain appropriate image results in case of e.g. snake scans. However, in some cases it is better to omit sorting in the merge step, and only do it after the fitting procedure (during data normalisation step), e.g. in the case of scans that are time triggered instead of motor position triggered.
 >	* ch0: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel00. Each list item can be another list in the case when multiple detectors should be summed for channel00 in the merged file (e.g. ch0 = ['xspress3_01', ['channel00','channel02']])
->	* ch2: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel02. Each list item can be another list in the case when multiple detectors should be summed for channel02 in the merged file (e.g. ch2 = ['xspress3_01', ['channel00','channel02']])
+>	* ch1: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel01. Each list item can be another list in the case when multiple detectors should be summed for channel02 in the merged file (e.g. ch2 = ['xspress3_01', ['channel00','channel02']])
 >	* Returns False on error, on success stores data in a new h5 file with suffix ‘_merge.h5’
 
 #### Fitting XRF data
@@ -321,13 +321,13 @@ import plotims as Ims
 
 
 def prepare_p06():
-    Fit.ReformP06Nxs('dir/ref/scan_00001')
-    Fit.ReformP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
+    Fit.ConvP06Nxs('dir/ref/scan_00001')
+    Fit.ConvP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
 
 
 def prepare_id15():
-    Fit.ReformID15H5('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
-    Fit.ReformID15H5('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
+    Fit.ConvID15H5('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
+    Fit.ConvID15H5('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
 #%%
 def fast_process():
     # fit the spectra usin linear fast fit (cfg file must be SNIP background!)

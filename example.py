@@ -13,13 +13,13 @@ import plotims as Ims
 
 
 def prepare_p06():
-    Fit.ReformP06Nxs('dir/ref/scan_00001')
-    Fit.ReformP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
+    Fit.ConvP06Nxs('dir/ref/scan_00001')
+    Fit.ConvP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
 
 
 def prepare_id15():
-    Fit.ReformID15H5('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
-    Fit.ReformID15H5('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
+    Fit.ConvID15H5('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
+    Fit.ConvID15H5('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
 #%%
 def fast_process():
     # fit the spectra usin linear fast fit (cfg file must be SNIP background!)
