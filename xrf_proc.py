@@ -1278,6 +1278,12 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             snake = True
             timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
 
+    # Set snake etc to false when concerning hxrf data, as here the mot positions are measurement IDs rather than motor coordinates
+    if mot1_name == "hxrf":
+        snake = False
+        timetriggered = False
+        sort = False
+
     try:
         ims1 = np.squeeze(np.array(file['fit/channel01/ims']))
         if len(ims1.shape) == 2:
@@ -1536,7 +1542,6 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
     except Exception:
         chan01_flag = False
 
-    # First correct specscan00188_merge.h5tra for icr/ocr
     # find indices where icr=0 and put those values = icr
     if np.nonzero(ocr0==0)[0].size != 0:
         ocr0[np.nonzero(ocr0==0)[0]] = icr0[np.nonzero(ocr0==0)[0]]
@@ -1743,7 +1748,6 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
     if chan01_flag:
         if np.average(ocr1/icr1) > 1.:
             print("ERROR: ocr1/icr1 is larger than 1!")
-    #TODO: something goes wrong with the dimensions in case of 1D scan.
     if icr0.shape[0] > ims0.shape[1]:
         icr0 = icr0[0:ims0.shape[1],:]
         ocr0 = ocr0[0:ims0.shape[1],:]
@@ -1815,6 +1819,104 @@ def Pymca_fit(spectra, mcafit, verbose=None):
         
     return result, groups
 
+##############################################################################
+# Read the Delta Premium handheld CSV files and restructure as H5 for further processing
+def ReformDeltaCsv(csvfile):
+    import pandas as pd
+    
+    file = pd.read_csv(csvfile, header=None)
+    
+    rowheads = [n for n in file[0] if n is not np.NaN]
+    # loop through the different columns and assign them to spectra0, spectra2 etc.
+    spectra0 = []
+    icr0 = []
+    ocr0 = []
+    spectra1 = []
+    icr1 = []
+    ocr1 = []
+    i0_0 = []
+    i0_1 = []
+    i1 = []
+    tm0 = []
+    tm1 = []
+    mot1 = []
+    mot2 = []
+    for key in file.keys()[2:-1]:
+        # in principle the instrument always measures in two modes consecutively, so if this column 
+        # does not have a subsequent matching partner, something went wrong
+        if file[key][rowheads.index('ExposureNum')] == '1':
+            if file[key][rowheads.index('TestID')] != file[key+1][rowheads.index('TestID')]:
+                print("WARNING: measurement %s does not have a matching 10keV mode measurement. Measurement exempt from H5 file." % file[key][rowheads.index('TestID')])
+            else: #the measurement in 'key' has an accompanying 10keV mode measurement in 'key+1'
+                i1.append(0) #no transmission counter registered
+                mot1.append(file[key][rowheads.index('TestID')]) #TODO: have to make it clear in rest of software whether mot1 contains actual motor positions, or rather scan IDs.
+                mot2.append(np.nan)
+                
+                i0_0.append(float(file[key][rowheads.index('TubeCurrentMon')]))
+                tm0.append(float(file[key][rowheads.index('Livetime')]))
+                spectra0.append([file[key][rowheads.index('TimeStamp')+1:].astype(float)])
+                ocr0.append(np.sum(spectra0[-1]))
+                icr0.append(ocr0[-1] * float(file[key][rowheads.index('Realtime')])/float(file[key][rowheads.index('Livetime')]))
+                i0_1.append(float(file[key+1][rowheads.index('TubeCurrentMon')])) 
+                tm1.append(float(file[key+1][rowheads.index('Livetime')])) 
+                spectra1.append([file[key+1][rowheads.index('TimeStamp')+1:].astype(float)])
+                ocr1.append(np.sum(spectra1[-1]))
+                icr1.append(ocr1[-1] * float(file[key+1][rowheads.index('Realtime')])/float(file[key+1][rowheads.index('Livetime')]))
+ 
+    mot1 = np.asarray(mot1)
+    mot2 = np.asarray(mot2)
+    spectra0 = np.asarray(spectra0)
+    spectra1 = np.asarray(spectra1)
+    sumspec0 = np.sum(spectra0[:], axis=(0,1))
+    maxspec0 = np.zeros(sumspec0.shape[0])
+    for i in range(sumspec0.shape[0]):
+        maxspec0[i] = spectra0[:,:,i].max()
+
+    sumspec1 = np.sum(spectra1[:], axis=(0,1))
+    maxspec1 = np.zeros(sumspec1.shape[0])
+    for i in range(sumspec1.shape[0]):
+        maxspec1[i] = spectra1[:,:,i].max()
+
+
+    # Hooray! We read all the information! Let's write it to a separate file
+    measurement_id = os.path.splitext(csvfile)[0]
+    print("Writing merged file: "+measurement_id+"_merge_40keV.h5...", end=" ")
+    f = h5py.File(measurement_id+"_merge_40keV.h5", 'w')
+    f.create_dataset('cmd', data='dscan Handheld Delta Premium 40keV mode')
+    f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=np.squeeze(i0_0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/acquisition_time', data=np.squeeze(tm0), compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=[n.encode('utf8') for n in mot1])
+    dset.attrs['Name'] = 'hxrf'
+    dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = 'hxrf'
+    f.close()
+    print("Done")
+    
+    print("Writing merged file: "+measurement_id+"_merge_10keV.h5...", end=" ")
+    f = h5py.File(measurement_id+"_merge_10keV.h5", 'w')
+    f.create_dataset('cmd', data='dscan Handheld Delta Premium 10keV mode')
+    f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=np.squeeze(i0_1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/acquisition_time', data=np.squeeze(tm1), compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=[n.encode('utf8') for n in mot1])
+    dset.attrs['Name'] = 'hxrf'
+    dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = 'hxrf'
+    f.close()
+    print("Done")
+
+    
 ##############################################################################
 # Read the spectra nexus files
 def read_P06_spectra(file, sc_id, ch):
