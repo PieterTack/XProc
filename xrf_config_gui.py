@@ -420,11 +420,11 @@ class Config_GUI(QWidget):
         self.fitrange_lbl0 = QLabel("Fit range:")
         self.fitmin = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitmin.setMaximumWidth(50)
-        self.fitmin.setValidator(QDoubleValidator(0, 1E6, 0))
+        self.fitmin.setValidator(QDoubleValidator(0, 1E6, 3))
         self.fitrange_lbl1 = QLabel(" - ")
         self.fitmax = QLineEdit("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitmax.setMaximumWidth(50)
-        self.fitmax.setValidator(QDoubleValidator(0, 1E6, 0))
+        self.fitmax.setValidator(QDoubleValidator(0, 1E6, 3))
         layout_fitrange.addWidget(self.fitrange_lbl0)
         layout_fitrange.addWidget(self.fitmin)
         layout_fitrange.addWidget(self.fitrange_lbl1)
@@ -507,11 +507,15 @@ class Config_GUI(QWidget):
         self.line_add.setMaximumWidth(30)
         self.line_rem = QPushButton("Remove")
         self.line_rem.setAutoDefault(False) # set False as otherwise this button is called on each return
-        self.line_rem.setMaximumWidth(50)
+        self.line_rem.setMaximumWidth(55)
+        self.rem_all = QPushButton("Remove All")
+        self.rem_all.setAutoDefault(False) # set False as otherwise this button is called on each return
+        self.rem_all.setMaximumWidth(80)
         tab_addline_layout.addWidget(self.addline_lbl)
         tab_addline_layout.addWidget(self.linefield)
         tab_addline_layout.addWidget(self.line_add)
         tab_addline_layout.addWidget(self.line_rem)
+        tab_addline_layout.addWidget(self.rem_all)
         tab_addline_layout.addStretch()
         tab_peakid_layout.addLayout(tab_addline_layout)
         self.linetree = QTreeWidget()
@@ -582,8 +586,10 @@ class Config_GUI(QWidget):
         self.fitpower.returnPressed.connect(self.set_bkgr_sum_esc) # different fit power
         self.line_add.clicked.connect(self.add_line) # add line to peak library
         self.line_rem.clicked.connect(self.rem_line) # remove line from peak library
+        self.rem_all.clicked.connect(self.all_rem) # remove all lines from peak library
         self.linetree.itemClicked.connect(self.linetree_onClick) # Item clicked in peakid linetree
         self.linetree.itemDoubleClicked.connect(self.linetree_onDoubleClick) #item double clicked in peakid linetree
+        self.fittree.itemDoubleClicked.connect(self.fittree_onDoubleClick) #item double clicked in peakid fittree
         self.save.clicked.connect(self.save_config) # save button
         self.load.clicked.connect(self.load_config) # load button
         self.refit.clicked.connect(self.do_refit) # refit button
@@ -796,6 +802,27 @@ class Config_GUI(QWidget):
                         ymin = [np.min(self.rawspe) - (np.max(self.rawspe)-np.min(self.rawspe))*0.05]*len(xlines)
                         ymax = np.array(ratios)/ratios[maxrateid]*maxint 
                         self.mpl.axes.vlines(xlines, ymin, ymax, colors='blue')
+                        
+                # Plot vertical lines on top of peaks/lines currently included in the fit (in green)
+                # It may also be a nice idea to be able to save the plot window image as png, and in that case also allow to not plot these vlines
+                xlines = []
+                ymin = []
+                ymax = []
+                for el in self.ConfigDict['peaks'].keys():
+                    linedict = compile_pymca_dict(el)
+                    for linegroup in self.ConfigDict['peaks'][el]:
+                        energies = [line['energy'] for line in linedict if linegroup in line['linegroup'] and line['energy'] >= np.min(xdata) and line['energy'] <= np.max(xdata)]
+                        print(el, linegroup, energies)
+                        if energies != []:
+                            for en in energies:
+                                xlines.append(en)
+                                ymin.append(self.rawspe[np.max(np.where(xdata <= xlines[-1]))])
+                                # axcoords = self.mpl.axes.transLimits.transform((xlines[-1],ymin[-1]))
+                                # axcoords[1] += 0.05 # define a lineheight of 5% axes length
+                                # ymax.append(self.mpl.axes.transLimits.inverted().transform(axcoords)[1])
+                                ymax.append(ymin[-1]*1.05)
+                self.mpl.axes.vlines(xlines, ymin, ymax, colors='green')
+                            
             self.mpl.canvas.draw()
 
 
@@ -993,6 +1020,16 @@ class Config_GUI(QWidget):
     def linetree_onDoubleClick(self, item, column):
         self.add_line()
 
+    def fittree_onDoubleClick(self, item, column):
+        parent = item.parent()
+        if parent is None: #the item has no parent, which means this is an element group that was clicked and all lines should be removed
+            text = item.text(0).split(' ')[0]
+        else: # the item has a parent, so a line was clicked and we need to add the element name from the parent
+            text = parent.text(0).split(' ')[0]+'-'+item.text(0).split(' ')[0]
+        # set lineedit field and trigger remove line event
+        self.linefield.setText(text)
+        self.rem_line()
+
     def add_line(self):
         edit = self.linefield.text()
         keys = list(self.ConfigDict['peaks'].keys())
@@ -1052,7 +1089,16 @@ class Config_GUI(QWidget):
         self.ConfigDict['peaks'] = sortedpeaks
         self.fitres = None
         self.adjust_fittree(self.fittree)
-    
+
+    def all_rem(self):
+        keys = list(self.ConfigDict['peaks'].keys())
+        for key in keys:
+            del(self.ConfigDict['peaks'][key])
+        del(self.ConfigDict['peaks'])
+        self.ConfigDict['peaks'] = {}
+        self.fitres = None
+        self.adjust_fittree(self.fittree)
+
     def rem_line(self):
         import re
         edit = self.linefield.text()
@@ -1062,10 +1108,7 @@ class Config_GUI(QWidget):
         # now go through all lines, check if they are in model
         for ed in edit:
             if ed == 'all': # remove all lines
-                for key in keys:
-                    del(self.ConfigDict['peaks'][key])
-                del(self.ConfigDict['peaks'])
-                self.ConfigDict['peaks'] = {}
+                self.all_rem()
             elif '-' not in ed: #remove all lines from this element
                 element = ed.replace(' ','')
                 if element in keys:
@@ -1174,7 +1217,7 @@ class Config_GUI(QWidget):
                     sortedpeaks[el] = self.ConfigDict['peaks'][el]
             self.ConfigDict['peaks'] = sortedpeaks
         # self.update_plot()
-        self.update_plot(update=False) #redraw the original plot, with KLM lines
+        self.update_plot(update=True) #redraw the original plot, with KLM lines
         self.fitres = None
         self.adjust_fittree(self.fittree)
 
