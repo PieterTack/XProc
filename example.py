@@ -8,18 +8,18 @@ Created on Tue Jul 13 11:55:01 2021
 import sys
 sys.path.insert(1, 'D:/School/PhD/python_pro/plotims')
 sys.path.insert(1, 'D:/School/PhD/python_pro/xrf_proc')
-import xrf_fit as Fit
+import xrf_proc as Fit
 import plotims as Ims
 
 
 def prepare_p06():
-    Fit.MergeP06Nxs('dir/ref/scan_00001')
-    Fit.MergeP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
+    Fit.ConvP06Nxs('dir/ref/scan_00001')
+    Fit.ConvP06Nxs(['dir/ct/scan_00002','dir/ct/scan_00003'])
 
 
 def prepare_id15():
-    Fit.h5id15convert('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
-    Fit.h5id15convert('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
+    Fit.ConvID15H5('dir/srmscan.h5', '1.1', (10, 10), mot1_name='hrz', mot2_name='hry')
+    Fit.ConvID15H5('dir/ctscan.h5', '1.1', (100, 101), mot1_name='hrrz', mot2_name='hry')
 #%%
 def fast_process():
     # fit the spectra usin linear fast fit (cfg file must be SNIP background!)
@@ -65,7 +65,7 @@ def correlation_plots():
     import numpy as np
     
     f = h5py.File('dir/preppedfile.h5','r')
-    data = np.moveaxis(np.array(f['tomo/channel02/slices']),0,-1)
+    data = np.moveaxis(np.array(f['tomo/channel01/slices']),0,-1)
     data[np.isnan(data)] = 0.
     names = [n.decode('utf8') for n in f['tomo/channel01/names']]
     f.close()
