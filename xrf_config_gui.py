@@ -374,6 +374,8 @@ class Config_GUI(QWidget):
         self.noise.setMaximumWidth(50)
         self.noise.setValidator(QDoubleValidator(-1E6, 1E6,3))
         self.noise.setEnabled(False)
+        self.showlineid = QCheckBox("Show lines in fit")
+        self.showlineid.setChecked(True)
         layout_calibres.addWidget(self.dettype)
         layout_calibres.addWidget(self.cte_lbl)
         layout_calibres.addWidget(self.cte)
@@ -383,6 +385,7 @@ class Config_GUI(QWidget):
         layout_calibres.addWidget(self.fano)
         layout_calibres.addWidget(self.noise_lbl)
         layout_calibres.addWidget(self.noise)
+        layout_calibres.addWidget(self.showlineid)
         layout_calibres.addStretch()
         layout_canvas.addLayout(layout_calibres)
         # general action buttons
@@ -392,6 +395,9 @@ class Config_GUI(QWidget):
         self.load = QPushButton("LOAD")
         self.load.setAutoDefault(False) # set False as otherwise this button is called on each return
         self.load.setMaximumWidth(75)
+        self.savepng = QPushButton("PNG")
+        self.savepng.setAutoDefault(False) # set False as otherwise this button is called on each return
+        self.savepng.setMaximumWidth(75)
         self.refit = QPushButton("REFIT")
         self.refit.setAutoDefault(False) # set False as otherwise this button is called on each return
         self.refit.setMaximumWidth(75)
@@ -400,6 +406,7 @@ class Config_GUI(QWidget):
         self.calib.setMaximumWidth(75)
         layout_buts.addWidget(self.save)
         layout_buts.addWidget(self.load)
+        layout_buts.addWidget(self.savepng)
         layout_buts.addWidget(self.refit)
         layout_buts.addWidget(self.calib)
         layout_canvas.addLayout(layout_buts)
@@ -592,7 +599,9 @@ class Config_GUI(QWidget):
         self.fittree.itemDoubleClicked.connect(self.fittree_onDoubleClick) #item double clicked in peakid fittree
         self.save.clicked.connect(self.save_config) # save button
         self.load.clicked.connect(self.load_config) # load button
+        self.savepng.clicked.connect(self.save_png) # save png button
         self.refit.clicked.connect(self.do_refit) # refit button
+        self.showlineid.stateChanged.connect(self.update_plot) # display lines indicating peaks added in fit
         self.plotopt_fit.stateChanged.connect(self.update_plot) # plot options fit
         self.plotopt_sum.stateChanged.connect(self.update_plot) # plot options pileup
         self.plotopt_bkg.stateChanged.connect(self.update_plot) # plot options background
@@ -803,25 +812,25 @@ class Config_GUI(QWidget):
                         ymax = np.array(ratios)/ratios[maxrateid]*maxint 
                         self.mpl.axes.vlines(xlines, ymin, ymax, colors='blue')
                         
-                # Plot vertical lines on top of peaks/lines currently included in the fit (in green)
-                # It may also be a nice idea to be able to save the plot window image as png, and in that case also allow to not plot these vlines
-                xlines = []
-                ymin = []
-                ymax = []
-                for el in self.ConfigDict['peaks'].keys():
-                    linedict = compile_pymca_dict(el)
-                    for linegroup in self.ConfigDict['peaks'][el]:
-                        energies = [line['energy'] for line in linedict if linegroup in line['linegroup'] and line['energy'] >= np.min(xdata) and line['energy'] <= np.max(xdata)]
-                        print(el, linegroup, energies)
-                        if energies != []:
-                            for en in energies:
-                                xlines.append(en)
-                                ymin.append(self.rawspe[np.max(np.where(xdata <= xlines[-1]))])
-                                # axcoords = self.mpl.axes.transLimits.transform((xlines[-1],ymin[-1]))
-                                # axcoords[1] += 0.05 # define a lineheight of 5% axes length
-                                # ymax.append(self.mpl.axes.transLimits.inverted().transform(axcoords)[1])
-                                ymax.append(ymin[-1]*1.05)
-                self.mpl.axes.vlines(xlines, ymin, ymax, colors='green')
+                # Plot vertical lines on top of peaks/lines currently included in the fit (in orange)
+                if self.showlineid.isChecked() is True:
+                    xlines = []
+                    ymin = []
+                    ymax = []
+                    newTransform = self.mpl.axes.transScale + self.mpl.axes.transLimits
+                    for el in self.ConfigDict['peaks'].keys():
+                        linedict = compile_pymca_dict(el)
+                        for linegroup in self.ConfigDict['peaks'][el]:
+                            energies = [line['energy'] for line in linedict if linegroup in line['linegroup'] 
+                                        and line['energy'] >= np.min(xdata) and line['energy'] <= np.max(xdata) and line['rate'] > 0.01]
+                            if energies != []:
+                                for en in energies:
+                                    xlines.append(en)
+                                    ymin.append(self.rawspe[np.max(np.where(xdata <= xlines[-1]))])
+                                    axcoords = newTransform.transform([xlines[-1],ymin[-1]])                                                               
+                                    axcoords[1] += 0.025 # define a lineheight of 2.5% axes length
+                                    ymax.append(newTransform.inverted().transform(axcoords)[1])
+                    self.mpl.axes.vlines(xlines, ymin, ymax, colors='orange')
                             
             self.mpl.canvas.draw()
 
@@ -1088,6 +1097,7 @@ class Config_GUI(QWidget):
                 sortedpeaks[el] = self.ConfigDict['peaks'][el]
         self.ConfigDict['peaks'] = sortedpeaks
         self.fitres = None
+        self.update_plot(update=True) #redraw the original plot, with KLM lines
         self.adjust_fittree(self.fittree)
 
     def all_rem(self):
@@ -1097,6 +1107,7 @@ class Config_GUI(QWidget):
         del(self.ConfigDict['peaks'])
         self.ConfigDict['peaks'] = {}
         self.fitres = None
+        self.update_plot(update=True) #redraw the original plot, with KLM lines
         self.adjust_fittree(self.fittree)
 
     def rem_line(self):
@@ -1148,14 +1159,18 @@ class Config_GUI(QWidget):
             if self.ConfigDict['peaks'][key] == []:
                 del(self.ConfigDict['peaks'][key])
         self.fitres = None
+        self.update_plot(update=True) #redraw the original plot, with KLM lines
         self.adjust_fittree(self.fittree)
+
+    def save_png(self):
+        imagename = QFileDialog.getSaveFileName(self, caption="Save PNG in:", filter="PNG (*.png)")[0]
+        self.mpl.canvas.print_figure(imagename, dpi=300)
 
     def save_config(self):
         filename = QFileDialog.getSaveFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
         self.ConfigDict.write(filename)
 
     def load_config(self):
-        #TODO: set Ge or Si button...
         filename = QFileDialog.getOpenFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
         self.ConfigDict.read(filename)
         # go over ConfigDict and adjust GUI accordingly
@@ -1216,7 +1231,7 @@ class Config_GUI(QWidget):
                 else:
                     sortedpeaks[el] = self.ConfigDict['peaks'][el]
             self.ConfigDict['peaks'] = sortedpeaks
-        # self.update_plot()
+        self.update_plot(update=False)
         self.update_plot(update=True) #redraw the original plot, with KLM lines
         self.fitres = None
         self.adjust_fittree(self.fittree)
@@ -1241,7 +1256,6 @@ class Config_GUI(QWidget):
             'linesarea':fitarea,
             'linesbkgr':bkgr
             }
-        # self.update_plot()
         self.update_plot(update=True) #redraw the original plot, with KLM lines
         self.adjust_fittree(self.fittree)
         
