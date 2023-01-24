@@ -140,7 +140,7 @@ Functions can then be used following, e.g.:
 
 Due to differences in beamline data formats, typically separate “conversion” functions are required for different beamlines. Currently, the following functions are supported:
 
->	`h5id15convert(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True)`
+>	`ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True)`
 >	* h5id15: (string) beamline stored h5 data file location, e.g. ‘id15/NIST_611_0001.h5’. A list of strings can be supplied to combine different measurements into 1 file, in which case the scanid argument should also be a list of identical length.
 >	* scanid: (string) the identifier of the relevant scan in the h5 file, typically the scan number followed by .1, e.g. ‘4.1’. A list of strings can be supplied to combine different scans into 1 file, in which case all scanid’s are obtained from the same h5id15 file.
 >	* scan_dim: (tuple) the scan dimensions, i.e. (10,10) for a 10×10 mapping

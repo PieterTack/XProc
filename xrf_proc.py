@@ -13,6 +13,7 @@ from scipy.interpolate import griddata
 import h5py
 import os
 import time
+from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from matplotlib import container
@@ -148,6 +149,8 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
     file.create_dataset('PCA/'+channel+'/names', data=[n.encode('utf8') for n in PCA_names])
     file.create_dataset('PCA/'+channel+'/RVE', data=evals[0:nclusters]/np.sum(evals))
     file.create_dataset('PCA/'+channel+'/loadings', data=evecs, compression='gzip', compression_opts=4)
+    dset = file['PCA']
+    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     
     # if kmeans option selected, follow up with Kmeans clustering on the PCA clusters
     if kmeans is True:
@@ -174,6 +177,8 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
         file.create_dataset('kmeans/'+channel+'/data_dir_clustered', data=('PCA/'+channel+'/ims').encode('utf8'))
         file.create_dataset('kmeans/'+channel+'/ims', data=clusters, compression='gzip', compression_opts=4)
         file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in PCA_names])     
+        dset = file['kmeans']
+        dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         if spectra.shape[0] == clusters.size:
             for i in range(nclusters):
                 file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=sumspec[i,:], compression='gzip', compression_opts=4)    
@@ -243,6 +248,8 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     file.create_dataset('kmeans/'+channel+'/nclusters', data=nclusters)
     file.create_dataset('kmeans/'+channel+'/data_dir_clustered', data=h5dir.encode('utf8'))
     file.create_dataset('kmeans/'+channel+'/ims', data=clusters, compression='gzip', compression_opts=4)
+    dset = file['kmeans']
+    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     if el_id is not None:
         file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in np.array(names)[el_id]])
     else:
@@ -297,6 +304,8 @@ def div_by_cnc(h5file, cncfile, channel=None):
     file.create_dataset('rel_dif/'+channel+'/names', data=[n.encode('utf8') for n in rel_names])
     file.create_dataset('rel_dif/'+channel+'/ims', data=rel_diff, compression='gzip', compression_opts=4)
     file.create_dataset('rel_dif/'+channel+'/cnc', data=cncfile.split("/")[-1].encode('utf8'))
+    dset = file['rel_dif']
+    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     file.close()
 
 ##############################################################################
@@ -643,6 +652,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     if reffiles.size > 1:
         ' '.join(reffiles)
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
+    dset = file['quant']
+    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     if absorb is not None:
         file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
         file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
@@ -1123,6 +1134,8 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     dset = file.create_dataset('elyield/'+cncfile+'/channel00/stddev', data=el_yield_err_0, compression='gzip', compression_opts=4)
     dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
     file.create_dataset('elyield/'+cncfile+'/channel00/names', data=[n.encode('utf8') for n in names0_mod[:]])
+    dset = file['detlim']
+    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     if chan01_flag:
         try:
             del file['detlim/'+cncfile+'/channel01/names']
@@ -1485,6 +1498,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     file.create_dataset('norm/channel00/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
     file.create_dataset('norm/channel00/sum/int_stddev', data=sum_fit0*sum_fit0_err, compression='gzip', compression_opts=4)
     file.create_dataset('norm/channel00/sum/bkg_stddev', data=sum_bkg0*sum_bkg0_err, compression='gzip', compression_opts=4)
+    dset = file['norm']
+    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     if chan01_flag:
         try:
             del file['norm/channel01']
@@ -1784,6 +1799,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
     file.create_dataset('fit/channel00/cfg', data=cfg0)
     file.create_dataset('fit/channel00/sum/int', data=sum_fit0, compression='gzip', compression_opts=4)
     file.create_dataset('fit/channel00/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
+    dset = file['fit']
+    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     if chan01_flag:
         try:
             del file['fit/channel01/ims']
@@ -1819,6 +1836,19 @@ def Pymca_fit(spectra, mcafit, verbose=None):
         
     return result, groups
 
+##############################################################################
+# Read the EDAX EagleIII SPC files and restructure as H5 for further processing
+#TODO: write this function
+def ConvEdaxSpc(spcfile):
+    import hyperspy.api as hs
+    
+    s = hs.load(spcfile)
+
+    # total_dataPoints = s.original_metadata.spc_header.numPts
+    # step = s.original_metadata.spc_header.evPerChan
+    # print(s.data)
+
+    pass
 ##############################################################################
 # Read the Delta Premium handheld CSV files and restructure as H5 for further processing
 def ConvDeltaCsv(csvfile):
