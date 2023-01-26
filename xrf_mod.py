@@ -8,6 +8,108 @@ Created on Mon Jan 16 12:32:27 2023
 import numpy as np
 
 ##############################################################################
+# join two files together, stitched one after the other
+def XProcH5_combine(files=['A0186_1_3_xrfct_0003_scan1.h5', 'A0186_1_3_xrfct_0004_scan1.h5', 'A0186_1_3_xrfct_0005_scan1.h5'], newfile='A0186_1_3_xrfct_scan1.h5', ax=0):
+    import h5py
+    import numpy as np
+    
+    cmd = ''
+    mot1 = []
+    mot2 = []
+    i0 = []
+    i1 = []
+    tm = []
+    icr0 = []
+    ocr0 = []
+    spectra0 = []
+    icr1 = []
+    ocr1 = []
+    spectra1 = []
+    
+    for file in files:
+        print("Reading "+file+"...", end="")
+        f = h5py.File(file,'r')
+        try:
+            cmd += f['cmd'][()].decode('utf8')
+        except Exception as ex:
+            cmd += f['cmd'][()]
+
+        mot1.append(np.array(f['mot1']))
+        mot1_name = str(f['mot1'].attrs["Name"])
+        mot2.append(np.array(f['mot2']))
+        mot2_name = str(f['mot2'].attrs["Name"])
+        i0.append(np.array(f['raw/I0']))
+        try:
+            i1.append(np.array(f['raw/I1']))
+            i1flag = True
+        except KeyError:
+            i1flag = False
+        tm.append(np.array(f['raw/acquisition_time']))
+        icr0.append(np.array(f['raw/channel00/icr']))
+        ocr0.append(np.array(f['raw/channel00/ocr']))
+        spectra0.append(np.array(f['raw/channel00/spectra']))
+        try:
+            icr1.append(np.array(f['raw/channel01/icr']))
+            ocr1.append(np.array(f['raw/channel01/ocr']))
+            spectra1.append(np.array(f['raw/channel01/spectra']))
+            ch1flag = True
+        except KeyError:
+            ch1flag = False
+        f.close()
+
+    # add in one array
+    
+    spectra0 = np.concatenate(spectra0, axis=ax)
+    icr0 = np.concatenate(icr0, axis=ax)
+    ocr0 = np.concatenate(ocr0, axis=ax)
+    if ch1flag:
+        spectra1 = np.concatenate(spectra1, axis=ax)
+        icr1 = np.concatenate(icr1, axis=ax)
+        ocr1 = np.concatenate(ocr1, axis=ax)
+    i0 = np.concatenate(i0, axis=ax)
+    if i1flag:
+        i1 = np.concatenate(i1, axis=ax)
+    mot1 = np.concatenate(mot1, axis=ax)
+    mot2 = np.concatenate(mot2, axis=ax)
+    tm = np.concatenate(tm, axis=ax)
+
+    sumspec0 = np.sum(spectra0[:], axis=(0,1))
+    maxspec0 = np.zeros(sumspec0.shape[0])
+    for i in range(sumspec0.shape[0]):
+        maxspec0[i] = spectra0[:,:,i].max()
+    if ch1flag is True:
+        sumspec1 = np.sum(spectra1[:], axis=(0,1))
+        maxspec1 = np.zeros(sumspec1.shape[0])
+        for i in range(sumspec1.shape[0]):
+            maxspec1[i] = spectra1[:,:,i].max()
+        
+    # write the new file
+    print("writing "+newfile+"...", end="")
+    f = h5py.File(newfile, 'w')
+    f.create_dataset('cmd', data=cmd)
+    f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=sumspec0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=maxspec0, compression='gzip', compression_opts=4)
+    if ch1flag:
+        f.create_dataset('raw/channel01/spectra', data=spectra1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel01/icr', data=icr1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel01/ocr', data=ocr1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel01/sumspec', data=sumspec1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel01/maxspec', data=maxspec1, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+    if i1flag:
+        f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = mot1_name
+    dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = mot2_name
+    f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
+    f.close()                   
+    print("Done")
+
+##############################################################################
 # delete a line from a fitted dataset (can be useful when data interpolation has to occur but there are empty pixels)
 #   Note that this also removes lines from I0, I1, acquisition_time, mot1 and mot2! 
 #       If you want to recover this data one has to re-initiate processing from the raw data.

@@ -2501,7 +2501,10 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 sc_dim = scan_dim
         if j == 0:
             f = h5py.File(file, 'r')
-            scan_cmd = f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
+            try:
+                scan_cmd = f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
+            except Exception as ex:
+                scan_cmd = f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
             spectra0_temp = np.array(f[sc_id+'/measurement/'+ch0id])
             spectra0 = np.zeros((sc_dim[0], sc_dim[1], spectra0_temp.shape[1]))
             for i in range(0, spectra0_temp.shape[1]):
@@ -2566,7 +2569,11 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
         # when reading second file, we should stitch it to the first file's image
         else:
             f = h5py.File(file, 'r')
-            scan_cmd += ' '+(f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
+            try:
+                scan_cmd += ' '+(f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
+            except Exception as ex:
+                scan_cmd += ' '+(f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
+                
             #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
             spectra0_tmp = np.array(f[sc_id+'/measurement/'+ch0id])
             spectra0_temp = np.zeros((sc_dim[0], sc_dim[1], spectra0_tmp.shape[1]))
@@ -2854,14 +2861,14 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             icr0[i,:] = icr0[i,sort_id]
             ocr0[i,:] = ocr0[i,sort_id]
             if ch1id is not None:
-            	spectra1[i,:,:] = spectra1[i,sort_id,:]
-            	icr1[i,:] = icr1[i,sort_id]
-            	ocr1[i,:] = ocr1[i,sort_id]
+                	spectra1[i,:,:] = spectra1[i,sort_id,:]
+                	icr1[i,:] = icr1[i,sort_id]
+                	ocr1[i,:] = ocr1[i,sort_id]
             mot1[i,:] = mot1[i,sort_id]
             mot2[i,:] = mot2[i,sort_id]
             i0[i,:] = i0[i,sort_id]
             if i1id is not None:
-            	i1[i,:] = i1[i,sort_id]
+                	i1[i,:] = i1[i,sort_id]
             tm[i,:] = tm[i,sort_id]
     
         # To make sure (especially when merging scans) sort mot2 as well
