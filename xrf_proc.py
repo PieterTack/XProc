@@ -414,7 +414,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     h5_normto = np.asarray(file['norm/I0'])
     if absorb is not None:
         h5_spectra = np.asarray(file['raw/'+channel+'/spectra'])
-        h5_cfg = file['fit/'+channel+'/cfg'][()].decode('utf8')
+        try:
+            h5_cfg = file['fit/'+channel+'/cfg'][()].decode('utf8')
+        except AttributeError:
+            h5_cfg = file['fit/'+channel+'/cfg'][()]
         if len(h5_spectra.shape) == 2:
             h5_spectra = h5_spectra.reshape((h5_spectra.shape[0], 1, h5_spectra.shape[1]))
         elif len(h5_spectra.shape) == 1:
