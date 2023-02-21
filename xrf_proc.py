@@ -266,33 +266,53 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
 #   If an element in the h5file is not present in the cncfile it is simply not calculated and ignored
 def div_by_cnc(h5file, cncfile, channel=None):
     # read in h5file quant data
-    #   normalise intensities to 1s acquisition time as this is the time for which we have el yields
+    # normalise intensities to 1s acquisition time as this is the time for which we have el yields
     file = h5py.File(h5file, 'r+')
     if channel is None:
         channel = list(file['quant'].keys())[0]
-    h5_ims = np.array(file['quant/'+channel+'/ims'])
-    h5_names = np.array([n.decode('utf8') for n in file['quant/'+channel+'/names']])
+    h5_ims = np.asarray(file['quant/'+channel+'/ims'])
+    h5_imserr = np.asarray(file['quant/'+channel+'/ims_stddev'])
+    h5_names = np.asarray([n.decode('utf8') for n in file['quant/'+channel+'/names']])
+    h5_sum = np.asarray(file['quant/'+channel+'/sum/int'])
+    h5_sumerr = np.asarray(file['quant/'+channel+'/sum/int_stddev'])
     h5_z = [Elements.getz(n.split(" ")[0]) for n in h5_names]
-    
+
     # read in cnc file
     cnc = read_cnc(cncfile)
+
+    #convert errors to relative errors
+    cnc.err /= cnc.conc
+    h5_sumerr /= h5_sum
+    for z in range(0, h5_ims.shape[0]):
+        h5_imserr[z, :, :] /= h5_ims[z, :, :]
 
     # loop over h5_z and count how many times there's a common z in h5_z and cnc.z
     cnt = 0
     for z in range(0,len(h5_z)):
         if h5_z[z] in cnc.z:
             cnt+=1
-    
+
     # make array to store rel_diff data and calculate them
-    rel_diff = np.zeros((cnt, h5_ims.shape[1], h5_ims.shape[2]))
+    rel_diff_ims = np.zeros((cnt, h5_ims.shape[1], h5_ims.shape[2]))
+    rel_diff_sum = np.zeros((cnt))
+    rel_diff_imserr = np.zeros((cnt, h5_ims.shape[1], h5_ims.shape[2]))
+    rel_diff_sumerr = np.zeros((cnt))
     rel_names = []
-    
+
     cnt = 0
     for z in range(0, len(h5_z)):
         if h5_z[z] in cnc.z:
-            rel_diff[cnt, :, :] = h5_ims[z,:,:] / cnc.conc[list(cnc.z).index(h5_z[z])]
+            rel_diff_ims[cnt, :, :] = h5_ims[z,:,:] / cnc.conc[list(cnc.z).index(h5_z[z])]
+            rel_diff_sum[cnt] = h5_sum[z] / cnc.conc[list(cnc.z).index(h5_z[z])]
+            rel_diff_imserr[cnt, :, :] = np.sqrt(h5_imserr[z,:,:]**2 + cnc.err[list(cnc.z).index(h5_z[z])]**2)
+            rel_diff_sumerr[cnt] = np.sqrt(h5_sumerr[z,:,:]**2 + cnc.err[list(cnc.z).index(h5_z[z])]**2)
             rel_names.append(h5_names[z])
             cnt+=1
+
+    # convert relative errors to absolute
+    for z in range(0, rel_diff_ims.shape[0]):
+        rel_diff_imserr *= rel_diff_ims
+    rel_diff_sumerr *= rel_diff_sum
 
     # save rel_diff data
     try:
@@ -302,7 +322,10 @@ def div_by_cnc(h5file, cncfile, channel=None):
     except Exception:
         pass
     file.create_dataset('rel_dif/'+channel+'/names', data=[n.encode('utf8') for n in rel_names])
-    file.create_dataset('rel_dif/'+channel+'/ims', data=rel_diff, compression='gzip', compression_opts=4)
+    file.create_dataset('rel_dif/'+channel+'/ims', data=rel_diff_ims, compression='gzip', compression_opts=4)
+    file.create_dataset('rel_dif/'+channel+'/sum/int', data=rel_diff_sum, compression='gzip', compression_opts=4)
+    file.create_dataset('rel_dif/'+channel+'/ims_stddev', data=rel_diff_imserr, compression='gzip', compression_opts=4)
+    file.create_dataset('rel_dif/'+channel+'/sum/int_stddev', data=rel_diff_sumerr, compression='gzip', compression_opts=4)
     file.create_dataset('rel_dif/'+channel+'/cnc', data=cncfile.split("/")[-1].encode('utf8'))
     dset = file['rel_dif']
     dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
