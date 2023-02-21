@@ -322,7 +322,9 @@ def div_by_cnc(h5file, cncfile, channel=None):
 #       type: tuple (['element'], 'cnc file')
 #       the element will be used to find Ka and Kb line intensities and correct for their respective ratio
 #       using concentration values from the provided cnc files.
-def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False):
+#   If keyword div_by_rhot is not None, the calculated aerial concentration is divided by a user-supplied div_by_rhot [cm²/g] value
+#       type: float
+def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, div_by_rhot=None):
     import plotims
 
 
@@ -632,6 +634,13 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     for i in range(sumint_err.size):
         sumint_err[i] = np.max(np.array([sumint_err[i], np.average(ims_err[i,:,:]), np.std(ims[i,:,:])/np.average(ims[i,:,:])]))
 
+    conc_unit = "ug/cm²"
+    if div_by_rhot is not None:
+        div_by_rhot = float(div_by_rhot)
+        ims /= div_by_rhot
+        sumint /= div_by_rhot
+        conc_unit = "ug/g"
+        
     # convert relative errors to absolute errors
     ims_err = ims_err*ims
     sumint_err = sumint_err*sumint
@@ -642,7 +651,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         del file['quant/'+channel]
     except Exception:
         pass
-    conc_unit = "ug/cm²"
     file.create_dataset('quant/'+channel+'/names', data=[n.encode('utf8') for n in names])
     dset = file.create_dataset('quant/'+channel+'/ims', data=ims, compression='gzip', compression_opts=4)
     dset.attrs["Unit"] = conc_unit
