@@ -266,7 +266,6 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
 #   If an element in the h5file is not present in the cncfile it is simply not calculated and ignored
 def div_by_cnc(h5file, cncfile, channel=None):
     # read in h5file quant data
-    # normalise intensities to 1s acquisition time as this is the time for which we have el yields
     file = h5py.File(h5file, 'r+')
     if channel is None:
         channel = list(file['quant'].keys())[0]
