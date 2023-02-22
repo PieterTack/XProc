@@ -317,6 +317,9 @@ def div_by_cnc(h5file, cncfile, channel=None):
     try:
         del file['rel_dif/'+channel+'/names']
         del file['rel_dif/'+channel+'/ims']
+        del file['rel_dif/'+channel+'/ims_stddev']
+        del file['rel_dif/'+channel+'/sum/int']
+        del file['rel_dif/'+channel+'/sum/int_stddev']
         del file['rel_dif/'+channel+'/cnc']
     except Exception:
         pass
