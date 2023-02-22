@@ -304,7 +304,7 @@ def div_by_cnc(h5file, cncfile, channel=None):
             rel_diff_ims[cnt, :, :] = h5_ims[z,:,:] / cnc.conc[list(cnc.z).index(h5_z[z])]
             rel_diff_sum[cnt] = h5_sum[z] / cnc.conc[list(cnc.z).index(h5_z[z])]
             rel_diff_imserr[cnt, :, :] = np.sqrt(h5_imserr[z,:,:]**2 + cnc.err[list(cnc.z).index(h5_z[z])]**2)
-            rel_diff_sumerr[cnt] = np.sqrt(h5_sumerr[z,:,:]**2 + cnc.err[list(cnc.z).index(h5_z[z])]**2)
+            rel_diff_sumerr[cnt] = np.sqrt(h5_sumerr[z]**2 + cnc.err[list(cnc.z).index(h5_z[z])]**2)
             rel_names.append(h5_names[z])
             cnt+=1
 
