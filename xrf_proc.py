@@ -2141,8 +2141,8 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 print("read")
         else: #the adc01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
             file = os.listdir(sc_id+"/adc01")
-            print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/adc01/"+file, 'r')
+            print("Reading " +sc_id+"/adc01/"+file[0] +"...", end=" ") #os.listdir returns a list, so we pick first element as only 1 should be there right now
+            f = h5py.File(sc_id+"/adc01/"+file[0], 'r')
             i0_arr = f['entry/data/Value1'][:]
             i1_arr = f['entry/data/Value2'][:]
             tm_arr = f['entry/data/ExposureTime'][:]
