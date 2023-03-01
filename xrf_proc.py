@@ -2078,7 +2078,7 @@ def read_P06_spectra(file, sc_id, ch):
     
 ##############################################################################
 # Merges separate P06 nxs files to 1 handy h5 file containing 2D array of spectra, relevant motor positions, I0 counter, ICR, OCR and mesaurement time.
-def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=['xspress3_01','channel02'], readas1d=False):
+def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, readas1d=False):
     scanid = np.array(scanid)
     if scanid.size == 1:
         scan_suffix = '/'.join(str(scanid).split('/')[0:-2])+'/scan'+str(scanid).split("_")[-1]
@@ -2110,7 +2110,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=['xspress
         mot2 = []
         files = list("")
         # actual spectrum scan files are in dir scanid/scan_0XXX/xspress3_01
-        for file in sorted(os.listdir(sc_id+"/adc01")):
+        for file in sorted(os.listdir(sc_id+"/"+ch0[0])):
             if file.endswith(".nxs"):
                 files.append(file)
         for file in files:
@@ -2125,19 +2125,33 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=['xspress
                     spectra1.append(spe1_arr[i,:])
                     icr1.append(icr1_arr[i])
                     ocr1.append(ocr1_arr[i])
-        for file in files:
-            # Reading I0 and measurement time data
+        if os.path.isfile(sc_id+"/adc01/"+files[-1]) is True:
+            for file in files:
+                # Reading I0 and measurement time data
+                print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
+                f = h5py.File(sc_id+"/adc01/"+file, 'r')
+                i0_arr = f['entry/data/value1'][:]
+                i1_arr = f['entry/data/value2'][:]
+                tm_arr = f['entry/data/exposuretime'][:]
+                for i in range(i0_arr.shape[0]):
+                    i0.append(i0_arr[i])
+                    i1.append(i1_arr[i])
+                    tm.append(tm_arr[i])
+                f.close()
+                print("read")
+        else: #the adc01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
+            file = os.listdir(sc_id+"/adc01")
             print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/adc01/"+file, 'r')
-            i0_arr = f['entry/data/value1'][:]
-            i1_arr = f['entry/data/value2'][:]
-            tm_arr = f['entry/data/exposuretime'][:]
+            i0_arr = f['entry/data/Value1'][:]
+            i1_arr = f['entry/data/Value2'][:]
+            tm_arr = f['entry/data/ExposureTime'][:]
             for i in range(i0_arr.shape[0]):
                 i0.append(i0_arr[i])
                 i1.append(i1_arr[i])
                 tm.append(tm_arr[i])
             f.close()
-            print("read")
+            print("read")            
         # actual pilcgenerator files can be different structure depending on type of scan
         files = list("")
         #TODO: we can clean this up, into 1 try block, pilctrigger can run from 01 to 05...

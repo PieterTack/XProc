@@ -1164,77 +1164,80 @@ class Config_GUI(QWidget):
 
     def save_png(self):
         imagename = QFileDialog.getSaveFileName(self, caption="Save PNG in:", filter="PNG (*.png)")[0]
-        self.mpl.canvas.print_figure(imagename, dpi=300)
+        if imagename != '':
+            self.mpl.canvas.print_figure(imagename, dpi=300)
 
     def save_config(self):
         filename = QFileDialog.getSaveFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
-        self.ConfigDict.write(filename)
+        if filename != '':
+            self.ConfigDict.write(filename)
 
     def load_config(self):
         filename = QFileDialog.getOpenFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
-        self.ConfigDict.read(filename)
-        # go over ConfigDict and adjust GUI accordingly
-        if self.ConfigDict['fit']['scatterflag'] == 1:
-            self.fit_scatter.setChecked(True)
-            self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
-            if len(self.ConfigDict['attenuators']['Matrix']) == 8:
-                self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][7]))
-            else:
-                self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5]))
-                self.ConfigDict['attenuators']['Matrix'].append(1)
-                self.ConfigDict['attenuators']['Matrix'].append(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5])
-        else:
-            self.fit_scatter.setChecked(False)
-            if self.ConfigDict['fit']['energy'][:] is not None:
+        if filename != '':
+            self.ConfigDict.read(filename)
+            # go over ConfigDict and adjust GUI accordingly
+            if self.ConfigDict['fit']['scatterflag'] == 1:
+                self.fit_scatter.setChecked(True)
                 self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
-            else:
-                self.raylE.setText("{:.3f}".format(20.))
-                self.ConfigDict['fit']['energy'] = [20.]
-            if len(self.ConfigDict['attenuators']['Matrix']) == 8:
-                self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][7]))
-            else:
-                self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5]))
-                self.ConfigDict['attenuators']['Matrix'].append(1)
-                self.ConfigDict['attenuators']['Matrix'].append(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5])
-        if self.ConfigDict['fit']['escapeflag'] == 1:
-            self.fitesc.setChecked(True)
-        else:
-            self.fitesc.setChecked(False)
-        if self.ConfigDict['fit']['sumflag'] == 1:
-            self.fitsum.setChecked(True)
-        else:
-            self.fitsum.setChecked(False)
-        if self.ConfigDict['fit']['stripflag'] == 0:
-            self.fit_bkgr.setChecked(False)
-        else:
-            self.fit_bkgr.setChecked(True)
-        if self.ConfigDict['fit']['continuum'] == 0:
-            self.fittype.setCurrentText('SNIP')
-            self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['snipwidth']))
-        elif self.ConfigDict['fit']['continuum'] == 4:
-            self.fittype.setCurrentText('Linear polynomial')
-            self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['linpolorder']))
-        elif self.ConfigDict['fit']['continuum'] == 5:
-            self.fittype.setCurrentText('Exp. polynomial')
-            self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['exppolorder']))
-        self.gain.setText("{:.3f}".format(self.ConfigDict['detector']['gain']))
-        self.cte.setText("{:.3f}".format(self.ConfigDict['detector']['zero']))
-        self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
-        self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
-        self.dettype.setCurrentText(self.ConfigDict['detector']['detele']) #Si or Ge; 'detene' tab appears not used directly...
-        if self.ConfigDict['peaks'] != {}:
-            # order the library in order of increasing atomic number...
-            sortedpeaks = {}
-            for el in sorted(self.ConfigDict['peaks'], key=Elements.getz):
-                if type(self.ConfigDict['peaks'][el]) is list:
-                    sortedpeaks[el] = sorted(self.ConfigDict['peaks'][el])
+                if len(self.ConfigDict['attenuators']['Matrix']) == 8:
+                    self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][7]))
                 else:
-                    sortedpeaks[el] = self.ConfigDict['peaks'][el]
-            self.ConfigDict['peaks'] = sortedpeaks
-        self.update_plot(update=False)
-        self.update_plot(update=True) #redraw the original plot, with KLM lines
-        self.fitres = None
-        self.adjust_fittree(self.fittree)
+                    self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5]))
+                    self.ConfigDict['attenuators']['Matrix'].append(1)
+                    self.ConfigDict['attenuators']['Matrix'].append(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5])
+            else:
+                self.fit_scatter.setChecked(False)
+                if self.ConfigDict['fit']['energy'][:] is not None:
+                    self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
+                else:
+                    self.raylE.setText("{:.3f}".format(20.))
+                    self.ConfigDict['fit']['energy'] = [20.]
+                if len(self.ConfigDict['attenuators']['Matrix']) == 8:
+                    self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][7]))
+                else:
+                    self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5]))
+                    self.ConfigDict['attenuators']['Matrix'].append(1)
+                    self.ConfigDict['attenuators']['Matrix'].append(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5])
+            if self.ConfigDict['fit']['escapeflag'] == 1:
+                self.fitesc.setChecked(True)
+            else:
+                self.fitesc.setChecked(False)
+            if self.ConfigDict['fit']['sumflag'] == 1:
+                self.fitsum.setChecked(True)
+            else:
+                self.fitsum.setChecked(False)
+            if self.ConfigDict['fit']['stripflag'] == 0:
+                self.fit_bkgr.setChecked(False)
+            else:
+                self.fit_bkgr.setChecked(True)
+            if self.ConfigDict['fit']['continuum'] == 0:
+                self.fittype.setCurrentText('SNIP')
+                self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['snipwidth']))
+            elif self.ConfigDict['fit']['continuum'] == 4:
+                self.fittype.setCurrentText('Linear polynomial')
+                self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['linpolorder']))
+            elif self.ConfigDict['fit']['continuum'] == 5:
+                self.fittype.setCurrentText('Exp. polynomial')
+                self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['exppolorder']))
+            self.gain.setText("{:.3f}".format(self.ConfigDict['detector']['gain']))
+            self.cte.setText("{:.3f}".format(self.ConfigDict['detector']['zero']))
+            self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
+            self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
+            self.dettype.setCurrentText(self.ConfigDict['detector']['detele']) #Si or Ge; 'detene' tab appears not used directly...
+            if self.ConfigDict['peaks'] != {}:
+                # order the library in order of increasing atomic number...
+                sortedpeaks = {}
+                for el in sorted(self.ConfigDict['peaks'], key=Elements.getz):
+                    if type(self.ConfigDict['peaks'][el]) is list:
+                        sortedpeaks[el] = sorted(self.ConfigDict['peaks'][el])
+                    else:
+                        sortedpeaks[el] = self.ConfigDict['peaks'][el]
+                self.ConfigDict['peaks'] = sortedpeaks
+            self.update_plot(update=False)
+            self.update_plot(update=True) #redraw the original plot, with KLM lines
+            self.fitres = None
+            self.adjust_fittree(self.fittree)
 
     def do_refit(self):                    
         mcafit = ClassMcaTheory.ClassMcaTheory()
