@@ -2161,23 +2161,12 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             print("read")            
         # actual pilcgenerator files can be different structure depending on type of scan
         files = list("")
-        #TODO: we can clean this up, into 1 try block, pilctrigger can run from 01 to 05...
-        try:
-            for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_03")):
-                if file.endswith(".nxs"):
-                    files.append(file)
-            pilcid = "/pilctriggergenerator_03/"
-        except FileNotFoundError:
-            try:
-                for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_02")):
+        for i in range(5,0,-1):
+            if os.path.isdir(sc_id+"/pilctriggergenerator_0"+str(i)) is True:
+                for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_0"+str(i))):
                     if file.endswith(".nxs"):
                         files.append(file)
-                pilcid = "/pilctriggergenerator_02/"
-            except FileNotFoundError:
-                for file in sorted(os.listdir(sc_id+"/pilctriggergenerator_01")):
-                    if file.endswith(".nxs"):
-                        files.append(file)
-                pilcid = "/pilctriggergenerator_01/"
+                pilcid = "/pilctriggergenerator_0"+str(i)+"/"
         try:
             md_dict = {}
             with open("/".join(sc_id.split("/")[0:-2])+"/scan_logbook.txt", "r") as file_handle:
@@ -2189,106 +2178,131 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         except Exception as ex:
             print("Warning: ", ex)
             dictionary = md_dict
-        for file in files:
-            # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
-            print("Reading " +sc_id+pilcid+file +"...", end=" ")
-            f = h5py.File(sc_id+pilcid+file, 'r')
-            enc_vals = []
-            for i in range(10):
-                if 'encoder_'+str(i) in list(f['entry/data'].keys()):
-                    enc_vals.append(f['entry/data/encoder_'+str(i)])
-            enc_names = [str(enc.attrs["Name"]).strip("'") for enc in enc_vals]
-            if scan_cmd[1] in enc_names:
-                mot1_arr = enc_vals[enc_names.index(scan_cmd[1])]
-                mot1_name = enc_names[enc_names.index(scan_cmd[1])]
-            else: # in this case the motor in not in the encoder list, so could be a virtual motor... let's look in the accompanying python logbook
-                try:
-                    pivot = dictionary["axes"]["axis0"]["virtual_motor_config"]["pivot_points"]
-                    mot_list = list(dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"].keys())
-                    mot1a = enc_vals[enc_names.index(mot_list[0])]
-                    mot1a_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
-                    mot1b = enc_vals[enc_names.index(mot_list[1])]
-                    mot1b_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
-                    mot1_arr = mot1a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
-                    mot1_name = str(scan_cmd[1])
-                except Exception:
-                    try:
-                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
-                            print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
-                            mot1_arr = enc_vals[0]
-                            mot1_name = enc_names[0]
-                        else:
-                            f2 = h5py.File(sc_id+'.nxs','r')
-                            mot1_arr = np.array(f2["scan/data/"+str(scan_cmd[1])][:])
-                            mot1_name = str(scan_cmd[1])
-                            f2.close()
-                    except KeyError:
-                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
-                            print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
-                            mot1_arr = enc_vals[0]
-                            mot1_name = enc_names[0]
-                        else:
-                            if scan_cmd[1] == 'scanz':
-                                mot1_arr = enc_vals[enc_names.index('scanw')]
-                                mot1_name = enc_names[enc_names.index('scanw')]
-                            elif scan_cmd[1] == 'scany':
-                                mot1_arr = enc_vals[enc_names.index('scanu')]
-                                mot1_name = enc_names[enc_names.index('scanu')]
-                            elif scan_cmd[1] == 'scanx':
-                                mot1_arr = enc_vals[enc_names.index('scanv')]
-                                mot1_name = enc_names[enc_names.index('scanv')]
-                            else:
-                                print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
-                                mot1_arr = enc_vals[0]
-                                mot1_name = enc_names[0]
-            if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
-                mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
-                mot2_name = enc_names[enc_names.index(scan_cmd[5])]
+        if files == [""]:
+            # Reading motor positions from main nxs file. Assumes only 2D scans are performed (stores encoder1 and 2 values)
+            print("Reading " +sc_id +".nxs...", end=" ")
+            f = h5py.File(sc_id+'.nxs', 'r')
+            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' 
+                mot1_arr = np.array(f["scan/data/timestamp")][:])
+                mot1_name = "timestamp"
+                mot2_arr = np.array(f2["scan/data/timestamp")][:])
+                mot2_name = "timestamp"                                        
+            elif scan_cmd[0] == 'dscan':
+                mot1_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
+                mot1_name = str(scan_cmd[1])
+                mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[1])][:])
+                mot2_name = str(scan_cmd[1])                            
             else:
-                try:
-                    pivot = dictionary["axes"]["axis1"]["virtual_motor_config"]["pivot_points"]
-                    mot_list = list(dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"].keys())
-                    mot2a = enc_vals[enc_names.index(mot_list[0])]
-                    mot2a_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
-                    mot2b = enc_vals[enc_names.index(mot_list[1])]
-                    mot2b_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
-                    mot2_arr = mot2a_contrib*(np.array(mot2a)-pivot[0])+mot2b_contrib*(np.array(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
-                    mot2_name = str(scan_cmd[5])
-                except Exception:
-                    try:
-                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
-                            print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
-                            mot2_arr = enc_vals[1]
-                            mot2_name = enc_names[1]
-                        else:
-                            f2 = h5py.File(sc_id+'.nxs','r')
-                            mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
-                            mot2_name = str(scan_cmd[5])
-                            f2.close()
-                    except KeyError:
-                        if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
-                            print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
-                            mot2_arr = enc_vals[1]
-                            mot2_name = enc_names[1]
-                        else:
-                            if scan_cmd[5] == 'scanz':
-                                mot2_arr = enc_vals[enc_names.index('scanw')]
-                                mot2_name = enc_names[enc_names.index('scanw')]
-                            elif scan_cmd[5] == 'scany':
-                                mot2_arr = enc_vals[enc_names.index('scanu')]
-                                mot2_name = enc_names[enc_names.index('scanu')]
-                            elif scan_cmd[5] == 'scanx':
-                                mot2_arr = enc_vals[enc_names.index('scanv')]
-                                mot2_name = enc_names[enc_names.index('scanv')]
-                            else:
-                                print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
-                                mot2_arr = enc_vals[1]
-                                mot2_name = enc_names[1]
+                mot1_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
+                mot1_name = str(scan_cmd[1])
+                mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
+                mot2_name = str(scan_cmd[5])            
+            f.close()
             for i in range(mot1_arr.shape[0]):
                 mot1.append(mot1_arr[i])
                 mot2.append(mot2_arr[i])
-            f.close()
             print("read")
+        else:
+            for file in files:
+                # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
+                print("Reading " +sc_id+pilcid+file +"...", end=" ")
+                f = h5py.File(sc_id+pilcid+file, 'r')
+                enc_vals = []
+                for i in range(10):
+                    if 'encoder_'+str(i) in list(f['entry/data'].keys()):
+                        enc_vals.append(f['entry/data/encoder_'+str(i)])
+                enc_names = [str(enc.attrs["Name"]).strip("'") for enc in enc_vals]
+                if scan_cmd[1] in enc_names:
+                    mot1_arr = enc_vals[enc_names.index(scan_cmd[1])]
+                    mot1_name = enc_names[enc_names.index(scan_cmd[1])]
+                else: # in this case the motor in not in the encoder list, so could be a virtual motor... let's look in the accompanying python logbook
+                    try:
+                        pivot = dictionary["axes"]["axis0"]["virtual_motor_config"]["pivot_points"]
+                        mot_list = list(dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"].keys())
+                        mot1a = enc_vals[enc_names.index(mot_list[0])]
+                        mot1a_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
+                        mot1b = enc_vals[enc_names.index(mot_list[1])]
+                        mot1b_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
+                        mot1_arr = mot1a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
+                        mot1_name = str(scan_cmd[1])
+                    except Exception:
+                        try:
+                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                                print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
+                                mot1_arr = enc_vals[0]
+                                mot1_name = enc_names[0]
+                            else:
+                                f2 = h5py.File(sc_id+'.nxs','r')
+                                mot1_arr = np.array(f2["scan/data/"+str(scan_cmd[1])][:])
+                                mot1_name = str(scan_cmd[1])
+                                f2.close()
+                        except KeyError:
+                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
+                                print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
+                                mot1_arr = enc_vals[0]
+                                mot1_name = enc_names[0]
+                            else:
+                                if scan_cmd[1] == 'scanz':
+                                    mot1_arr = enc_vals[enc_names.index('scanw')]
+                                    mot1_name = enc_names[enc_names.index('scanw')]
+                                elif scan_cmd[1] == 'scany':
+                                    mot1_arr = enc_vals[enc_names.index('scanu')]
+                                    mot1_name = enc_names[enc_names.index('scanu')]
+                                elif scan_cmd[1] == 'scanx':
+                                    mot1_arr = enc_vals[enc_names.index('scanv')]
+                                    mot1_name = enc_names[enc_names.index('scanv')]
+                                else:
+                                    print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
+                                    mot1_arr = enc_vals[0]
+                                    mot1_name = enc_names[0]
+                if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
+                    mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
+                    mot2_name = enc_names[enc_names.index(scan_cmd[5])]
+                else:
+                    try:
+                        pivot = dictionary["axes"]["axis1"]["virtual_motor_config"]["pivot_points"]
+                        mot_list = list(dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"].keys())
+                        mot2a = enc_vals[enc_names.index(mot_list[0])]
+                        mot2a_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
+                        mot2b = enc_vals[enc_names.index(mot_list[1])]
+                        mot2b_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
+                        mot2_arr = mot2a_contrib*(np.array(mot2a)-pivot[0])+mot2b_contrib*(np.array(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
+                        mot2_name = str(scan_cmd[5])
+                    except Exception:
+                        try:
+                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                                print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
+                                mot2_arr = enc_vals[1]
+                                mot2_name = enc_names[1]
+                            else:
+                                f2 = h5py.File(sc_id+'.nxs','r')
+                                mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
+                                mot2_name = str(scan_cmd[5])
+                                f2.close()
+                        except KeyError:
+                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                                print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
+                                mot2_arr = enc_vals[1]
+                                mot2_name = enc_names[1]
+                            else:
+                                if scan_cmd[5] == 'scanz':
+                                    mot2_arr = enc_vals[enc_names.index('scanw')]
+                                    mot2_name = enc_names[enc_names.index('scanw')]
+                                elif scan_cmd[5] == 'scany':
+                                    mot2_arr = enc_vals[enc_names.index('scanu')]
+                                    mot2_name = enc_names[enc_names.index('scanu')]
+                                elif scan_cmd[5] == 'scanx':
+                                    mot2_arr = enc_vals[enc_names.index('scanv')]
+                                    mot2_name = enc_names[enc_names.index('scanv')]
+                                else:
+                                    print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
+                                    mot2_arr = enc_vals[1]
+                                    mot2_name = enc_names[1]
+                for i in range(mot1_arr.shape[0]):
+                    mot1.append(mot1_arr[i])
+                    mot2.append(mot2_arr[i])
+                f.close()
+                print("read")
         # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.array
         # let's translate scan command to figure out array dimensions we want to fill
         #   1D scan (ascan, dscan, timescan, ...) contain 7 parts, i.e. dscan samx 0 1 10 1 False
