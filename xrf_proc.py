@@ -2178,24 +2178,24 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         except Exception as ex:
             print("Warning: ", ex)
             dictionary = md_dict
-        if files == [""]:
+        if files == []:
             # Reading motor positions from main nxs file. Assumes only 2D scans are performed (stores encoder1 and 2 values)
             print("Reading " +sc_id +".nxs...", end=" ")
             f = h5py.File(sc_id+'.nxs', 'r')
-            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' 
-                mot1_arr = np.array(f["scan/data/timestamp")][:])
+            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
+                mot1_arr = np.array(f["scan/data/timestamp"][:])
                 mot1_name = "timestamp"
-                mot2_arr = np.array(f2["scan/data/timestamp")][:])
+                mot2_arr = np.array(f["scan/data/timestamp"][:])
                 mot2_name = "timestamp"                                        
-            elif scan_cmd[0] == 'dscan':
+            elif scan_cmd[0] == 'dscan' or scan_cmd[0] == 'ascan':
                 mot1_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
                 mot1_name = str(scan_cmd[1])
-                mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[1])][:])
+                mot2_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
                 mot2_name = str(scan_cmd[1])                            
             else:
                 mot1_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
                 mot1_name = str(scan_cmd[1])
-                mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
+                mot2_arr = np.array(f["scan/data/"+str(scan_cmd[5])][:])
                 mot2_name = str(scan_cmd[5])            
             f.close()
             for i in range(mot1_arr.shape[0]):
