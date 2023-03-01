@@ -123,6 +123,10 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
         if kmeans is not None:
             spectra = np.array(file['raw/channel01/spectra'])
         channel = 'channel01'
+    elif 'channel02' in h5dir:
+        if kmeans is not None:
+            spectra = np.array(file['raw/channel02/spectra'])
+        channel = 'channel02'
     
     # perform PCA clustering
     scores, evals, evecs = PCA(data, nclusters=nclusters, el_id=el_id)
@@ -226,6 +230,9 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     elif 'channel01' in h5dir:
         spectra = np.array(file['raw/channel01/spectra'])
         channel = 'channel01'
+    elif 'channel02' in h5dir:
+        spectra = np.array(file['raw/channel02/spectra'])
+        channel = 'channel02'
     spectra = spectra.reshape((spectra.shape[0]*spectra.shape[1], spectra.shape[2]))
     
     # perform Kmeans clustering
@@ -2141,7 +2148,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 print("read")
         else: #the adc01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
             file = os.listdir(sc_id+"/adc01")
-            print("Reading " +sc_id+"/adc01/"+file[0] +"...", end=" ") #os.listdir returns a list, we only need the string... Should be single file at this point
+            print("Reading " +sc_id+"/adc01/"+file[0] +"...", end=" ") #os.listdir returns a list, so we pick first element as only 1 should be there right now
             f = h5py.File(sc_id+"/adc01/"+file[0], 'r')
             i0_arr = f['entry/data/Value1'][:]
             i1_arr = f['entry/data/Value2'][:]
