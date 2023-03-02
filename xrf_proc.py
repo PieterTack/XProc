@@ -1328,8 +1328,9 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         if ims0.shape[1] > mot1.shape[0]:
             ims0 = ims0[:,0:mot1.shape[0],:]      
             I0 = I0[0:mot1.shape[0],:]
-            tm = tm[0:mot1.shape[0],:]            
-        if cmd[0] != "b'timescanc" and cmd[0] != "b'dscan" and cmd[0] != "timescanc" and cmd[0] != "dscan" and cmd[0] != "c" and cmd[0] != "b'c":
+            tm = tm[0:mot1.shape[0],:]
+        except_list = ["b'timescanc", "b'dscan", "b'ascan", "timescanc", "dscan", "ascan", "c", "b'c"]
+        if cmd[0] not in except_list:
             print(cmd[0])
             snake = True
             timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
