@@ -1179,7 +1179,10 @@ class Config_GUI(QWidget):
             # go over ConfigDict and adjust GUI accordingly
             if self.ConfigDict['fit']['scatterflag'] == 1:
                 self.fit_scatter.setChecked(True)
-                self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
+                try:
+                    self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
+                except TypeError:
+                    self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy'][0])) #if list of energies is provided, only take first element
                 if len(self.ConfigDict['attenuators']['Matrix']) == 8:
                     self.scatangle.setText("{:.3f}".format(self.ConfigDict['attenuators']['Matrix'][7]))
                 else:
