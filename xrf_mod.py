@@ -8,6 +8,52 @@ Created on Mon Jan 16 12:32:27 2023
 import numpy as np
 
 ##############################################################################
+# Convert XProcH5 intensity data to csv format
+#   Column headers are the respective element names, whereas rows represent the different motor1 coordinates
+#       (in handheld XRF data these are the separate file names)
+#TODO: we may want to expand this function to allow for multiple h5files and h5dirs combined to a single csv file. At that point,
+#   we should include an additional column stating the respective h5file name, and, more importantly, make sure all elements are represented across all files
+def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
+    import h5py
+    import os
+
+    # check if csvfile already exists, and warn if we don't want to overwrite (default)
+    if overwrite is False:
+        if os.path.isfile(csvfile) is True:
+            raise ValueError("Warning: CSV file "+csvfile+" already exists.\n Set keyword overwrite=True if you wish to overwrite this file.")
+
+    # determine the path containing the element names
+    namespath = h5dir.split('/')
+    if namespath[-2] == 'sum':
+        namespath = '/'.join(namespath[:-2])+'/names' #if sum directory the names path is in the directory above
+    else:
+        namespath = '/'.join(namespath[:-1])+'/names'
+        
+    # read the h5 data
+    with h5py.File(h5file, 'r') as h5:
+        data = np.asarray(h5[h5dir]).astype(str)
+        names = [n.decode("utf8") for n in h5[namespath]]
+        mot1_name = str(h5['mot1'].attrs["Name"])
+        if mot1_name == "hxrf":
+            rowID = [n.decode("utf8") for n in h5["mot1"]]
+        else:
+            rowID = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
+
+    # 'flatten' the data
+    if len(data.shape) == 3:
+        data = data.reshape((data.shape[0],data.shape[1]*data.shape[2]))
+        rowID = rowID.reshape((rowID.shape[0]*rowID.shape[1]))
+
+    # write data as csv
+    print("Writing "+csvfile+"...", end="")
+    with open(csvfile, 'w') as csv:
+        csv.write('RowID'+';'.join(names))
+        for i in range(rowID.shape[0]):
+            csv.write(rowID[i]+';'.join(data[:,i]))
+    print("Done.")
+        
+    
+##############################################################################
 # join two files together, stitched one after the other
 def XProcH5_combine(files=['A0186_1_3_xrfct_0003_scan1.h5', 'A0186_1_3_xrfct_0004_scan1.h5', 'A0186_1_3_xrfct_0005_scan1.h5'], newfile='A0186_1_3_xrfct_scan1.h5', ax=0):
     import h5py
