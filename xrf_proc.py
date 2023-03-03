@@ -31,34 +31,215 @@ class Cnc():
         self.density = 0 # [mg/cm^3]
         self.mass = 0 # [mg]
         self.thickness = 0 # [micron]
+        
+class Spc():
+    def __init__(self, spcfile):
+        # file content: spc_dtype = \
+        #     [  # data offset (bytes)
+        #         ('fVersion', '<f4'),  # 0
+        #         ('aVersion', '<f4'),  # 4
+        #         ('fileName', '8i1'),  # 8
+        #         ('collectDateYear', '<i2'),  # 16
+        #         ('collectDateDay', '<i1'),  # 17
+        #         ('collectDateMon', '<i1'),
+        #         ('collectTimeMin', '<i1'),
+        #         ('collectTimeHour', '<i1'),
+        #         ('collectTimeHund', '<i1'),
+        #         ('collectTimeSec', '<i1'),
+        #         ('fileSize', '<i4'),  # 24
+        #         ('dataStart', '<i4'),  # 28
+        #         ('numPts', '<i2'),  # 32
+        #         ('intersectingDist', '<i2'),  # 34
+        #         ('workingDist', '<i2'),  # 36
+        #         ('scaleSetting', '<i2'),  # 38
+    
+        #         ('filler1', 'V24'),  # 40
+    
+        #         ('spectrumLabel', '256i1'),  # 64
+        #         ('imageFilename', '8i1'),  # 320
+        #         ('spotX', '<i2'),  # 328
+        #         ('spotY', '<i2'),  # 330
+        #         ('imageADC', '<i2'),  # 332
+        #         ('discrValues', '<5i4'),  # 334
+        #         ('discrEnabled', '<5i1'),  # 354
+        #         ('pileupProcessed', '<i1'),  # 359
+        #         ('fpgaVersion', '<i4'),  # 360
+        #         ('pileupProcVersion', '<i4'),  # 364
+        #         ('NB5000CFG', '<i4'),  # 368
+    
+        #         ('filler2', 'V12'),  # 380
+    
+        #         ('evPerChan', '<i4'),  # 384 **
+        #         ('ADCTimeConstant', '<i2'),  # 388
+        #         ('analysisType', '<i2'),  # 390     #4:live, 1:clock
+        #         ('preset', '<f4'),  # 392           #set measurement time in s
+        #         ('maxp', '<i4'),  # 396
+        #         ('maxPeakCh', '<i4'),  # 400
+        #         ('xRayTubeZ', '<i2'),  # 404
+        #         ('filterZ', '<i2'),  # 406
+        #         ('current', '<f4'),  # 408          #Tube current in uA?
+        #         ('sampleCond', '<i2'),  # 412       #0:air, 1:vacuum
+        #         ('sampleType', '<i2'),  # 414
+        #         ('xrayCollimator', '<u2'),  # 416
+        #         ('xrayCapilaryType', '<u2'),  # 418
+        #         ('xrayCapilarySize', '<u2'),  # 420     #"Beam spot"
+        #         ('xrayFilterThickness', '<u2'),  # 422
+        #         ('spectrumSmoothed', '<u2'),  # 424
+        #         ('detector_Size_SiLi', '<u2'),  # 426   #detector area in mm²
+        #         ('spectrumReCalib', '<u2'),  # 428
+        #         ('eagleSystem', '<u2'),  # 430
+        #         ('sumPeakRemoved', '<u2'),  # 432
+        #         ('edaxSoftwareType', '<u2'),  # 434
+    
+        #         ('filler3', 'V6'),  # 436
+    
+        #         ('escapePeakRemoved', '<u2'),  # 442
+        #         ('analyzerType', '<u4'),  # 444
+        #         ('startEnergy', '<f4'),  # 448 **
+        #         ('endEnergy', '<f4'),  # 452
+        #         ('liveTime', '<f4'),  # 456 **      #Live time
+        #         ('tilt', '<f4'),  # 460 **
+        #         ('takeoff', '<f4'),  # 464          #beam incidence angle
+        #         ('beamCurFact', '<f4'),  # 468
+        #         ('detReso', '<f4'),  # 472 **
+        #         ('detectType', '<u4'),  # 476
+        #         ('parThick', '<f4'),  # 480
+        #         ('alThick', '<f4'),  # 484          #Al light shield thickness (in um?)
+        #         ('beWinThick', '<f4'),  # 488       #Be window thickness (in um?)
+        #         ('auThick', '<f4'),  # 492          #Au light shield thickness (in um?)
+        #         ('siDead', '<f4'),  # 496
+        #         ('siLive', '<f4'),  # 500
+        #         ('xrayInc', '<f4'),  # 504
+        #         ('azimuth', '<f4'),  # 508 **
+        #         ('elevation', '<f4'),  # 512 **
+        #         ('bCoeff', '<f4'),  # 516
+        #         ('cCoeff', '<f4'),  # 520
+        #         ('tailMax', '<f4'),  # 524
+        #         ('tailHeight', '<f4'),  # 528
+        #         ('kV', '<f4'),  # 532 **            #kV source setting
+        #         ('apThick', '<f4'),  # 536
+        #         ('xTilt', '<f4'),  # 540
+        #         ('yTilt', '<f4'),  # 544
+        #         ('yagStatus', '<u4'),  # 548
+    
+        #         ('filler4', 'V24'),  # 552
+    
+        #         ('rawDataType', '<u2'),  # 576
+        #         ('totalBkgdCount', '<f4'),  # 578
+        #         ('totalSpectralCount', '<u4'),  # 582
+        #         ('avginputCount', '<f4'),  # 586
+        #         ('stdDevInputCount', '<f4'),  # 590
+        #         ('peakToBack', '<u2'),  # 594
+        #         ('peakToBackValue', '<f4'),  # 596
+    
+        #         ('filler5', 'V38'),  # 600
+    
+        #         ('numElem', '<i2'),  # 638 **
+        #         ('at', '<48u2'),  # 640 **
+        #         ('line', '<48u2'),  # 736
+        #         ('energy', '<48f4'),  # 832
+        #         ('height', '<48u4'),  # 1024
+        #         ('spkht', '<48i2'),  # 1216
+    
+        #         ('filler5_1', 'V30'),  # 1312
+    
+        #         ('numRois', '<i2'),  # 1342
+        #         ('st', '<48i2'),  # 1344
+        #         ('end', '<48i2'),  # 1440
+        #         ('roiEnable', '<48i2'),  # 1536
+        #         ('roiNames', '(24,8)i1'),  # 1632
+    
+        #         ('filler5_2', 'V1'),  # 1824
+    
+        #         ('userID', '80i1'),  # 1825
+    
+        #         ('filler5_3', 'V111'),  # 1905
+    
+        #         ('sRoi', '<48i2'),  # 2016
+        #         ('scaNum', '<48i2'),  # 2112
+    
+        #         ('filler6', 'V12'),  # 2208
+    
+        #         ('backgrdWidth', '<i2'),  # 2220
+        #         ('manBkgrdPerc', '<f4'),  # 2222
+        #         ('numBkgrdPts', '<i2'),  # 2226
+        #         ('backMethod', '<u4'),  # 2228
+        #         ('backStEng', '<f4'),  # 2232
+        #         ('backEndEng', '<f4'),  # 2236
+        #         ('bg', '<64i2'),  # 2240
+        #         ('bgType', '<u4'),  # 2368
+        #         ('concenKev1', '<f4'),  # 2372
+        #         ('concenKev2', '<f4'),  # 2376
+        #         ('concenMethod', '<i2'),  # 2380
+        #         ('jobFilename', '<32i1'),  # 2382
+    
+        #         ('filler7', 'V16'),  # 2414
+    
+        #         ('numLabels', '<i2'),  # 2430
+        #         ('label', '<(10,32)i1'),  # 2432
+        #         ('labelx', '<10i2'),  # 2752
+        #         ('labely', '<10i4'),  # 2772
+        #         ('zListFlag', '<i4'),  # 2812
+        #         ('bgPercents', '<64f4'),  # 2816
+        #         ('IswGBg', '<i2'),  # 3072
+        #         ('BgPoints', '<5f4'),  # 3074
+        #         ('IswGConc', '<i2'),  # 3094
+        #         ('numConcen', '<i2'),  # 3096
+        #         ('ZList', '<24i2'),  # 3098
+        #         ('GivenConc', '<24f4'),  # 3146
+    
+        #         ('filler8', 'V598'),  # 3242
+    
+        #         ('spectrum', '<4096i4'),  # 3840 #actual spectrum
+        #         ('longFileName', '<256i1'),  # 20224
+        #         ('longImageFileName', '<256i1'),  # 20480
+        #     ]
+        
+        # We'll only look for the parts we need
+        self.rv = {}
+        with open(spcfile, 'rb') as h:
+            h.seek(408)
+            self.rv['Current'] = np.fromfile(h, dtype = [ ('current', '<f4')], count=1)['current'][0]
+            h.seek(456)
+            self.rv['LiveTime'] = np.fromfile(h, dtype = [ ('liveTime', '<f4')], count=1)['liveTime'][0]
+            h.seek(3840)
+            self.rv['Data'] = np.fromfile(h, dtype = [ ('spectrum', '<4096i4')], count=1)['spectrum'][0]
+            self.rv['ICR'] = np.total(self.rv['Data'])
+            self.rv['OCR'] = self.rv['ICR'] # ICR and OCR are identical in this case as data is already deadtime corrected (i.e. acquired for given livetime)
+            
+            # TODO: no info on motor positions is found in this file
+            # We could also consider importing the Eagle-quantified data, for further usage...
+            # To read in all data fields: h.seek(0); header = np.fromfile(h, dtype = spc_dtype, count=1)self.rv[]; for name in header.dtype.names: self.rv[name] = header[name][0] if len(header[name]) == 1 else header[name]
+            
 
+
+    
 ##############################################################################
 def read_cnc(cncfile):
     rv = Cnc()
     line = ""
-    f = open(cncfile, "r")
-    f.readline() #Standard_Name
-    rv.name = f.readline() # name of the standard
-    f.readline() #Density(mg/cm^3)	Mass(mg)	Sample_thickness(micron)
-    line = [float(i) for i in f.readline().split("\t") if i.strip()] #should contain 3 elements
-    rv.density = line[0]
-    rv.mass = line[1]
-    rv.thickness = line[1]
-    f.readline() #Number of elements
-    size = int(f.readline())
-    f.readline() #Z	Cert conc(ppm)	Standard_error(ppm)
-    z = np.zeros(size)
-    conc = np.zeros(size)
-    err = np.zeros(size)
-    for i in range(0,size):
+    with open(cncfile, "r") as f:
+        f.readline() #Standard_Name
+        rv.name = f.readline() # name of the standard
+        f.readline() #Density(mg/cm^3)	Mass(mg)	Sample_thickness(micron)
         line = [float(i) for i in f.readline().split("\t") if i.strip()] #should contain 3 elements
-        z[i] = int(line[0])
-        conc[i] = line[1]
-        err[i] = line[2]
+        rv.density = line[0]
+        rv.mass = line[1]
+        rv.thickness = line[1]
+        f.readline() #Number of elements
+        size = int(f.readline())
+        f.readline() #Z	Cert conc(ppm)	Standard_error(ppm)
+        z = np.zeros(size)
+        conc = np.zeros(size)
+        err = np.zeros(size)
+        for i in range(0,size):
+            line = [float(i) for i in f.readline().split("\t") if i.strip()] #should contain 3 elements
+            z[i] = int(line[0])
+            conc[i] = line[1]
+            err[i] = line[2]
     rv.z = z
     rv.conc = conc
     rv.err = err
-    f.close()
     
     return rv
 
@@ -1882,17 +2063,66 @@ def Pymca_fit(spectra, mcafit, verbose=None):
 
 ##############################################################################
 # Read the EDAX EagleIII SPC files and restructure as H5 for further processing
-#TODO: write this function
-def ConvEdaxSpc(spcfile):
-    import hyperspy.api as hs
+# Syntax: ConvEdaxSpc(spcprefix, outfile, scandim)
+# Example: ConvEdaxSpc('/data/eagle/folder/a', 'a_merge.h5', (30,1), coords=[22.3, 17, 0.05, 0.])
+#       If coords is provided, motor positions are calculated. Coords=[Xstart, Ystart, Xincr, Yincr]
+#           Where Xstart and Ystart are the position coordinates of the first measurement (a11.SPC)
+#           and Xincr and Yincr are the step sizes of X and Y motors, in mm. The software assumes that
+#           X is the 'fast moving' motor, i.e. makes most steps during the scan and that no snake-pattern scans are performed
+def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
+    import glob
     
-    s = hs.load(spcfile)
+    spcfiles = glob.glob(spcprefix+'*.spc')
+    # check if found files number matches provided scan dimension
+    if len(spcfiles) != scandim[0]*scandim[1]:
+        raise ValueError("ValueError: scan dimension ", scandim, " does not match number of SPC files: ", len(spcfiles))
+    
+    spectra = []
+    ocr = [] #icr and ocr are the same for edax eagle data as we acquire for certain set livetime
+    i0 = []
+    tm = []
+    mot1 = []
+    mot2 = []
+    
+    x,y = 0, 0
+    for file in sorted(spcfiles):
+        s = Spc(file)      
+        i0.append(float(s["Current"]))
+        tm.append(float(s["LiveTime"]))
+        spectra.append([s["Data"].astype(float)])
+        ocr.append(float(s["OCR"]))
 
-    # total_dataPoints = s.original_metadata.spc_header.numPts
-    # step = s.original_metadata.spc_header.evPerChan
-    # print(s.data)
+        mot1.append(coords[0]+x*coords[2])
+        mot2.append(coords[1]+y*coords[3])
+        x += 1
+        if x >= scandim[0]:
+            x = 0
+            y += 1
+ 
+    sumspec = np.sum(spectra[:], axis=(0,1))
+    maxspec = np.zeros(sumspec.shape[0])
+    for i in range(sumspec.shape[0]):
+        maxspec[i] = spectra[:,:,i].max()
+    i1 = np.zeros(i0.shape)
 
-    pass
+    outfile = '/'.join(spcprefix.split('/')[:-1])+'/'+outfile
+    print("Writing converted file: "+outfile+"...", end=" ")
+    with h5py.File(outfile, 'w') as f:
+        f.create_dataset('cmd', data='scan EDAX EagleIII')
+        f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/icr', data=np.squeeze(ocr), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4)
+        dset = f.create_dataset('mot1', data=[n.encode('utf8') for n in mot1])
+        dset.attrs['Name'] = 'X'
+        dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = 'Y'
+    print("Done")
+
 ##############################################################################
 # Read the Delta Premium handheld CSV files and restructure as H5 for further processing
 def ConvDeltaCsv(csvfile):
@@ -2575,7 +2805,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             f = h5py.File(file, 'r')
             try:
                 scan_cmd = f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
-            except Exception as ex:
+            except Exception:
                 scan_cmd = f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
             spectra0_temp = np.array(f[sc_id+'/measurement/'+ch0id])
             spectra0 = np.zeros((sc_dim[0], sc_dim[1], spectra0_temp.shape[1]))
@@ -2643,7 +2873,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             f = h5py.File(file, 'r')
             try:
                 scan_cmd += ' '+(f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
-            except Exception as ex:
+            except Exception:
                 scan_cmd += ' '+(f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
                 
             #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
