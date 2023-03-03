@@ -837,26 +837,27 @@ class Config_GUI(QWidget):
 
     def browse_app(self):
         self.filename = QFileDialog.getOpenFileName(self, caption="Open spectrum file", filter="H5 (*.h5);;SPE (*.spe);;CSV (*.csv)")[0]
-        self.filedir.setText("'"+str(self.filename)+"'")
-        # read in first ims file, to obtain data on elements and dimensions
-        if(self.filename != "''"):
-            if self.filename.split('.')[-1] == 'spe':
-                pass #TODO
-            elif self.filename.split('.')[-1] == 'csv':
-                pass #TODO
-            elif self.filename.split('.')[-1] == 'h5':
-                self.file = Poll_h5dir(self.filename)
-                self.subdirs = []
-                self.subdirs = self.file.dirs()
-                self.rawspe = self.file.spe([dirs for dirs in self.subdirs if 'raw' in dirs and 'sumspec' in dirs][0])
-                # change dropdown widget to display appropriate subdirs
-                self.subdir.clear()
-                self.subdir.addItems(self.subdirs)
-                self.subdir.setCurrentIndex(self.subdirs.index([dirs for dirs in self.subdirs if 'raw' in dirs and 'sumspec' in dirs][0]))
-        # now adjust plot window (if new file or dir chosen, the fit results should clear and only self.rawspe is displayed)
-        self.fitres = None
-        self.update_plot(update=False)
-        self.adjust_fittree(self.fittree)
+        if len(self.filename) != 0:
+            self.filedir.setText("'"+str(self.filename)+"'")
+            # read in first ims file, to obtain data on elements and dimensions
+            if(self.filename != "''"):
+                if self.filename.split('.')[-1] == 'spe':
+                    pass #TODO
+                elif self.filename.split('.')[-1] == 'csv':
+                    pass #TODO
+                elif self.filename.split('.')[-1] == 'h5':
+                    self.file = Poll_h5dir(self.filename)
+                    self.subdirs = []
+                    self.subdirs = self.file.dirs()
+                    self.rawspe = self.file.spe([dirs for dirs in self.subdirs if 'raw' in dirs and 'sumspec' in dirs][0])
+                    # change dropdown widget to display appropriate subdirs
+                    self.subdir.clear()
+                    self.subdir.addItems(self.subdirs)
+                    self.subdir.setCurrentIndex(self.subdirs.index([dirs for dirs in self.subdirs if 'raw' in dirs and 'sumspec' in dirs][0]))
+            # now adjust plot window (if new file or dir chosen, the fit results should clear and only self.rawspe is displayed)
+            self.fitres = None
+            self.update_plot(update=False)
+            self.adjust_fittree(self.fittree)
 
     def subdir_change(self, index):
         if self.subdirs != []:
@@ -1164,17 +1165,17 @@ class Config_GUI(QWidget):
 
     def save_png(self):
         imagename = QFileDialog.getSaveFileName(self, caption="Save PNG in:", filter="PNG (*.png)")[0]
-        if imagename != '':
+        if len(imagename) != 0:
             self.mpl.canvas.print_figure(imagename, dpi=300)
 
     def save_config(self):
         filename = QFileDialog.getSaveFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
-        if filename != '':
+        if len(filename) != 0:
             self.ConfigDict.write(filename)
 
     def load_config(self):
         filename = QFileDialog.getOpenFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
-        if filename != '':
+        if len(filename) != 0:
             self.ConfigDict.read(filename)
             # go over ConfigDict and adjust GUI accordingly
             if self.ConfigDict['fit']['scatterflag'] == 1:
