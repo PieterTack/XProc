@@ -1176,6 +1176,7 @@ class Config_GUI(QWidget):
     def load_config(self):
         filename = QFileDialog.getOpenFileName(self, caption="Save config in:", filter="CFG (*.cfg)")[0]
         if len(filename) != 0:
+            self.ConfigDict['peaks'] = {}
             self.ConfigDict.read(filename)
             # go over ConfigDict and adjust GUI accordingly
             if self.ConfigDict['fit']['scatterflag'] == 1:
