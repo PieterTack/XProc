@@ -1219,29 +1219,16 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     cnc = read_cnc(cncfile)
     
     # read h5 file
-    file = h5py.File(h5file, 'r+')
     try:
-        sum_fit0 = np.array(file['norm/channel00/sum/int'])
-        sum_bkg0 = np.array(file['norm/channel00/sum/bkg'])
-        sum_fit0_err = np.array(file['norm/channel00/sum/int_stddev'])/sum_fit0
-        sum_bkg0_err = np.array(file['norm/channel00/sum/bkg_stddev'])/sum_bkg0
-        names0 = file['norm/channel00/names']
-        try:
-            sum_fit1 = np.array(file['norm/channel01/sum/int'])
-            sum_bkg1 = np.array(file['norm/channel01/sum/bkg'])
-            sum_fit1_err = np.array(file['norm/channel01/sum/int_stddev'])/sum_fit1
-            sum_bkg1_err = np.array(file['norm/channel01/sum/bkg_stddev'])/sum_bkg1
-            names1 = file['norm/channel01/names']
-            chan01_flag = True
-        except Exception:
-            chan01_flag = False
-        tm = np.array(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-        I0 = np.array(file['raw/I0'])
-        I0norm = np.array(file['norm/I0'])
+        with h5py.File(h5file, 'r') as file:
+            keys = [key for key in file['norm'].keys() if 'channel' in key]
+            tm = np.array(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
+            I0 = np.array(file['raw/I0'])
+            I0norm = np.array(file['norm/I0'])
     except Exception:
         print("ERROR: calc_detlim: cannot open normalised data in "+h5file)
         return
-    
+
     # correct tm for appropriate normalisation factor
     #   tm is time for which DL would be calculated using values as reported, taking into account the previous normalisation factor
     tm = np.sum(tm)
@@ -1249,152 +1236,94 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
         normfactor = I0norm/(np.sum(I0)*tm)
     else:
         normfactor = I0norm/np.sum(I0)
-        
-    # undo normalisation on intensities as performed during norm_xrf_batch
-    #   in order to get intensities matching the current tm value (i.e. equal to raw fit values)
-    names0 = np.array([n.decode('utf8') for n in names0[:]])
-    sum_bkg0 = sum_bkg0/normfactor
-    sum_fit0 = sum_fit0/normfactor
-    if chan01_flag:
-        names1 = np.array([n.decode('utf8') for n in names1[:]])
-        sum_bkg1 = sum_bkg1/normfactor
-        sum_fit1 = sum_fit1/normfactor
-    # prune cnc.conc array to appropriate elements according to names0 and names1
-    #   creates arrays of size names0 and names1, where 0 values in conc0 and conc1 represent elements not stated in cnc_files.
-    conc0 = np.zeros(names0.size)
-    conc0_err = np.zeros(names0.size)
-    conc0_air = np.zeros(names0.size)
-    conc0_air_err = np.zeros(names0.size)
-    for j in range(0, names0.size):
-        el_name = names0[j].split(" ")[0]
-        for i in range(0, cnc.z.size):
-            if el_name == Elements.getsymbol(cnc.z[i]):
-                conc0_air[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
-                conc0_air_err[j] = (cnc.err[i]/cnc.conc[i])*conc0_air[j] # unit: [ug/cm²]
-                conc0[j] = cnc.conc[i] # unit: [ppm]
-                conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ppm]
-    if chan01_flag:
-        conc1 = np.zeros(names1.size)
-        conc1_err = np.zeros(names1.size)
-        conc1_air = np.zeros(names1.size)
-        conc1_air_err = np.zeros(names1.size)
-        for j in range(0, names1.size):
-            el_name = names1[j].split(" ")[0]
+
+    for index, chnl in enumerate(keys):
+        with h5py.File(h5file, 'r') as file:
+            sum_fit0 = np.array(file['norm/'+chnl+'/sum/int'])
+            sum_bkg0 = np.array(file['norm/'+chnl+'/sum/bkg'])
+            sum_fit0_err = np.array(file['norm/'+chnl+'/sum/int_stddev'])/sum_fit0
+            sum_bkg0_err = np.array(file['norm/'+chnl+'/sum/bkg_stddev'])/sum_bkg0
+            names0 = file['norm/'+chnl+'/names']
+                    
+        # undo normalisation on intensities as performed during norm_xrf_batch
+        #   in order to get intensities matching the current tm value (i.e. equal to raw fit values)
+        names0 = np.array([n.decode('utf8') for n in names0[:]])
+        sum_bkg0 = sum_bkg0/normfactor
+        sum_fit0 = sum_fit0/normfactor
+        # prune cnc.conc array to appropriate elements according to names0 and names1
+        #   creates arrays of size names0 and names1, where 0 values in conc0 and conc1 represent elements not stated in cnc_files.
+        conc0 = np.zeros(names0.size)
+        conc0_err = np.zeros(names0.size)
+        conc0_air = np.zeros(names0.size)
+        conc0_air_err = np.zeros(names0.size)
+        for j in range(0, names0.size):
+            el_name = names0[j].split(" ")[0]
             for i in range(0, cnc.z.size):
                 if el_name == Elements.getsymbol(cnc.z[i]):
-                    conc1_air[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
-                    conc1_air_err[j] = (cnc.err[i]/cnc.conc[i])*conc1_air[j] # unit: [ug/cm²]
-                    conc1[j] = cnc.conc[i] # unit: [ppm]
-                    conc1_err[j] = (cnc.err[i]/cnc.conc[i])*conc1[j] # unit: [ppm]
-
-    
-    # some values will be 0 (due to conc0 or conc1 being 0). Ignore these in further calculations.
-    names0_mod = []
-    dl_1s_0 = []
-    dl_1000s_0 = []
-    dl_1s_err_0 = []
-    dl_1000s_err_0 = []
-    el_yield_0 = []
-    el_yield_err_0 = []
-    for i in range(0, conc0.size):
-        if conc0[i] > 0:
-            # detection limit corresponding to tm=1s
-            dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/(sum_fit0[i]/tm)) * conc0[i])
-            j = len(dl_1s_0)-1
-            dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
-            el_yield_0.append((sum_fit0[i]*normfactor/I0norm) / conc0_air[i]) # element yield expressed as cps/conc
-            # calculate DL errors (based on standard error propagation)
-            dl_1s_err_0.append(np.sqrt(sum_fit0_err[i]**2 + sum_bkg0_err[i]**2 +
-                                     (conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i])) * dl_1s_0[j])
-            dl_1000s_err_0.append(dl_1s_err_0[j] / dl_1s_0[j] * dl_1000s_0[j])
-            el_yield_err_0.append(np.sqrt((conc0_air_err[i]/conc0_air[i])*(conc0_air_err[i]/conc0_air[i]) + sum_fit0_err[i]**2)*el_yield_0[j])
-            names0_mod.append(names0[i])
-    if chan01_flag:
-        names1_mod = []
-        dl_1s_err_1 = []
-        dl_1000s_err_1 = []
-        dl_1s_1 = []
-        dl_1000s_1 = []
-        el_yield_1 = []
-        el_yield_err_1 = []
-        for i in range(0, conc1.size):
-            if conc1[i] > 0:
+                    conc0_air[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                    conc0_air_err[j] = (cnc.err[i]/cnc.conc[i])*conc0_air[j] # unit: [ug/cm²]
+                    conc0[j] = cnc.conc[i] # unit: [ppm]
+                    conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ppm]    
+        
+        # some values will be 0 (due to conc0 or conc1 being 0). Ignore these in further calculations.
+        names0_mod = []
+        dl_1s_0 = []
+        dl_1000s_0 = []
+        dl_1s_err_0 = []
+        dl_1000s_err_0 = []
+        el_yield_0 = []
+        el_yield_err_0 = []
+        for i in range(0, conc0.size):
+            if conc0[i] > 0:
                 # detection limit corresponding to tm=1s
-                dl_1s_1.append( (3.*np.sqrt(sum_bkg1[i]/tm)/(sum_fit1[i]/tm)) * conc1[i])
-                j = len(dl_1s_1)-1
-                dl_1000s_1.append(dl_1s_1[j] / np.sqrt(1000.))
-                el_yield_1.append((sum_fit1[i]*normfactor/I0norm) / conc1_air[i]) # element yield expressed as cps/conc
+                dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/(sum_fit0[i]/tm)) * conc0[i])
+                j = len(dl_1s_0)-1
+                dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
+                el_yield_0.append((sum_fit0[i]*normfactor/I0norm) / conc0_air[i]) # element yield expressed as cps/conc
                 # calculate DL errors (based on standard error propagation)
-                dl_1s_err_1.append(np.sqrt(sum_fit1_err[i]**2 + sum_bkg1_err[i]**2 +
-                                         (conc1_err[i]/conc1[i])*(conc1_err[i]/conc1[i])) * dl_1s_1[j])
-                dl_1000s_err_1.append(dl_1s_err_1[j] / dl_1s_1[j] * dl_1000s_1[j])
-                el_yield_err_1.append(np.sqrt((conc1_air_err[i]/conc1_air[i])*(conc1_air_err[i]/conc1_air[i]) +sum_fit1_err[i]**2)*el_yield_1[j])
-                names1_mod.append(names1[i])
-    # save DL data to file
-    cncfile = cncfile.split("/")[-1]
-    try:
-        del file['detlim/'+cncfile+'/unit']
-    except Exception:
-        pass
-    file.create_dataset('detlim/'+cncfile+'/unit', data='ppm')
-    try:
-        del file['detlim/'+cncfile+'/channel00/names']
-        del file['detlim/'+cncfile+'/channel00/1s/data']
-        del file['detlim/'+cncfile+'/channel00/1s/stddev']
-        del file['detlim/'+cncfile+'/channel00/1000s/data']
-        del file['detlim/'+cncfile+'/channel00/1000s/stddev']
-        del file['elyield/'+cncfile+'/channel00/yield']
-        del file['elyield/'+cncfile+'/channel00/stddev']
-        del file['elyield/'+cncfile+'/channel00/names']
-    except Exception:
-        pass
-    file.create_dataset('detlim/'+cncfile+'/channel00/names', data=[n.encode('utf8') for n in names0_mod[:]])
-    file.create_dataset('detlim/'+cncfile+'/channel00/1s/data', data=dl_1s_0, compression='gzip', compression_opts=4)
-    file.create_dataset('detlim/'+cncfile+'/channel00/1s/stddev', data=dl_1s_err_0, compression='gzip', compression_opts=4)
-    file.create_dataset('detlim/'+cncfile+'/channel00/1000s/data', data=dl_1000s_0, compression='gzip', compression_opts=4)
-    file.create_dataset('detlim/'+cncfile+'/channel00/1000s/stddev', data=dl_1000s_err_0, compression='gzip', compression_opts=4)    
-    dset = file.create_dataset('elyield/'+cncfile+'/channel00/yield', data=el_yield_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
-    dset = file.create_dataset('elyield/'+cncfile+'/channel00/stddev', data=el_yield_err_0, compression='gzip', compression_opts=4)
-    dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
-    file.create_dataset('elyield/'+cncfile+'/channel00/names', data=[n.encode('utf8') for n in names0_mod[:]])
-    dset = file['detlim']
-    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    if chan01_flag:
-        try:
-            del file['detlim/'+cncfile+'/channel01/names']
-            del file['detlim/'+cncfile+'/channel01/1s/data']
-            del file['detlim/'+cncfile+'/channel01/1s/stddev']
-            del file['detlim/'+cncfile+'/channel01/1000s/data']
-            del file['detlim/'+cncfile+'/channel01/1000s/stddev']        
-            del file['elyield/'+cncfile+'/channel01/yield']
-            del file['elyield/'+cncfile+'/channel01/stddev']
-            del file['elyield/'+cncfile+'/channel01/names']
-        except Exception:
-            pass
-        file.create_dataset('detlim/'+cncfile+'/channel01/names', data=[n.encode('utf8') for n in names1_mod[:]])
-        file.create_dataset('detlim/'+cncfile+'/channel01/1s/data', data=dl_1s_1, compression='gzip', compression_opts=4)
-        file.create_dataset('detlim/'+cncfile+'/channel01/1s/stddev', data=dl_1s_err_1, compression='gzip', compression_opts=4)
-        file.create_dataset('detlim/'+cncfile+'/channel01/1000s/data', data=dl_1000s_1, compression='gzip', compression_opts=4)
-        file.create_dataset('detlim/'+cncfile+'/channel01/1000s/stddev', data=dl_1000s_err_1, compression='gzip', compression_opts=4)  
-        dset = file.create_dataset('elyield/'+cncfile+'/channel01/yield', data=el_yield_1, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
-        dset = file.create_dataset('elyield/'+cncfile+'/channel01/stddev', data=el_yield_err_1, compression='gzip', compression_opts=4)
-        dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
-        file.create_dataset('elyield/'+cncfile+'/channel01/names', data=[n.encode('utf8') for n in names1_mod[:]])
-    file.close()
+                dl_1s_err_0.append(np.sqrt(sum_fit0_err[i]**2 + sum_bkg0_err[i]**2 +
+                                         (conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i])) * dl_1s_0[j])
+                dl_1000s_err_0.append(dl_1s_err_0[j] / dl_1s_0[j] * dl_1000s_0[j])
+                el_yield_err_0.append(np.sqrt((conc0_air_err[i]/conc0_air[i])*(conc0_air_err[i]/conc0_air[i]) + sum_fit0_err[i]**2)*el_yield_0[j])
+                names0_mod.append(names0[i])
+
+        # save DL data to file
+        cncfile = cncfile.split("/")[-1]
+        with h5py.File(h5file, 'r+') as file:
+            try:
+                del file['detlim/'+cncfile+'/unit']
+            except Exception:
+                pass
+            file.create_dataset('detlim/'+cncfile+'/unit', data='ppm')
+            try:
+                del file['detlim/'+cncfile+'/'+chnl+'/names']
+                del file['detlim/'+cncfile+'/'+chnl+'/1s/data']
+                del file['detlim/'+cncfile+'/'+chnl+'/1s/stddev']
+                del file['detlim/'+cncfile+'/'+chnl+'/1000s/data']
+                del file['detlim/'+cncfile+'/'+chnl+'/1000s/stddev']
+                del file['elyield/'+cncfile+'/'+chnl+'/yield']
+                del file['elyield/'+cncfile+'/'+chnl+'/stddev']
+                del file['elyield/'+cncfile+'/'+chnl+'/names']
+            except Exception:
+                pass
+            file.create_dataset('detlim/'+cncfile+'/'+chnl+'/names', data=[n.encode('utf8') for n in names0_mod[:]])
+            file.create_dataset('detlim/'+cncfile+'/'+chnl+'/1s/data', data=dl_1s_0, compression='gzip', compression_opts=4)
+            file.create_dataset('detlim/'+cncfile+'/'+chnl+'/1s/stddev', data=dl_1s_err_0, compression='gzip', compression_opts=4)
+            file.create_dataset('detlim/'+cncfile+'/'+chnl+'/1000s/data', data=dl_1000s_0, compression='gzip', compression_opts=4)
+            file.create_dataset('detlim/'+cncfile+'/'+chnl+'/1000s/stddev', data=dl_1000s_err_0, compression='gzip', compression_opts=4)    
+            dset = file.create_dataset('elyield/'+cncfile+'/'+chnl+'/yield', data=el_yield_0, compression='gzip', compression_opts=4)
+            dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
+            dset = file.create_dataset('elyield/'+cncfile+'/'+chnl+'/stddev', data=el_yield_err_0, compression='gzip', compression_opts=4)
+            dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
+            file.create_dataset('elyield/'+cncfile+'/'+chnl+'/names', data=[n.encode('utf8') for n in names0_mod[:]])
+            dset = file['detlim']
+            dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     
-    # plot the DLs
-    # plot_detlim(dl_1s_0, names0_mod, tm='1s', ref='atho-g', dl_err=dl_1s_err_0, bar=True, save=h5file.split('.')+'_DL.png')
-    plot_detlim([dl_1s_0, dl_1000s_0],
-                [names0_mod, names0_mod],
-                tm=['1s','1000s'], ref=['DL'], 
-                dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch0_DL.png', ytitle=plotytitle)
-    if chan01_flag:
-        plot_detlim([dl_1s_1, dl_1000s_1],
-                    [names1_mod, names1_mod],
+        # plot the DLs
+        plot_detlim([dl_1s_0, dl_1000s_0],
+                    [names0_mod, names0_mod],
                     tm=['1s','1000s'], ref=['DL'], 
-                    dl_err=[dl_1s_err_1, dl_1000s_err_1], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch1_DL.png', ytitle=plotytitle)
+                    dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch'+str(index)+'_DL.png', ytitle=plotytitle)
 
 ##############################################################################
 # make publish-worthy overview images of all fitted elements in h5file (including scale bars, colorbar, ...)
@@ -1473,470 +1402,301 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
 def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, halfpixshift=True, mot2nosort=False):
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
-    file = h5py.File(h5file, 'r+')
-    ims0 = np.squeeze(np.array(file['fit/channel00/ims']))
-    names0 = file['fit/channel00/names']
-    sum_fit0 = np.array(file['fit/channel00/sum/int'])
-    sum_bkg0 = np.array(file['fit/channel00/sum/bkg'])
-    I0 =  np.array(file['raw/I0'])
-    tm = np.array(file['raw/acquisition_time'])
-    mot1 = np.array(file['mot1'])
-    mot1_name = str(file['mot1'].attrs["Name"])
-    mot2 = np.array(file['mot2'])
-    mot2_name = str(file['mot2'].attrs["Name"])
-    cmd = str(np.array(file['cmd'])).split(' ')
-    if len(ims0.shape) == 2 or len(ims0.shape) == 1:
-        if len(ims0.shape) == 2:
-            ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
-            I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
-            tm = tm.reshape((np.squeeze(tm).shape[0], 1))
-            mot1 = mot1.reshape((np.squeeze(mot1).shape[0], 1))
-            mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
-        else:
-            ims0 = ims0.reshape((ims0.shape[0],1, 1))
-            I0 = I0.reshape((I0.shape[0], 1))
-            tm = tm.reshape((tm.shape[0], 1))
-            mot1 = mot1.reshape((mot1.shape[0], 1))
-            mot2 = mot2.reshape((mot2.shape[0], 1))
-        if I0.shape[0] > ims0.shape[1]:
-            I0 = I0[0:ims0.shape[1],:]
-        if tm.shape[0] > ims0.shape[1]:
-            tm = tm[0:ims0.shape[1],:]
-        if mot1.shape[0] > ims0.shape[1]:
-            mot1 = mot1[0:ims0.shape[1],:]            
-        if mot2.shape[0] > ims0.shape[1]:
-            mot2 = mot2[0:ims0.shape[1],:]
-        if ims0.shape[1] > mot1.shape[0]:
-            ims0 = ims0[:,0:mot1.shape[0],:]      
-            I0 = I0[0:mot1.shape[0],:]
-            tm = tm[0:mot1.shape[0],:]
-        except_list = ["b'timescanc", "b'dscan", "b'ascan", "timescanc", "dscan", "ascan", "c", "b'c"]
-        if cmd[0] not in except_list:
-            print(cmd[0])
-            snake = True
-            timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
+    with h5py.File(h5file, 'r') as file:
+        keys = [key for key in file['norm'].keys() if 'channel' in key]
+        I0 =  np.asarray(file['raw/I0'])
+        tm = np.asarray(file['raw/acquisition_time'])
+        mot1_raw = np.asarray(file['mot1'])
+        mot1_name = str(file['mot1'].attrs["Name"])
+        mot2_raw = np.asarray(file['mot2'])
+        mot2_name = str(file['mot2'].attrs["Name"])
+        cmd = str(np.asarray(file['cmd'])).split(' ')
 
-    # Set snake etc to false when concerning hxrf data, as here the mot positions are measurement IDs rather than motor coordinates
-    if mot1_name == "hxrf":
-        snake = False
-        timetriggered = False
-        sort = False
-
-    try:
-        ims1 = np.squeeze(np.array(file['fit/channel01/ims']))
-        if len(ims1.shape) == 2:
-            ims1 = ims1.reshape((ims1.shape[0], ims1.shape[1], 1))
-        elif len(ims1.shape) == 1:
-            ims1 = ims1.reshape((ims1.shape[0],1,1))
-            if ims1.shape[1] > mot1.shape[0]:
-                ims1 = ims1[:,0:mot1.shape[0],:]            
-        names1 = file['fit/channel01/names']
-        sum_fit1 = np.array(file['fit/channel01/sum/int'])
-        sum_bkg1 = np.array(file['fit/channel01/sum/bkg'])
-        chan01_flag = True
-    except Exception:
-        chan01_flag = False
-    
-    # set I0 value to normalise to
-    if I0norm is None:
-        normto = np.max(I0)
-    else:
-        normto = I0norm
-    # set I0 indices that are 0, equal to normto (i.e. these points will not be normalised, as there was technically no beam)
-    if np.nonzero(I0==0)[1].size != 0:
-        for row, col in zip(np.nonzero(I0==0)[0], np.nonzero(I0==0)[1]):
-            I0[row, col] = normto
-
-    # for continuous scans, the mot1 position runs in snake-type fashion
-    #   so we need to sort the positions line per line and adjust all other data accordingly
-    # Usually sorting will have happened in xrf_fit_batch, but in some cases it is better to omit there and do it here
-    #   for instance when certain scan lines need to be deleted
-    if sort is True:
-        for i in range(mot1[:,0].size):
-            sort_id = np.argsort(mot1[i,:])
-            ims0[:,i,:] = ims0[:,i,sort_id]
-            mot1[i,:] = mot1[i,sort_id]
-            mot2[i,:] = mot2[i,sort_id]
-            I0[i,:] = I0[i,sort_id]
-            tm[i,:] = tm[i,sort_id]
-            if chan01_flag:
-                ims1[:,i,:] = ims1[:,i,sort_id]
-        # To make sure (especially when merging scans) sort mot2 as well
-        if mot2nosort is not True:
-            for i in range(mot2[0,:].size):
-                sort_id = np.argsort(mot2[:,i])
-                ims0[:,:,i] = ims0[:,sort_id,i]
-                mot1[:,i] = mot1[sort_id,i]
-                mot2[:,i] = mot2[sort_id,i]
-                I0[:,i] = I0[sort_id,i]
-                tm[:,i] = tm[sort_id,i]
-                if chan01_flag:
-                    ims1[:,:,i] = ims1[:,sort_id,i]
-        try:
-            del file['fit/channel00/ims']
-            del file['raw/I0']
-            del file['mot1']
-            del file['mot2']
-            del file['raw/acquisition_time']
-            if chan01_flag:
-                del file['fit/channel01/ims']
-        except Exception:
-            pass
-        file.create_dataset('fit/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
-        file.create_dataset('raw/I0', data=I0, compression='gzip', compression_opts=4)
-        dset = file.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
-        dset.attrs['Name'] = mot1_name
-        dset = file.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
-        dset.attrs['Name'] = mot2_name
-        file.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
-        if chan01_flag:
-            file.create_dataset('fit/channel01/ims', data=ims1, compression='gzip', compression_opts=4)
-        
-
-    # correct I0
-    ims0[ims0 < 0] = 0.
-    sum_fit0[sum_fit0 < 0] = 0.
-    sum_bkg0[sum_bkg0 < 0] = 0.
-    ims0_err = np.nan_to_num(np.sqrt(ims0)/ims0)
-    sum_fit0_err = np.nan_to_num(np.sqrt(sum_fit0[:]+2*sum_bkg0[:])/sum_fit0[:])
-    sum_bkg0_err = np.nan_to_num(np.sqrt(sum_bkg0[:])/sum_bkg0[:])
-    for i in range(0, ims0.shape[0]):
-        if tmnorm is True:
-            ims0[i,:,:] = ims0[i,:,:]/(I0*tm) * normto
-        else:
-            ims0[i,:,:] = ims0[i,:,:]/(I0) * normto
-    if tmnorm is True:
-        sum_fit0 = sum_fit0/(np.sum(I0)*np.sum(tm)) * normto
-        sum_bkg0 = sum_bkg0/(np.sum(I0)*np.sum(tm)) * normto
-    else:
-        sum_fit0 = (sum_fit0/np.sum(I0)) * normto
-        sum_bkg0 = (sum_bkg0/np.sum(I0)) * normto
-    ims0[np.isnan(ims0)] = 0.
-    if chan01_flag:
-        ims1[ims1 < 0] = 0.
-        sum_fit1[sum_fit1 < 0] = 0.
-        sum_bkg1[sum_bkg1 < 0] = 0.
-        ims1_err = np.nan_to_num(np.sqrt(ims1)/ims1)
-        sum_fit1_err = np.nan_to_num(np.sqrt(sum_fit1[:]+2*sum_bkg1[:])/sum_fit1[:])
-        sum_bkg1_err = np.nan_to_num(np.sqrt(sum_bkg1[:])/sum_bkg1[:])
-        for i in range(0, ims1.shape[0]):
-            if tmnorm is True:
-                ims1[i,:,:] = ims1[i,:,:]/(I0*tm) * normto
+    # need to make a copy of mot1 and mot2 in case of sorting, which will also be used in snake etc.
+    #   Not the most memory efficient way to do things, but these sizes will usually not be limiting and at least it's an easier fix
+    for index, chnl in enumerate(keys):
+        mot1 = mot1_raw.copy()
+        mot2 = mot2_raw.copy()
+        with h5py.File(h5file, 'r') as file:
+            ims0 = np.squeeze(np.array(file['fit/'+chnl+'/ims']))
+            names0 = file['fit/'+chnl+'/names']
+            sum_fit0 = np.array(file['fit/'+chnl+'/sum/int'])
+            sum_bkg0 = np.array(file['fit/'+chnl+'/sum/bkg'])
+        if len(ims0.shape) == 2 or len(ims0.shape) == 1:
+            if len(ims0.shape) == 2:
+                ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
+                I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
+                tm = tm.reshape((np.squeeze(tm).shape[0], 1))
+                mot1 = mot1.reshape((np.squeeze(mot1).shape[0], 1))
+                mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
             else:
-                ims1[i,:,:] = ims1[i,:,:]/(I0) * normto
-        if tmnorm is True:
-            sum_fit1 = sum_fit1/(np.sum(I0)*np.sum(tm)) * normto
-            sum_bkg1 = sum_bkg1/(np.sum(I0)*np.sum(tm)) * normto
+                ims0 = ims0.reshape((ims0.shape[0],1, 1))
+                I0 = I0.reshape((I0.shape[0], 1))
+                tm = tm.reshape((tm.shape[0], 1))
+                mot1 = mot1.reshape((mot1.shape[0], 1))
+                mot2 = mot2.reshape((mot2.shape[0], 1))
+            if I0.shape[0] > ims0.shape[1]:
+                I0 = I0[0:ims0.shape[1],:]
+            if tm.shape[0] > ims0.shape[1]:
+                tm = tm[0:ims0.shape[1],:]
+            if mot1.shape[0] > ims0.shape[1]:
+                mot1 = mot1[0:ims0.shape[1],:]            
+            if mot2.shape[0] > ims0.shape[1]:
+                mot2 = mot2[0:ims0.shape[1],:]
+            if ims0.shape[1] > mot1.shape[0]:
+                ims0 = ims0[:,0:mot1.shape[0],:]      
+                I0 = I0[0:mot1.shape[0],:]
+                tm = tm[0:mot1.shape[0],:]
+            except_list = ["b'timescanc", "b'dscan", "b'ascan", "timescanc", "dscan", "ascan", "c", "b'c"]
+            if cmd[0] not in except_list:
+                snake = True
+                timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
+    
+        # Set snake etc to false when concerning hxrf data, as here the mot positions are measurement IDs rather than motor coordinates
+        if mot1_name == "hxrf":
+            snake = False
+            timetriggered = False
+    
+        # set I0 value to normalise to
+        if I0norm is None:
+            normto = np.max(I0)
         else:
-            sum_fit1 = (sum_fit1/np.sum(I0)) * normto
-            sum_bkg1 = (sum_bkg1/np.sum(I0)) * normto
-        ims1[np.isnan(ims1)] = 0.
-        
+            normto = I0norm
+        # set I0 indices that are 0, equal to normto (i.e. these points will not be normalised, as there was technically no beam)
+        if np.nonzero(I0==0)[1].size != 0:
+            for row, col in zip(np.nonzero(I0==0)[0], np.nonzero(I0==0)[1]):
+                I0[row, col] = normto
+    
+        # for continuous scans, the mot1 position runs in snake-type fashion
+        #   so we need to sort the positions line per line and adjust all other data accordingly
+        # Usually sorting will have happened in xrf_fit_batch, but in some cases it is better to omit there and do it here
+        #   for instance when certain scan lines need to be deleted
+        if sort is True:
+            for i in range(mot1[:,0].size):
+                sort_id = np.argsort(mot1[i,:])
+                ims0[:,i,:] = ims0[:,i,sort_id]
+                mot1[i,:] = mot1[i,sort_id]
+                mot2[i,:] = mot2[i,sort_id]
+                I0[i,:] = I0[i,sort_id]
+                tm[i,:] = tm[i,sort_id]
+            # To make sure (especially when merging scans) sort mot2 as well
+            if mot2nosort is not True:
+                for i in range(mot2[0,:].size):
+                    sort_id = np.argsort(mot2[:,i])
+                    ims0[:,:,i] = ims0[:,sort_id,i]
+                    mot1[:,i] = mot1[sort_id,i]
+                    mot2[:,i] = mot2[sort_id,i]
+                    I0[:,i] = I0[sort_id,i]
+                    tm[:,i] = tm[sort_id,i]
+            with h5py.File(h5file, 'r+') as file:
+                if index == 0:
+                    try:
+                        del file['raw/I0']
+                        del file['mot1']
+                        del file['mot2']
+                        del file['raw/acquisition_time']
+                    except Exception:
+                        pass
+                    file.create_dataset('raw/I0', data=I0, compression='gzip', compression_opts=4)
+                    dset = file.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+                    dset.attrs['Name'] = mot1_name
+                    dset = file.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+                    dset.attrs['Name'] = mot2_name
+                    file.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
+                try:
+                    del file['fit/'+chnl+'/ims']
+                except Exception:
+                    pass
+                file.create_dataset('fit/'+chnl+'/ims', data=ims0, compression='gzip', compression_opts=4)
 
-    # if this is snakescan, interpolate ims array for motor positions so images look nice
-    #   this assumes that mot1 was the continuously moving motor
-    if snake is True:
-        print("Interpolating image for motor positions...", end=" ")
-        if timetriggered is False:
-            if halfpixshift is True:
-                pos_low = np.min(mot1[:,0])
-                pos_high = np.max(mot1[:,0])
-                for i in range(0, mot1[:,0].size): #correct for half a pixel shift
-                    if mot1[i,0] <= np.average((pos_high,pos_low)):
-                        mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
-                    else:
-                        mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
-            mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
-            mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
-            ims0_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
-            ims0_err_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
-            if chan01_flag:
-                ims1_tmp = np.zeros((ims1.shape[0], ims1.shape[1], ims1.shape[2]))
-                ims1_err_tmp = np.zeros((ims1.shape[0], ims1.shape[1], ims1.shape[2]))
-        if timetriggered is True:
-            if halfpixshift is True:
-                # correct positions for half pixel shift
-                mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
-            # based on cmd determine regular grid positions
-            mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(cmd[4]))
-            mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(cmd[8])) 
-            if cmd[0] == "b'cdmesh":
-                mot1_pos = mot1_pos - (mot1_pos[0] - mot1[0,0])
-                mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
-            ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
-            ims0_err_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
-            if chan01_flag:
-                ims1_tmp = np.zeros((ims1.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
-                ims1_err_tmp = np.zeros((ims1.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
-        # interpolate to the regular grid motor positions
-        mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size),
-                mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
-        x = mot1.ravel()
-        y = mot2.ravel()
-
-        # import matplotlib.pyplot as plt
-        # plt.imshow(mot1_tmp)
-        # plt.colorbar()
-        # plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
-        # plt.close()
-        # plt.imshow(mot2_tmp)
-        # plt.colorbar()
-        # plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
-        # plt.close()
-        # plt.imshow(ims0[8,0:255530].reshape((505,506)))
-        # plt.colorbar()
-        # plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
-        # plt.close()
-
-        for i in range(names0.size):
-            values = ims0[i,:,:].ravel()
-            # ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-            # ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-            ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='nearest').T
-            ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
-        ims0 = np.nan_to_num(ims0_tmp)
-        ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
-        if chan01_flag:
-            for i in range(names1.size):
-                values = ims1[i,:,:].ravel()
-                # ims1_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-                # ims1_err_tmp[i,:,:] = griddata((x, y), ims1_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-                ims1_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='nearest').T
-                ims1_err_tmp[i,:,:] = griddata((x, y), ims1_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
-            ims1 = np.nan_to_num(ims1_tmp)
-            ims1_err = np.nan_to_num(ims1_err_tmp)*ims1
-        print("Done")
-
-  
-    # save normalised data
-    print("     Writing...", end=" ")
-    try:
-        del file['norm/I0']
-        del file['norm/channel00']
-    except KeyError:
-        pass
-    file.create_dataset('norm/I0', data=normto)
-    file.create_dataset('norm/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
-    file.create_dataset('norm/channel00/ims_stddev', data=ims0_err, compression='gzip', compression_opts=4)
-    file.create_dataset('norm/channel00/names', data=names0)
-    file.create_dataset('norm/channel00/sum/int', data=sum_fit0, compression='gzip', compression_opts=4)
-    file.create_dataset('norm/channel00/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
-    file.create_dataset('norm/channel00/sum/int_stddev', data=sum_fit0*sum_fit0_err, compression='gzip', compression_opts=4)
-    file.create_dataset('norm/channel00/sum/bkg_stddev', data=sum_bkg0*sum_bkg0_err, compression='gzip', compression_opts=4)
-    dset = file['norm']
-    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    if chan01_flag:
-        try:
-            del file['norm/channel01']
-        except KeyError:
-            pass
-        file.create_dataset('norm/channel01/ims', data=ims1, compression='gzip', compression_opts=4)
-        file.create_dataset('norm/channel01/ims_stddev', data=ims1_err, compression='gzip', compression_opts=4)
-        file.create_dataset('norm/channel01/names', data=names1)
-        file.create_dataset('norm/channel01/sum/int', data=sum_fit1, compression='gzip', compression_opts=4)
-        file.create_dataset('norm/channel01/sum/bkg', data=sum_bkg1, compression='gzip', compression_opts=4)
-        file.create_dataset('norm/channel01/sum/int_stddev', data=sum_fit1*sum_fit1_err, compression='gzip', compression_opts=4)
-        file.create_dataset('norm/channel01/sum/bkg_stddev', data=sum_bkg1*sum_bkg1_err, compression='gzip', compression_opts=4)
-    file.close()
+    
+        # correct I0
+        ims0[ims0 < 0] = 0.
+        sum_fit0[sum_fit0 < 0] = 0.
+        sum_bkg0[sum_bkg0 < 0] = 0.
+        ims0_err = np.nan_to_num(np.sqrt(ims0)/ims0)
+        sum_fit0_err = np.nan_to_num(np.sqrt(sum_fit0[:]+2*sum_bkg0[:])/sum_fit0[:])
+        sum_bkg0_err = np.nan_to_num(np.sqrt(sum_bkg0[:])/sum_bkg0[:])
+        for i in range(0, ims0.shape[0]):
+            if tmnorm is True:
+                ims0[i,:,:] = ims0[i,:,:]/(I0*tm) * normto
+            else:
+                ims0[i,:,:] = ims0[i,:,:]/(I0) * normto
+        if tmnorm is True:
+            sum_fit0 = sum_fit0/(np.sum(I0)*np.sum(tm)) * normto
+            sum_bkg0 = sum_bkg0/(np.sum(I0)*np.sum(tm)) * normto
+        else:
+            sum_fit0 = (sum_fit0/np.sum(I0)) * normto
+            sum_bkg0 = (sum_bkg0/np.sum(I0)) * normto
+        ims0[np.isnan(ims0)] = 0.           
+    
+        # if this is snakescan, interpolate ims array for motor positions so images look nice
+        #   this assumes that mot1 was the continuously moving motor
+        if snake is True:
+            print("Interpolating image for motor positions...", end=" ")
+            if timetriggered is False:
+                if halfpixshift is True:
+                    pos_low = np.min(mot1[:,0])
+                    pos_high = np.max(mot1[:,0])
+                    for i in range(0, mot1[:,0].size): #correct for half a pixel shift
+                        if mot1[i,0] <= np.average((pos_high,pos_low)):
+                            mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
+                        else:
+                            mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
+                mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
+                mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
+                ims0_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
+                ims0_err_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
+            if timetriggered is True:
+                if halfpixshift is True:
+                    # correct positions for half pixel shift
+                    mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
+                # based on cmd determine regular grid positions
+                mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(cmd[4]))
+                mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(cmd[8])) 
+                if cmd[0] == "b'cdmesh":
+                    mot1_pos = mot1_pos - (mot1_pos[0] - mot1[0,0])
+                    mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
+                ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
+                ims0_err_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
+            # interpolate to the regular grid motor positions
+            mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size),
+                    mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
+            x = mot1.ravel()
+            y = mot2.ravel()
+    
+            # import matplotlib.pyplot as plt
+            # plt.imshow(mot1_tmp)
+            # plt.colorbar()
+            # plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
+            # plt.close()
+            # plt.imshow(mot2_tmp)
+            # plt.colorbar()
+            # plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
+            # plt.close()
+            # plt.imshow(ims0[8,0:255530].reshape((505,506)))
+            # plt.colorbar()
+            # plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
+            # plt.close()
+    
+            for i in range(names0.size):
+                values = ims0[i,:,:].ravel()
+                # ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                # ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
+                ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='nearest').T
+                ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
+            ims0 = np.nan_to_num(ims0_tmp)
+            ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
+            print("Done")
+    
+      
+        # save normalised data
+        print("     Writing...", end=" ")
+        with h5py.File(h5file, 'r+') as file:
+            try:
+                del file['norm/I0']
+                del file['norm/'+chnl]
+            except KeyError:
+                pass
+            file.create_dataset('norm/I0', data=normto)
+            file.create_dataset('norm/'+chnl+'/ims', data=ims0, compression='gzip', compression_opts=4)
+            file.create_dataset('norm/'+chnl+'/ims_stddev', data=ims0_err, compression='gzip', compression_opts=4)
+            file.create_dataset('norm/'+chnl+'/names', data=names0)
+            file.create_dataset('norm/'+chnl+'/sum/int', data=sum_fit0, compression='gzip', compression_opts=4)
+            file.create_dataset('norm/'+chnl+'/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
+            file.create_dataset('norm/'+chnl+'/sum/int_stddev', data=sum_fit0*sum_fit0_err, compression='gzip', compression_opts=4)
+            file.create_dataset('norm/'+chnl+'/sum/bkg_stddev', data=sum_bkg0*sum_bkg0_err, compression='gzip', compression_opts=4)
+            dset = file['norm']
+            dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     print("Done")
     
 ##############################################################################
 # fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
-#   NOTE: the cfg file sscan00188_merge.h5hould use the SNIP background method! Others will fail as considered 'too slow' by the PyMca fit routine itself
+#   NOTE: the cfg file should use the SNIP background method! Others will fail as considered 'too slow' by the PyMca fit routine itself
 #   NOTE2: setting a standard also fits the separate spectra without bulk fit! This can take a long time!!
 def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
     # perhaps channel00 and channel01 need different cfg files. Allow for tuple or array in this case.
-    cfgfile = np.array(cfgfile)
-    if cfgfile.size == 1:
-        cfg0 = str(cfgfile)
-        cfg1 = str(cfgfile)
-        cfglist = str(cfgfile)
-    else:
-        cfg0 = str(cfgfile[0])
-        cfg1 = str(cfgfile[1])
-        cfglist = ' ,'.join([cfgfile[0], cfgfile[1]])
+    cfgfile = np.asarray(cfgfile)
         
     # let's read the h5file structure and launch our fit.
-    file = h5py.File(h5file, 'r+')
-    spectra0 = file['raw/channel00/spectra']
-    sumspec0 = file['raw/channel00/sumspec']
-    icr0 = np.array(file['raw/channel00/icr'])
-    ocr0 = np.array(file['raw/channel00/ocr'])
-    spec0_shape = spectra0.shape
-    if len(spec0_shape) == 2:
-        spectra0 = np.array(spectra0).reshape((spec0_shape[0], 1, spec0_shape[1]))
-        icr0 = np.array(icr0).reshape((icr0.shape[0], 1))
-        ocr0 = np.array(ocr0).reshape((ocr0.shape[0], 1))
-    nchannels0 = spectra0.shape[2]
-    try:
-        spectra1 = file['raw/channel01/spectra']
-        sumspec1 = file['raw/channel01/sumspec']
-        icr1 = np.array(file['raw/channel01/icr'])
-        ocr1 = np.array(file['raw/channel01/ocr'])
-        if len(spectra1.shape) == 2:
-            spectra1 = np.array(spectra1).reshape((spectra1.shape[0], 1, spectra1.shape[1]))
-            icr1 = np.array(icr1).reshape((icr1.shape[0], 1))
-            ocr1 = np.array(ocr1).reshape((ocr1.shape[0], 1))
-        nchannels1 = spectra1.shape[2]
-        chan01_flag = True
-    except Exception:
-        chan01_flag = False
-
-    # find indices where icr=0 and put those values = icr
-    if np.nonzero(ocr0==0)[0].size != 0:
-        ocr0[np.nonzero(ocr0==0)[0]] = icr0[np.nonzero(ocr0==0)[0]]
-        if np.nonzero(icr0==0)[0].size != 0:
-            icr0[np.nonzero(icr0==0)[0]] = 1 #if icr0 equal to 0, let's set to 1
-            ocr0[np.nonzero(ocr0==0)[0]] = icr0[np.nonzero(ocr0==0)[0]] # let's run this again. Seems redundant, but icr could have changed.
-    if chan01_flag:
-        if np.nonzero(ocr1==0)[0].size != 0:
-            ocr1[np.nonzero(ocr1==0)[0]] = icr1[np.nonzero(ocr1==0)[0]]
-            if np.nonzero(icr1==0)[0].size != 0:
-                icr1[np.nonzero(icr1==0)[0]] = 1 #if icr0 equal to 0, let's set to 1
-                ocr1[np.nonzero(ocr1==0)[0]] = icr1[np.nonzero(ocr1==0)[0]] # let's run this again. Seems redundant, but icr could have changed.
-
-    # work PyMca's magic!
-    t0 = time.time()
-    print("Initiating fit of <"+h5file+"> using model(s) <"+cfglist+">...", end=" ")
-    n_spectra = round(spectra0.size/nchannels0, 0)
-    if chan01_flag:
-        n_spectra += round(spectra1.size/nchannels1, 0)
-    if standard is None:
-        # read and set PyMca configuration for channel00
-        fastfit = FastXRFLinearFit.FastXRFLinearFit()
-        try: 
-            fastfit.setFitConfigurationFile(cfg0)
-        except Exception:
-            print("-----------------------------------------------------------------------------")
-            print("Error: %s is not a valid PyMca configuration file." % cfg0)
-            print("-----------------------------------------------------------------------------")
-        fitresults0 = fastfit.fitMultipleSpectra(x=range(0,nchannels0), y=np.array(spectra0[:,:,:]), ysum=sumspec0)
-        #fit sumspec
-        config = ConfigDict.ConfigDict()
-        config.read(cfg0)
-        config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
-        mcafit = ClassMcaTheory.ClassMcaTheory()
-        mcafit.configure(config)
-        mcafit.setData(range(0,nchannels0), sumspec0)
-        mcafit.estimate()
-        fitresult0_sum, result0_sum = mcafit.startfit(digest=1)
-        sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
-        sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
-
-        if chan01_flag:
-            # read and set PyMca configuration for channel01
+    file = h5py.File(h5file, 'r')
+    keys = [key for key in file['raw'].keys() if 'channel' in key]
+    for index, chnl in enumerate(keys):
+        if cfgfile.size == 1:
+            cfg = str(cfgfile)
+        else:
+            cfg = cfgfile[index]
+        with h5py.File(h5file, 'r') as file:
+            spectra0 = file['raw/'+chnl+'/spectra']
+            sumspec0 = file['raw/'+chnl+'/sumspec']
+            icr0 = np.asarray(file['raw/'+chnl+'/icr'])
+            ocr0 = np.asarray(file['raw/'+chnl+'/ocr'])
+        spec0_shape = spectra0.shape
+        if len(spec0_shape) == 2:
+            spectra0 = np.asarray(spectra0).reshape((spec0_shape[0], 1, spec0_shape[1]))
+            icr0 = np.asarray(icr0).reshape((icr0.shape[0], 1))
+            ocr0 = np.asarray(ocr0).reshape((ocr0.shape[0], 1))
+        nchannels0 = spectra0.shape[2]
+    
+        # find indices where icr=0 and put those values = icr
+        if np.nonzero(ocr0==0)[0].size != 0:
+            ocr0[np.nonzero(ocr0==0)[0]] = icr0[np.nonzero(ocr0==0)[0]]
+            if np.nonzero(icr0==0)[0].size != 0:
+                icr0[np.nonzero(icr0==0)[0]] = 1 #if icr0 equal to 0, let's set to 1
+                ocr0[np.nonzero(ocr0==0)[0]] = icr0[np.nonzero(ocr0==0)[0]] # let's run this again. Seems redundant, but icr could have changed.
+    
+        # work PyMca's magic!
+        t0 = time.time()
+        print("Initiating fit of <"+h5file+"> "+chnl+" using model(s) <"+cfg+">...", end=" ")
+        n_spectra = round(spectra0.size/nchannels0, 0)
+        if standard is None:
+            # read and set PyMca configuration for channel00
             fastfit = FastXRFLinearFit.FastXRFLinearFit()
             try: 
-                fastfit.setFitConfigurationFile(cfg1)
+                fastfit.setFitConfigurationFile(cfg)
             except Exception:
                 print("-----------------------------------------------------------------------------")
-                print("Error: %s is not a valid PyMca configuration file." % cfg1)
+                print("Error: %s is not a valid PyMca configuration file." % cfg)
                 print("-----------------------------------------------------------------------------")
-            fitresults1 = fastfit.fitMultipleSpectra(x=range(0,nchannels1), y=np.array(spectra1[:,:,:]), ysum=sumspec1)
+            fitresults0 = fastfit.fitMultipleSpectra(x=range(0,nchannels0), y=np.array(spectra0[:,:,:]), ysum=sumspec0)
             #fit sumspec
             config = ConfigDict.ConfigDict()
-            config.read(cfg1)
+            config.read(cfg)
             config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
             mcafit = ClassMcaTheory.ClassMcaTheory()
             mcafit.configure(config)
-            mcafit.setData(range(0,nchannels1), sumspec1)
+            mcafit.setData(range(0,nchannels0), sumspec0)
             mcafit.estimate()
-            fitresult1_sum, result1_sum = mcafit.startfit(digest=1)
-            sum_fit1 = [result1_sum[peak]["fitarea"] for peak in result1_sum["groups"]]
-            sum_bkg1 = [result1_sum[peak]["statistics"]-result1_sum[peak]["fitarea"] for peak in result1_sum["groups"]]
-
-        print("Done")
-        # actual fit results are contained in fitresults['parameters']
-        #   labels of the elements are fitresults.labels("parameters"), first # are 'A0, A1, A2' of polynomial background, which we don't need
-        peak_int0 = np.array(fitresults0['parameters'])
-        names0 = fitresults0.labels("parameters")
-        names0 = [n.replace('Scatter Peak000', 'Rayl') for n in names0]
-        names0 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names0])
-        cutid0 = 0
-        for i in range(names0.size):
-            if names0[i] == 'A'+str(i):
-                cutid0 = i+1
-        if chan01_flag:
-            peak_int1 = np.array(fitresults1['parameters'])
-            names1 = fitresults1.labels("parameters")
-            names1 = [n.replace('Scatter Peak000', 'Rayl') for n in names1]
-            names1 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names1])
-            cutid1 = 0
-            for i in range(names1.size):
-                if names1[i] == 'A'+str(i):
-                    cutid1 = i+1
-        # for i in range(peak_int0.shape[0]):
-        #     plt.imshow(peak_int0[i,:,:])
-        #     plt.title(fitresults0.labels("parameters")[i])
-        #     plt.colorbar()
-        #     plt.show()
-        
-    else: #standard is not None; this is a srm spectrum and as such we would like to obtain the background values.
-        # channel00
-        config = ConfigDict.ConfigDict()
-        config.read(cfg0)
-        config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
-        mcafit = ClassMcaTheory.ClassMcaTheory()
-        mcafit.configure(config)
-        if ncores is None or ncores == -1 or ncores == 0:
-            ncores = multiprocessing.cpu_count()-1
-        spec_chansum = np.sum(spectra0, axis=2)
-        spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
-        spec2fit = np.array(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))[spec2fit_id,:]
-        if spectra0.shape[0]*spectra0.shape[1] > 1:
-            print("Using "+str(ncores)+" cores...")
-            pool = multiprocessing.Pool(processes=ncores)
-            results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
-            results = list(results)
-            groups = list(groups)
-            if groups[0] is None: #first element could be None, so let's search for first not-None item.
-                for i in range(0, np.array(groups, dtype='object').shape[0]):
-                    if groups[i] is not None:
-                        groups[0] = groups[i]
-                        break
-            none_id = [i for i, x in enumerate(results) if x is None]
-            if none_id != []:
-                for i in range(0, np.array(none_id).size):
-                    results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
-            peak_int0 = np.zeros((spectra0.shape[0]*spectra0.shape[1], np.array(groups[0]).shape[0]))
-            peak_int0[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
-            peak_int0 = np.moveaxis(peak_int0.reshape((spectra0.shape[0], spectra0.shape[1], np.array(groups[0]).shape[0])),-1,0)
-            peak_int0[np.isnan(peak_int0)] = 0.
-            pool.close()
-            pool.join()
-        else:
-            mcafit.setData(range(0,nchannels0), spectra0[0,0,:])
-            mcafit.estimate()
-            fitresult0, result0 = mcafit.startfit(digest=1)
-            peak_int0 = np.asarray([result0[peak]["fitarea"] for peak in result0["groups"]])
-            peak_int0 = peak_int0.reshape((peak_int0.shape[0],1,1))
+            fitresult0_sum, result0_sum = mcafit.startfit(digest=1)
+            sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
+            sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
+    
+            print("Done")
+            # actual fit results are contained in fitresults['parameters']
+            #   labels of the elements are fitresults.labels("parameters"), first # are 'A0, A1, A2' of polynomial background, which we don't need
+            peak_int0 = np.array(fitresults0['parameters'])
+            names0 = fitresults0.labels("parameters")
+            names0 = [n.replace('Scatter Peak000', 'Rayl') for n in names0]
+            names0 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names0])
+            cutid0 = 0
+            for i in range(names0.size):
+                if names0[i] == 'A'+str(i):
+                    cutid0 = i+1
             
-        
-        #fit sumspec
-        mcafit.setData(range(0,nchannels0), sumspec0)
-        mcafit.estimate()
-        fitresult0_sum, result0_sum = mcafit.startfit(digest=1)
-        names0 = result0_sum["groups"]
-        names0 = [n.replace('Scatter Peak000', 'Rayl') for n in result0_sum["groups"]]
-        names0 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names0])
-        cutid0 = 0
-        for i in range(names0.size):
-            if names0[i] == 'A'+str(i):
-                cutid0 = i+1
-        sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
-        sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
-
-        if chan01_flag:
-            # channel01
+        else: #standard is not None; this is a srm spectrum and as such we would like to obtain the background values.
+            # channel00
             config = ConfigDict.ConfigDict()
-            config.read(cfg1)
+            config.read(cfg)
             config['fit']['use_limit'] = 1 # make sure the limits of the configuration will be taken
             mcafit = ClassMcaTheory.ClassMcaTheory()
             mcafit.configure(config)
-            spec_chansum = np.sum(spectra1, axis=2)
+            if ncores is None or ncores == -1 or ncores == 0:
+                ncores = multiprocessing.cpu_count()-1
+            spec_chansum = np.sum(spectra0, axis=2)
             spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
-            spec2fit = np.array(spectra1).reshape((spectra1.shape[0]*spectra1.shape[1], spectra1.shape[2]))[spec2fit_id,:]
-            if spectra1.shape[0]*spectra1.shape[1] > 1:
+            spec2fit = np.array(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))[spec2fit_id,:]
+            if spectra0.shape[0]*spectra0.shape[1] > 1:
+                print("Using "+str(ncores)+" cores...", end=" ")
                 pool = multiprocessing.Pool(processes=ncores)
                 results, groups = zip(*pool.map(partial(Pymca_fit, mcafit=mcafit, verbose=verbose), spec2fit))
                 results = list(results)
@@ -1950,97 +1710,69 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
                 if none_id != []:
                     for i in range(0, np.array(none_id).size):
                         results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
-                peak_int1 = np.zeros((spectra1.shape[0]*spectra1.shape[1], np.array(groups[0]).shape[0]))
-                peak_int1[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
-                peak_int1 = np.moveaxis(peak_int1.reshape((spectra1.shape[0], spectra1.shape[1], np.array(groups[0]).shape[0])),-1,0)
-                peak_int1[np.isnan(peak_int1)] = 0.
+                peak_int0 = np.zeros((spectra0.shape[0]*spectra0.shape[1], np.array(groups[0]).shape[0]))
+                peak_int0[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
+                peak_int0 = np.moveaxis(peak_int0.reshape((spectra0.shape[0], spectra0.shape[1], np.array(groups[0]).shape[0])),-1,0)
+                peak_int0[np.isnan(peak_int0)] = 0.
                 pool.close()
                 pool.join()
             else:
-                mcafit.setData(range(0,nchannels0), spectra1[0,0,:])
+                mcafit.setData(range(0,nchannels0), spectra0[0,0,:])
                 mcafit.estimate()
-                fitresult1, result1 = mcafit.startfit(digest=1)
-                peak_int1 = np.asarray([result1[peak]["fitarea"] for peak in result1["groups"]])
-                peak_int1 = peak_int1.reshape((peak_int1.shape[0],1,1))
-
+                fitresult0, result0 = mcafit.startfit(digest=1)
+                peak_int0 = np.asarray([result0[peak]["fitarea"] for peak in result0["groups"]])
+                peak_int0 = peak_int0.reshape((peak_int0.shape[0],1,1))
+                
+            
             #fit sumspec
-            mcafit.setData(range(0,nchannels1), sumspec1)
+            mcafit.setData(range(0,nchannels0), sumspec0)
             mcafit.estimate()
-            fitresult1_sum, result1_sum = mcafit.startfit(digest=1)
-            names1 = [n.replace('Scatter Peak000', 'Rayl') for n in result1_sum["groups"]]
-            names1 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names1])
-            cutid1 = 0
-            for i in range(names1.size):
-                if names1[i] == 'A'+str(i):
-                    cutid1 = i+1
-            sum_fit1 = [result1_sum[peak]["fitarea"] for peak in result1_sum["groups"]]
-            sum_bkg1 = [result1_sum[peak]["statistics"]-result1_sum[peak]["fitarea"] for peak in result1_sum["groups"]]
-    print("Fit finished after "+str(time.time()-t0)+" seconds for "+str(n_spectra)+" spectra.")
-
-    ims0 = peak_int0[cutid0:,:,:]
-    if chan01_flag:
-        ims1 = peak_int1[cutid1:,:,:]
-
-    # correct for deadtime  
-    # check if icr/ocr values are appropriate!
-    if np.average(ocr0/icr0) > 1.:
-        print("ERROR: ocr0/icr0 is larger than 1!")
-    if chan01_flag:
-        if np.average(ocr1/icr1) > 1.:
-            print("ERROR: ocr1/icr1 is larger than 1!")
-    if icr0.shape[0] > ims0.shape[1]:
-        icr0 = icr0[0:ims0.shape[1],:]
-        ocr0 = ocr0[0:ims0.shape[1],:]
-    for i in range(names0.size):
-        ims0[i,:,:] = ims0[i,:,:] * icr0/ocr0
-    if chan01_flag:
-        if icr1.shape[0] > ims1.shape[1]:
-            icr1 = icr1[0:ims1.shape[1],:]
-            ocr1 = ocr1[0:ims1.shape[1],:]
-        for i in range(names1.size):        
-            ims1[i,:,:] = ims1[i,:,:] * icr1/ocr1
-    sum_fit0 = np.array(sum_fit0)*np.sum(icr0)/np.sum(ocr0)
-    sum_bkg0 = np.array(sum_bkg0)*np.sum(icr0)/np.sum(ocr0)
-    if len(spec0_shape) == 2:
-        ims0 = np.squeeze(ims0)
-    if chan01_flag:
-        sum_fit1 = np.array(sum_fit1)*np.sum(icr1)/np.sum(ocr1)
-        sum_bkg1 = np.array(sum_bkg1)*np.sum(icr1)/np.sum(ocr1)
+            fitresult0_sum, result0_sum = mcafit.startfit(digest=1)
+            names0 = result0_sum["groups"]
+            names0 = [n.replace('Scatter Peak000', 'Rayl') for n in result0_sum["groups"]]
+            names0 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names0])
+            cutid0 = 0
+            for i in range(names0.size):
+                if names0[i] == 'A'+str(i):
+                    cutid0 = i+1
+            sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
+            sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
+    
+        print("Fit finished after "+str(time.time()-t0)+" seconds for "+str(n_spectra)+" spectra.")
+        ims0 = peak_int0[cutid0:,:,:]
+    
+        # correct for deadtime  
+        # check if icr/ocr values are appropriate!
+        if np.average(ocr0/icr0) > 1.:
+            print("ERROR: "+chnl+" ocr/icr is larger than 1!")
+        if icr0.shape[0] > ims0.shape[1]:
+            icr0 = icr0[0:ims0.shape[1],:]
+            ocr0 = ocr0[0:ims0.shape[1],:]
+        for i in range(names0.size):
+            ims0[i,:,:] = ims0[i,:,:] * icr0/ocr0
+        sum_fit0 = np.array(sum_fit0)*np.sum(icr0)/np.sum(ocr0)
+        sum_bkg0 = np.array(sum_bkg0)*np.sum(icr0)/np.sum(ocr0)
         if len(spec0_shape) == 2:
-            ims1 = np.squeeze(ims1)
-
-    # save the fitted data
-    print("Writing fit data to "+h5file+"...", end=" ")
-    try:
-        del file['fit/channel00/ims']
-        del file['fit/channel00/names']
-        del file['fit/channel00/cfg']
-        del file['fit/channel00/sum/int']
-        del file['fit/channel00/sum/bkg']
-    except Exception:
-        pass
-    file.create_dataset('fit/channel00/ims', data=ims0, compression='gzip', compression_opts=4)
-    file.create_dataset('fit/channel00/names', data=[n.encode('utf8') for n in names0[cutid0:]])
-    file.create_dataset('fit/channel00/cfg', data=cfg0)
-    file.create_dataset('fit/channel00/sum/int', data=sum_fit0, compression='gzip', compression_opts=4)
-    file.create_dataset('fit/channel00/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
-    dset = file['fit']
-    dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    if chan01_flag:
-        try:
-            del file['fit/channel01/ims']
-            del file['fit/channel01/names']
-            del file['fit/channel01/cfg']
-            del file['fit/channel01/sum/int']
-            del file['fit/channel01/sum/bkg']
-        except Exception:
-            pass
-        file.create_dataset('fit/channel01/ims', data=ims1, compression='gzip', compression_opts=4)
-        file.create_dataset('fit/channel01/names', data=[n.encode('utf8') for n in names1[cutid1:]])
-        file.create_dataset('fit/channel01/cfg', data=cfg1)
-        file.create_dataset('fit/channel01/sum/int', data=sum_fit1, compression='gzip', compression_opts=4)
-        file.create_dataset('fit/channel01/sum/bkg', data=sum_bkg1, compression='gzip', compression_opts=4)
-    file.close()
+            ims0 = np.squeeze(ims0)
+    
+        # save the fitted data
+        print("Writing fit data to "+h5file+"...", end=" ")
+        with h5py.File(h5file, 'r+') as file:
+            try:
+                del file['fit/'+chnl+'/ims']
+                del file['fit/'+chnl+'/names']
+                del file['fit/'+chnl+'/cfg']
+                del file['fit/'+chnl+'/sum/int']
+                del file['fit/'+chnl+'/sum/bkg']
+            except Exception:
+                pass
+            file.create_dataset('fit/'+chnl+'/ims', data=ims0, compression='gzip', compression_opts=4)
+            file.create_dataset('fit/'+chnl+'/names', data=[n.encode('utf8') for n in names0[cutid0:]])
+            file.create_dataset('fit/'+chnl+'/cfg', data=cfg)
+            file.create_dataset('fit/'+chnl+'/sum/int', data=sum_fit0, compression='gzip', compression_opts=4)
+            file.create_dataset('fit/'+chnl+'/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
+            dset = file['fit']
+            dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     print('Done')
 
 ##############################################################################
@@ -2065,7 +1797,7 @@ def Pymca_fit(spectra, mcafit, verbose=None):
 # Read the EDAX EagleIII SPC files and restructure as H5 for further processing
 # Syntax: ConvEdaxSpc(spcprefix, outfile, scandim)
 # Example: ConvEdaxSpc('/data/eagle/folder/a', 'a_merge.h5', (30,1), coords=[22.3, 17, 0.05, 0.])
-#       If coords is provided, motor positions are calculated. Coords=[Xstart, Ystart, Xincr, Yincr]
+#       If coords is provided, motor positions are calculated. coords=[Xstart, Ystart, Xincr, Yincr]
 #           Where Xstart and Ystart are the position coordinates of the first measurement (a11.SPC)
 #           and Xincr and Yincr are the step sizes of X and Y motors, in mm. The software assumes that
 #           X is the 'fast moving' motor, i.e. makes most steps during the scan and that no snake-pattern scans are performed
