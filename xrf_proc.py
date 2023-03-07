@@ -1627,8 +1627,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         else:
             cfg = cfgfile[index]
         with h5py.File(h5file, 'r') as file:
-            spectra0 = file['raw/'+chnl+'/spectra']
-            sumspec0 = file['raw/'+chnl+'/sumspec']
+            spectra0 = np.asarray(file['raw/'+chnl+'/spectra'])
+            sumspec0 = np.asarray(file['raw/'+chnl+'/sumspec'])
             icr0 = np.asarray(file['raw/'+chnl+'/icr'])
             ocr0 = np.asarray(file['raw/'+chnl+'/ocr'])
         spec0_shape = spectra0.shape
