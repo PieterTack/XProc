@@ -1419,7 +1419,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         mot2 = mot2_raw.copy()
         with h5py.File(h5file, 'r') as file:
             ims0 = np.squeeze(np.array(file['fit/'+chnl+'/ims']))
-            names0 = file['fit/'+chnl+'/names']
+            names0 = [n for n in file['fit/'+chnl+'/names']]
             sum_fit0 = np.array(file['fit/'+chnl+'/sum/int'])
             sum_bkg0 = np.array(file['fit/'+chnl+'/sum/bkg'])
         if len(ims0.shape) == 2 or len(ims0.shape) == 1:
