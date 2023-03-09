@@ -225,7 +225,7 @@ def read_cnc(cncfile):
         line = [float(i) for i in f.readline().split("\t") if i.strip()] #should contain 3 elements
         rv.density = line[0]
         rv.mass = line[1]
-        rv.thickness = line[1]
+        rv.thickness = line[2]
         f.readline() #Number of elements
         size = int(f.readline())
         f.readline() #Z	Cert conc(ppm)	Standard_error(ppm)
@@ -641,6 +641,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot1 = np.asarray(file['mot1'])
         mot2 = np.asarray(file['mot2'])
     file.close()
+
+#TODO: add option to provide a mask from which new sumspec etc is calculated. 
 
     h5_ims = (h5_ims / h5_normto)  #These are intensities for 1 I0 count.
     h5_sum = (h5_sum / h5_normto)
@@ -1290,6 +1292,11 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
         # save DL data to file
         cncfile = cncfile.split("/")[-1]
         with h5py.File(h5file, 'r+') as file:
+            # remove old keys as these are now redundant, we should use a single cncfile for either detector channel
+            for key in [k for k in file['detlim/'].keys()]:
+                if key != cncfile:
+                    del file['detlim/'+key]
+                    del file['elyield/'+key]
             try:
                 del file['detlim/'+cncfile+'/unit']
             except Exception:
