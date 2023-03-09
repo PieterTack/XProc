@@ -1243,7 +1243,7 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
             sum_bkg0 = np.array(file['norm/'+chnl+'/sum/bkg'])
             sum_fit0_err = np.array(file['norm/'+chnl+'/sum/int_stddev'])/sum_fit0
             sum_bkg0_err = np.array(file['norm/'+chnl+'/sum/bkg_stddev'])/sum_bkg0
-            names0 = file['norm/'+chnl+'/names']
+            names0 = [n for n in file['norm/'+chnl+'/names']]
                     
         # undo normalisation on intensities as performed during norm_xrf_batch
         #   in order to get intensities matching the current tm value (i.e. equal to raw fit values)
