@@ -293,20 +293,20 @@ def PCA(rawdata, nclusters=5, el_id=None):
 def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
     # read in h5file data, with appropriate h5dir
     file = h5py.File(h5file, 'r+')
-    data = np.array(file[h5dir])
+    data = np.asarray(file[h5dir])
     if el_id is not None:
         names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
     if 'channel00' in h5dir:
         if kmeans is not None:
-            spectra = np.array(file['raw/channel00/spectra'])
+            spectra = np.asarray(file['raw/channel00/spectra'])
         channel = 'channel00'
     elif 'channel01' in h5dir:
         if kmeans is not None:
-            spectra = np.array(file['raw/channel01/spectra'])
+            spectra = np.asarray(file['raw/channel01/spectra'])
         channel = 'channel01'
     elif 'channel02' in h5dir:
         if kmeans is not None:
-            spectra = np.array(file['raw/channel02/spectra'])
+            spectra = np.asarray(file['raw/channel02/spectra'])
         channel = 'channel02'
     
     # perform PCA clustering
@@ -402,17 +402,17 @@ def Kmeans(rawdata, nclusters=5, el_id=None, whiten=True):
 def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     # read in h5file data, with appropriate h5dir
     file = h5py.File(h5file, 'r+')
-    data = np.array(file[h5dir])
+    data = np.asarray(file[h5dir])
     if el_id is not None:
         names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
     if 'channel00' in h5dir:
-        spectra = np.array(file['raw/channel00/spectra'])
+        spectra = np.asarray(file['raw/channel00/spectra'])
         channel = 'channel00'
     elif 'channel01' in h5dir:
-        spectra = np.array(file['raw/channel01/spectra'])
+        spectra = np.asarray(file['raw/channel01/spectra'])
         channel = 'channel01'
     elif 'channel02' in h5dir:
-        spectra = np.array(file['raw/channel02/spectra'])
+        spectra = np.asarray(file['raw/channel02/spectra'])
         channel = 'channel02'
     spectra = spectra.reshape((spectra.shape[0]*spectra.shape[1], spectra.shape[2]))
     
@@ -439,13 +439,13 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     dset = file['kmeans']
     dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     if el_id is not None:
-        file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in np.array(names)[el_id]])
+        file.create_dataset('kmeans/'+channel+'/el_id', data=[n.encode('utf8') for n in np.asarray(names)[el_id]])
     else:
         file.create_dataset('kmeans/'+channel+'/el_id', data='None')        
     if nosumspec is False:
         if spectra.shape[0] == clusters.size:
             for i in range(nclusters):
-                dset = file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.array(sumspec)[i,:], compression='gzip', compression_opts=4)    
+                dset = file.create_dataset('kmeans/'+channel+'/sumspec_'+str(i), data=np.asarray(sumspec)[i,:], compression='gzip', compression_opts=4)    
                 dset.attrs["NPixels"] = np.asarray(np.where(clusters.ravel() == i)).size
     file.close()
     
@@ -543,18 +543,18 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
 
     # first let's go over the reffiles and calculate element yields
     #   distinguish between K and L lines while doing this
-    reffiles = np.array(reffiles)
+    reffiles = np.asarray(reffiles)
     if reffiles.size == 1:
         reff = h5py.File(str(reffiles), 'r')
         ref_yld = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
         ref_yld_err = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/stddev']] # elemental yield errors in (ug/cm²)/(ct/s)
         ref_names = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
         ref_z = [Elements.getz(n.split(" ")[0]) for n in ref_names]
-        ref_yld_err = np.array(ref_yld_err) / np.array(ref_yld) #convert to relative error
+        ref_yld_err = np.asarray(ref_yld_err) / np.asarray(ref_yld) #convert to relative error
         if norm is not None:
             names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
             if norm in names:
-                sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
+                sum_fit = np.asarray(reff['norm/'+channel+'/sum/int'])
                 sum_fit[np.where(sum_fit < 0)] = 0
                 ref_yld_err = np.sqrt(ref_yld_err*ref_yld_err + 1./sum_fit[names.index(norm)])
                 ref_yld = [yld*(sum_fit[names.index(norm)]) for yld in ref_yld]
@@ -576,16 +576,16 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             ref_yld_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
             ref_yld_err_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/stddev']] # elemental yield errors in (ug/cm²)/(ct/s)
             ref_names_tmp = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
-            ref_yld_err_tmp = np.array(ref_yld_err_tmp) / np.array(ref_yld_tmp) #convert to relative error
+            ref_yld_err_tmp = np.asarray(ref_yld_err_tmp) / np.asarray(ref_yld_tmp) #convert to relative error
             if norm is not None:
                 names = [n.decode('utf8') for n in reff['norm/'+channel+'/names']]
                 if norm in names:
-                    ref_sum_fit = np.array(reff['norm/'+channel+'/sum/int'])
-                    ref_sum_bkg = np.array(reff['norm/'+channel+'/sum/bkg'])
-                    ref_rawI0 = np.sum(np.array(reff['raw/I0']))
+                    ref_sum_fit = np.asarray(reff['norm/'+channel+'/sum/int'])
+                    ref_sum_bkg = np.asarray(reff['norm/'+channel+'/sum/bkg'])
+                    ref_rawI0 = np.sum(np.asarray(reff['raw/I0']))
                     ref_sum_fit[np.where(ref_sum_fit < 0)] = 0
                     ref_sum_bkg[np.where(ref_sum_bkg < 0)] = 0
-                    ref_normto = np.array(reff['norm/I0'])
+                    ref_normto = np.asarray(reff['norm/I0'])
                     ref_sum_fit = ref_sum_fit / ref_normto
                     ref_sum_bkg = ref_sum_bkg / ref_normto
                     ref_yld_err_tmp = np.sqrt(ref_yld_err_tmp*ref_yld_err_tmp + np.sqrt((ref_sum_fit[names.index(norm)]+2.*ref_sum_bkg[names.index(norm)])*ref_rawI0)/(ref_sum_fit[names.index(norm)]*ref_rawI0))
@@ -593,7 +593,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 else:
                     print("ERROR: quant_with_ref: norm signal not present for reference material in "+reffiles[i])
                     return False
-            for j in range(0, np.array(ref_yld_tmp).size):
+            for j in range(0, np.asarray(ref_yld_tmp).size):
                 ref_yld.append(ref_yld_tmp[j])
                 ref_yld_err.append(ref_yld_err_tmp[j])
                 ref_names.append(ref_names_tmp[j])
@@ -847,7 +847,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     # check which relative errors are largest: sumint_err or np.average(ims_err) or np.std(ims)/np.average(ims)
     #   then use this error as the sumint_err
     for i in range(sumint_err.size):
-        sumint_err[i] = np.max(np.array([sumint_err[i], np.average(ims_err[i,:,:]), np.std(ims[i,:,:])/np.average(ims[i,:,:])]))
+        sumint_err[i] = np.max(np.asarray([sumint_err[i], np.average(ims_err[i,:,:]), np.std(ims[i,:,:])/np.average(ims[i,:,:])]))
 
     conc_unit = "ug/cm²"
     if div_by_rhot is not None:
@@ -912,14 +912,14 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     titlefontsize = 26
 
     # check shape of dl. If 1D, then only single curve selected. 2D array means several DLs
-    dl = np.array(dl, dtype='object')
-    el_names = np.array(el_names, dtype='object')
+    dl = np.asarray(dl, dtype='object')
+    el_names = np.asarray(el_names, dtype='object')
     if tm:
-        tm = np.array(tm)
+        tm = np.asarray(tm)
     if ref:
-        ref = np.array(ref)
+        ref = np.asarray(ref)
     if dl_err is not None:
-        dl_err = np.array(dl_err, dtype='object')[:]*3. # we plot 3sigma error bars.
+        dl_err = np.asarray(dl_err, dtype='object')[:]*3. # we plot 3sigma error bars.
     # verify that el_names, dl_err are also 2D if provided
     if len(el_names.shape) != len(dl.shape):
         print("Error: el_names should be of similar dimension as dl")
@@ -931,15 +931,15 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     marker = itertools.cycle(('o', 's', 'd', 'p', '^', 'v')) #some plot markers to cycle through in case of multiple curves
     # make el_z array from el_names
     if len(el_names.shape) == 1 and type(el_names[0]) is type(str()):
-        el_names = np.array(el_names, dtype='str')
-        all_names = np.array([str(name) for name in np.nditer(el_names)])
+        el_names = np.asarray(el_names, dtype='str')
+        all_names = np.asarray([str(name) for name in np.nditer(el_names)])
     else:
         all_names = []
         for i in range(0,len(el_names)):
             for j in range(0, len(el_names[i])):
                 all_names.append(el_names[i][j])
-        all_names = np.array(all_names, dtype='str')
-    el_z = np.array([Elements.getz(name.split(" ")[0]) for name in all_names])
+        all_names = np.asarray(all_names, dtype='str')
+    el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in all_names])
     # count unique Z's
     unique_z = np.unique(el_z)
     #set figure width and height
@@ -954,7 +954,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     unique_el, unique_id = np.unique(all_names, return_index=True) # sorts unique_z names alphabetically instead of increasing Z!!
     el_labels = ["-".join(n.split(" ")) for n in all_names[unique_id]]
     z_temp = el_z[unique_id]
-    unique_el = np.array(el_labels)[np.argsort(z_temp)]
+    unique_el = np.asarray(el_labels)[np.argsort(z_temp)]
     z_temp = z_temp[np.argsort(z_temp)]
     # if for same element/Z multiple lines, join them.
     # K or Ka should be lowest, L above, M above that, ... (as typically K gives lowest DL, L higher, M higher still...)
@@ -974,10 +974,10 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         else:
                             new_labels = new_labels[:-2]
                             new_labels.append(el_labels[unique_id[i]] + "\n" + el_labels[j])
-        new_labels = np.array(new_labels)
+        new_labels = np.asarray(new_labels)
     else:
-        new_z = np.array(z_temp)
-        new_labels = np.array(el_labels)
+        new_z = np.asarray(z_temp)
+        new_labels = np.asarray(el_labels)
     new_labels = new_labels[np.argsort(new_z)]
     new_z = new_z[np.argsort(new_z)]
 
@@ -1002,11 +1002,14 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             secaxx.set_xticks(new_z)
             secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
             # fit curve through points and plot as dashed line in same color
-            fit_par = np.polyfit(el_z, np.log(dl), 2)
-            func = np.poly1d(fit_par)
-            fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
-            plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[0].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
-            ax.get_legend().remove()
+            try:
+                fit_par = np.polyfit(el_z, np.log(dl), 2)
+                func = np.poly1d(fit_par)
+                fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
+                plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[0].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
+                ax.get_legend().remove()
+            except Exception:
+                pass
         plt.ylabel(ytitle, fontsize=titlefontsize)
         plt.yscale('log')
         plt.yticks(fontsize=tickfontsize)
@@ -1020,7 +1023,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
         # multiple dl ranges are provided. Loop over them, annotate differences between tm and ref comparissons
         #   Only 1 of the two (tm or ref) should be of size >1; loop over that one
         if (tm is None and ref is None) or (tm.size == 1 and ref.size == 1):
-            ref = np.array(['DL '+str(int(n)) for n in np.linspace(0, dl.shape[0]-1, num=dl.shape[0])])
+            ref = np.asarray(['DL '+str(int(n)) for n in np.linspace(0, dl.shape[0]-1, num=dl.shape[0])])
         if tm is not None and tm.size > 1:
             if ref is not None:
                 label_prefix = str(ref[0])+"_"
@@ -1029,7 +1032,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             for i in range(0, tm.size):
                 # plot curves and axes
                 if bar is True:
-                    el = np.array(["-".join(name.split(" ")) for name in el_names[i]])
+                    el = np.asarray(["-".join(name.split(" ")) for name in el_names[i]])
                     bar_x = np.zeros(el.size)
                     for k in range(0,el.size):
                         bar_x[k] = list(unique_el).index(el[i]) + (0.9/tm.size)*(i-(tm.size-1)/2.)
@@ -1039,7 +1042,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
                         ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
-                    el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
+                    el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=label_prefix+str(tm[i]), linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0:
@@ -1049,11 +1052,14 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         secaxx.set_xticks(new_z)
                         secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
-                    fit_par = np.polyfit(el_z, np.log(np.array(dl[i], dtype='float64')), 2)
-                    func = np.poly1d(fit_par)
-                    fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
-                    plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
-                    ax.get_legend().remove()
+                    try:
+                        fit_par = np.polyfit(el_z, np.log(np.asarray(dl[i], dtype='float64')), 2)
+                        func = np.poly1d(fit_par)
+                        fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
+                        plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
+                        ax.get_legend().remove()
+                    except Exception:
+                        pass
             plt.ylabel(ytitle, fontsize=titlefontsize)
             plt.yscale('log')
             plt.yticks(fontsize=tickfontsize)
@@ -1071,7 +1077,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             for i in range(0, ref.size):
                 # plot curves and axes
                 if bar is True:
-                    el = np.array(["-".join(name.split(" ")) for name in el_names[i]])
+                    el = np.asarray(["-".join(name.split(" ")) for name in el_names[i]])
                     bar_x = np.zeros(el.size) + (0.9/ref.size)*(i-(ref.size-1)/2.)
                     for k in range(0,el.size):
                         bar_x[k] = list(unique_el).index(el[k])
@@ -1081,7 +1087,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
                         ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
-                    el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
+                    el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=str(ref[i])+label_suffix, linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0:
@@ -1091,11 +1097,14 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         secaxx.set_xticks(new_z)
                         secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
-                    fit_par = np.polyfit(el_z, np.log(dl[i]), 2)
-                    func = np.poly1d(fit_par)
-                    fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
-                    plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
-                    ax.get_legend().remove()
+                    try:
+                        fit_par = np.polyfit(el_z, np.log(dl[i]), 2)
+                        func = np.poly1d(fit_par)
+                        fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
+                        plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
+                        ax.get_legend().remove()
+                    except Exception:
+                        pass
             plt.ylabel(ytitle, fontsize=titlefontsize)
             plt.yscale('log')
             plt.yticks(fontsize=tickfontsize)
@@ -1112,14 +1121,14 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     elif len(dl.shape) == 3:
         # multiple dl ranges, loop over both tm and ref
         if tm is None:
-            tm = np.array(['tm'+str(int(n)) for n in np.linspace(0, dl.shape[0]-1, num=dl.shape[0])])
+            tm = np.asarray(['tm'+str(int(n)) for n in np.linspace(0, dl.shape[0]-1, num=dl.shape[0])])
         if ref is None:
-            ref = np.array(['ref'+str(int(n)) for n in np.linspace(0, dl.shape[1]-1, num=dl.shape[1])])
+            ref = np.asarray(['ref'+str(int(n)) for n in np.linspace(0, dl.shape[1]-1, num=dl.shape[1])])
         for i in range(0, ref.size):
             for j in range(0, tm.size):
                 # plot curves and axes
                 if bar is True:
-                    el = np.array(["-".join(name.split(" ")) for name in el_names[i,j]])
+                    el = np.asarray(["-".join(name.split(" ")) for name in el_names[i,j]])
                     bar_x = np.zeros(el.size)
                     for k in range(0,el.size):
                         bar_x[k] = list(unique_el.index(el[k]) + (0.9/(tm.size*ref.size))*(i*tm.size+j-(tm.size*ref.size-1)/2.))
@@ -1129,7 +1138,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
                         ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
-                    el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names[i,j]])
+                    el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i,j]])
                     plt.errorbar(el_z, dl[i,j], yerr=dl_err[i,j], label=str(ref[i])+'_'+str(tm[j]), linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0 and j == 0:
@@ -1139,11 +1148,14 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         secaxx.set_xticks(new_z)
                         secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
-                    fit_par = np.polyfit(el_z, np.log(dl[i,j]), 2)
-                    func = np.poly1d(fit_par)
-                    fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
-                    plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
-                    ax.get_legend().remove()
+                    try:
+                        fit_par = np.polyfit(el_z, np.log(dl[i,j]), 2)
+                        func = np.poly1d(fit_par)
+                        fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
+                        plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
+                        ax.get_legend().remove()
+                    except Exception:
+                        pass
                 plt.ylabel(ytitle, fontsize=titlefontsize)
                 plt.yscale('log')
                 plt.yticks(fontsize=tickfontsize)
@@ -1156,11 +1168,11 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     elif (len(dl.shape) == 1 and type(el_names[0]) is not type(np.str_())):
         # multiple dl ranges with different length, loop over both tm and ref
         if tm is None:
-            tm = np.array(['tm'+str(int(n)) for n in np.linspace(0, dl.shape[0]-1, num=dl.shape[0])])
+            tm = np.asarray(['tm'+str(int(n)) for n in np.linspace(0, dl.shape[0]-1, num=dl.shape[0])])
         if tm.size == 1:
             tm_tmp = [tm]
         if ref is None:
-            ref = np.array(['ref'+str(int(n)) for n in np.linspace(0, dl.shape[1]-1, num=dl.shape[1])])
+            ref = np.asarray(['ref'+str(int(n)) for n in np.linspace(0, dl.shape[1]-1, num=dl.shape[1])])
         for i in range(0, ref.size):
             el_names_tmp = el_names[i]
             dl_tmp = dl[i]
@@ -1168,7 +1180,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             for j in range(0, tm.size):
                 # plot curves and axes
                 if bar is True:
-                    el = np.array(["-".join(name.split(" ")) for name in el_names_tmp])
+                    el = np.asarray(["-".join(name.split(" ")) for name in el_names_tmp])
                     bar_x = np.zeros(el.size)
                     for k in range(0,el.size):
                         bar_x[k] = list(unique_el).index(el[k]) + (0.9/(tm.size*ref.size))*(i*tm.size+j-(tm.size*ref.size-1)/2.)
@@ -1178,7 +1190,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
                         ax.set_xticklabels(unique_el, fontsize=tickfontsize)
                 else:
-                    el_z = np.array([Elements.getz(name.split(" ")[0]) for name in el_names_tmp])
+                    el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names_tmp])
                     plt.errorbar(el_z, dl_tmp, yerr=dl_err_tmp, label=str(ref[i])+'_'+str(tm_tmp[j]), linestyle='', fmt=next(marker), capsize=3)
                     ax = plt.gca()
                     if i == 0 and j == 0:
@@ -1188,11 +1200,14 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         secaxx.set_xticks(new_z)
                         secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
                     # fit curve through points and plot as dashed line in same color
-                    fit_par = np.polyfit(el_z, np.log(dl_tmp), 2)
-                    func = np.poly1d(fit_par)
-                    fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
-                    plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
-                    ax.get_legend().remove()
+                    try:
+                        fit_par = np.polyfit(el_z, np.log(dl_tmp), 2)
+                        func = np.poly1d(fit_par)
+                        fit_x = np.linspace(np.min(el_z), np.max(el_z), num=(np.max(el_z)-np.min(el_z))*2)
+                        plt.plot(fit_x, np.exp(func(fit_x)), linestyle='--', color=plt.legend().legendHandles[-1].get_colors()[0]) #Note: this also plots a legend, which is removed later on.
+                        ax.get_legend().remove()
+                    except Exception:
+                        pass
                 plt.ylabel(ytitle, fontsize=titlefontsize)
                 plt.yscale('log')
                 plt.yticks(fontsize=tickfontsize)
@@ -1224,9 +1239,9 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
     try:
         with h5py.File(h5file, 'r') as file:
             keys = [key for key in file['norm'].keys() if 'channel' in key]
-            tm = np.array(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-            I0 = np.array(file['raw/I0'])
-            I0norm = np.array(file['norm/I0'])
+            tm = np.asarray(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
+            I0 = np.asarray(file['raw/I0'])
+            I0norm = np.asarray(file['norm/I0'])
     except Exception:
         print("ERROR: calc_detlim: cannot open normalised data in "+h5file)
         return
@@ -1241,15 +1256,15 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
 
     for index, chnl in enumerate(keys):
         with h5py.File(h5file, 'r') as file:
-            sum_fit0 = np.array(file['norm/'+chnl+'/sum/int'])
-            sum_bkg0 = np.array(file['norm/'+chnl+'/sum/bkg'])
-            sum_fit0_err = np.array(file['norm/'+chnl+'/sum/int_stddev'])/sum_fit0
-            sum_bkg0_err = np.array(file['norm/'+chnl+'/sum/bkg_stddev'])/sum_bkg0
+            sum_fit0 = np.asarray(file['norm/'+chnl+'/sum/int'])
+            sum_bkg0 = np.asarray(file['norm/'+chnl+'/sum/bkg'])
+            sum_fit0_err = np.asarray(file['norm/'+chnl+'/sum/int_stddev'])/sum_fit0
+            sum_bkg0_err = np.asarray(file['norm/'+chnl+'/sum/bkg_stddev'])/sum_bkg0
             names0 = [n for n in file['norm/'+chnl+'/names']]
                     
         # undo normalisation on intensities as performed during norm_xrf_batch
         #   in order to get intensities matching the current tm value (i.e. equal to raw fit values)
-        names0 = np.array([n.decode('utf8') for n in names0[:]])
+        names0 = np.asarray([n.decode('utf8') for n in names0[:]])
         sum_bkg0 = sum_bkg0/normfactor
         sum_fit0 = sum_fit0/normfactor
         # prune cnc.conc array to appropriate elements according to names0 and names1
@@ -1324,6 +1339,8 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
             dset.attrs["Unit"] = "(ct/s)/(ug/cm²)"
             file.create_dataset('elyield/'+cncfile+'/'+chnl+'/names', data=[n.encode('utf8') for n in names0_mod[:]])
             dset = file['detlim']
+            dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            dset = file['elyield']
             dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     
         # plot the DLs
@@ -1425,10 +1442,10 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         mot1 = mot1_raw.copy()
         mot2 = mot2_raw.copy()
         with h5py.File(h5file, 'r') as file:
-            ims0 = np.squeeze(np.array(file['fit/'+chnl+'/ims']))
+            ims0 = np.squeeze(np.asarray(file['fit/'+chnl+'/ims']))
             names0 = [n for n in file['fit/'+chnl+'/names']]
-            sum_fit0 = np.array(file['fit/'+chnl+'/sum/int'])
-            sum_bkg0 = np.array(file['fit/'+chnl+'/sum/bkg'])
+            sum_fit0 = np.asarray(file['fit/'+chnl+'/sum/int'])
+            sum_bkg0 = np.asarray(file['fit/'+chnl+'/sum/bkg'])
         if len(ims0.shape) == 2 or len(ims0.shape) == 1:
             if len(ims0.shape) == 2:
                 ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
@@ -1665,7 +1682,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
                 print("-----------------------------------------------------------------------------")
                 print("Error: %s is not a valid PyMca configuration file." % cfg)
                 print("-----------------------------------------------------------------------------")
-            fitresults0 = fastfit.fitMultipleSpectra(x=range(0,nchannels0), y=np.array(spectra0[:,:,:]), ysum=sumspec0)
+            fitresults0 = fastfit.fitMultipleSpectra(x=range(0,nchannels0), y=np.asarray(spectra0[:,:,:]), ysum=sumspec0)
             #fit sumspec
             config = ConfigDict.ConfigDict()
             config.read(cfg)
@@ -1681,10 +1698,10 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             print("Done")
             # actual fit results are contained in fitresults['parameters']
             #   labels of the elements are fitresults.labels("parameters"), first # are 'A0, A1, A2' of polynomial background, which we don't need
-            peak_int0 = np.array(fitresults0['parameters'])
+            peak_int0 = np.asarray(fitresults0['parameters'])
             names0 = fitresults0.labels("parameters")
             names0 = [n.replace('Scatter Peak000', 'Rayl') for n in names0]
-            names0 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names0])
+            names0 = np.asarray([n.replace('Scatter Compton000', 'Compt') for n in names0])
             cutid0 = 0
             for i in range(names0.size):
                 if names0[i] == 'A'+str(i):
@@ -1700,8 +1717,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             if ncores is None or ncores == -1 or ncores == 0:
                 ncores = multiprocessing.cpu_count()-1
             spec_chansum = np.sum(spectra0, axis=2)
-            spec2fit_id = np.array(np.where(spec_chansum.ravel() > 0.)).squeeze()
-            spec2fit = np.array(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))[spec2fit_id,:]
+            spec2fit_id = np.asarray(np.where(spec_chansum.ravel() > 0.)).squeeze()
+            spec2fit = np.asarray(spectra0).reshape((spectra0.shape[0]*spectra0.shape[1], spectra0.shape[2]))[spec2fit_id,:]
             if spectra0.shape[0]*spectra0.shape[1] > 1:
                 print("Using "+str(ncores)+" cores...", end=" ")
                 pool = multiprocessing.Pool(processes=ncores)
@@ -1709,17 +1726,17 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
                 results = list(results)
                 groups = list(groups)
                 if groups[0] is None: #first element could be None, so let's search for first not-None item.
-                    for i in range(0, np.array(groups, dtype='object').shape[0]):
+                    for i in range(0, np.asarray(groups, dtype='object').shape[0]):
                         if groups[i] is not None:
                             groups[0] = groups[i]
                             break
                 none_id = [i for i, x in enumerate(results) if x is None]
                 if none_id != []:
-                    for i in range(0, np.array(none_id).size):
-                        results[none_id[i]] = [0]*np.array(groups[0]).shape[0] # set None to 0 values
-                peak_int0 = np.zeros((spectra0.shape[0]*spectra0.shape[1], np.array(groups[0]).shape[0]))
-                peak_int0[spec2fit_id,:] = np.array(results).reshape((spec2fit_id.size, np.array(groups[0]).shape[0]))
-                peak_int0 = np.moveaxis(peak_int0.reshape((spectra0.shape[0], spectra0.shape[1], np.array(groups[0]).shape[0])),-1,0)
+                    for i in range(0, np.asarray(none_id).size):
+                        results[none_id[i]] = [0]*np.asarray(groups[0]).shape[0] # set None to 0 values
+                peak_int0 = np.zeros((spectra0.shape[0]*spectra0.shape[1], np.asarray(groups[0]).shape[0]))
+                peak_int0[spec2fit_id,:] = np.asarray(results).reshape((spec2fit_id.size, np.asarray(groups[0]).shape[0]))
+                peak_int0 = np.moveaxis(peak_int0.reshape((spectra0.shape[0], spectra0.shape[1], np.asarray(groups[0]).shape[0])),-1,0)
                 peak_int0[np.isnan(peak_int0)] = 0.
                 pool.close()
                 pool.join()
@@ -1737,7 +1754,7 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             fitresult0_sum, result0_sum = mcafit.startfit(digest=1)
             names0 = result0_sum["groups"]
             names0 = [n.replace('Scatter Peak000', 'Rayl') for n in result0_sum["groups"]]
-            names0 = np.array([n.replace('Scatter Compton000', 'Compt') for n in names0])
+            names0 = np.asarray([n.replace('Scatter Compton000', 'Compt') for n in names0])
             cutid0 = 0
             for i in range(names0.size):
                 if names0[i] == 'A'+str(i):
@@ -1757,8 +1774,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
             ocr0 = ocr0[0:ims0.shape[1],:]
         for i in range(names0.size):
             ims0[i,:,:] = ims0[i,:,:] * icr0/ocr0
-        sum_fit0 = np.array(sum_fit0)*np.sum(icr0)/np.sum(ocr0)
-        sum_bkg0 = np.array(sum_bkg0)*np.sum(icr0)/np.sum(ocr0)
+        sum_fit0 = np.asarray(sum_fit0)*np.sum(icr0)/np.sum(ocr0)
+        sum_bkg0 = np.asarray(sum_bkg0)*np.sum(icr0)/np.sum(ocr0)
         if len(spec0_shape) == 2:
             ims0 = np.squeeze(ims0)
     
@@ -1976,21 +1993,21 @@ def read_P06_spectra(file, sc_id, ch):
                 icr0_arr = f['entry/instrument/xspress3/'+ch[1]+'/scaler/allevent'][:]
                 ocr0_arr = f['entry/instrument/xspress3/'+ch[1]+'/scaler/allgood'][:]
         elif type(ch[1]) is list: #if multiple channels provided we want to add them 
-            spe0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/histogram'][:])
+            spe0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/histogram'][:])
             try:
-                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allEvent'][:])
-                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allGood'][:])
+                icr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allEvent'][:])
+                ocr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allGood'][:])
             except KeyError:
-                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allevent'][:])
-                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allgood'][:])
+                icr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allevent'][:])
+                ocr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allgood'][:])
             for chnl in ch[1][1:]:
-                spe0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
+                spe0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
                 try:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
+                    icr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
+                    ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
                 except KeyError:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
+                    icr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
+                    ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
         f.close()
         print("read")
     elif type(ch[0]) is list:
@@ -2001,29 +2018,29 @@ def read_P06_spectra(file, sc_id, ch):
         # read spectra and icr/ocr from first device (ch[0][0]) so we can later add the rest
         #   as ch[0] is a list, ch[1] is also expected to be a list!
         if type(ch[1][0]) is str:
-            spe0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/histogram'][:])
+            spe0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/histogram'][:])
             try:
-                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allEvent'][:])
-                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allGood'][:])
+                icr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allEvent'][:])
+                ocr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allGood'][:])
             except KeyError:
-                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allevent'][:])
-                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allgood'][:])
+                icr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allevent'][:])
+                ocr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0]+'/scaler/allgood'][:])
         elif type(ch[1][0]) is list: #if multiple channels provided for this device we want to add them 
-            spe0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/histogram'][:])
+            spe0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0][0]+'/histogram'][:])
             try:
-                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allEvent'][:])
-                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allGood'][:])
+                icr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allEvent'][:])
+                ocr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allGood'][:])
             except KeyError:
-                icr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allevent'][:])
-                ocr0_arr = np.array(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allgood'][:])
+                icr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allevent'][:])
+                ocr0_arr = np.asarray(f['entry/instrument/xspress3/'+ch[1][0][0]+'/scaler/allgood'][:])
             for chnl in ch[1][0][1:]:
-                spe0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
+                spe0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
                 try:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
+                    icr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
+                    ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
                 except KeyError:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
+                    icr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
+                    ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
         f.close()
         print("read")
         # Now let's read the following spectra/devices
@@ -2033,22 +2050,22 @@ def read_P06_spectra(file, sc_id, ch):
             print("Reading " +sc_id+"/"+dev+"/"+file +"...", end=" ")
             f = h5py.File(sc_id+"/"+dev+"/"+file, 'r')
             if type(ch[1][i+1]) is str:
-                spe0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/histogram'][:])
+                spe0_arr += np.asarray(f['entry/instrument/xspress3/'+ch[1][i+1]+'/histogram'][:])
                 try:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allEvent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allGood'][:])
+                    icr0_arr += np.asarray(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allEvent'][:])
+                    ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allGood'][:])
                 except KeyError:
-                    icr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allevent'][:])
-                    ocr0_arr += np.array(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allgood'][:])
+                    icr0_arr += np.asarray(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allevent'][:])
+                    ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+ch[1][i+1]+'/scaler/allgood'][:])
             elif type(ch[1][i+1]) is list: #if multiple channels provided for this device we want to add them 
                 for chnl in ch[1][i+1][:]:
-                    spe0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
+                    spe0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/histogram'][:])
                     try:
-                        icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
-                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
+                        icr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allEvent'][:])
+                        ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allGood'][:])
                     except KeyError:
-                        icr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
-                        ocr0_arr += np.array(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
+                        icr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allevent'][:])
+                        ocr0_arr += np.asarray(f['entry/instrument/xspress3/'+chnl+'/scaler/allgood'][:])
             f.close()    
             print("read")
     return spe0_arr, icr0_arr, ocr0_arr
@@ -2056,7 +2073,7 @@ def read_P06_spectra(file, sc_id, ch):
 ##############################################################################
 # Merges separate P06 nxs files to 1 handy h5 file containing 2D array of spectra, relevant motor positions, I0 counter, ICR, OCR and mesaurement time.
 def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, readas1d=False):
-    scanid = np.array(scanid)
+    scanid = np.asarray(scanid)
     if scanid.size == 1:
         scan_suffix = '/'.join(str(scanid).split('/')[0:-2])+'/scan'+str(scanid).split("_")[-1]
     else:
@@ -2070,7 +2087,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         # file with name scanid contains info on scan command
         f = h5py.File(sc_id+'.nxs', 'r')
         scan_cmd = str(f['scan/program_name'].attrs["scan_command"][:])
-        scan_cmd = np.array(scan_cmd.strip("[]'").split(" "))
+        scan_cmd = np.asarray(scan_cmd.strip("[]'").split(" "))
         print(' '.join(scan_cmd))
         f.close()
 
@@ -2153,19 +2170,19 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             print("Reading " +sc_id +".nxs...", end=" ")
             f = h5py.File(sc_id+'.nxs', 'r')
             if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
-                mot1_arr = np.array(f["scan/data/timestamp"][:])
+                mot1_arr = np.asarray(f["scan/data/timestamp"][:])
                 mot1_name = "timestamp"
-                mot2_arr = np.array(f["scan/data/timestamp"][:])
+                mot2_arr = np.asarray(f["scan/data/timestamp"][:])
                 mot2_name = "timestamp"                                        
             elif scan_cmd[0] == 'dscan' or scan_cmd[0] == 'ascan':
-                mot1_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
+                mot1_arr = np.asarray(f["scan/data/"+str(scan_cmd[1])][:])
                 mot1_name = str(scan_cmd[1])
-                mot2_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
+                mot2_arr = np.asarray(f["scan/data/"+str(scan_cmd[1])][:])
                 mot2_name = str(scan_cmd[1])                            
             else:
-                mot1_arr = np.array(f["scan/data/"+str(scan_cmd[1])][:])
+                mot1_arr = np.asarray(f["scan/data/"+str(scan_cmd[1])][:])
                 mot1_name = str(scan_cmd[1])
-                mot2_arr = np.array(f["scan/data/"+str(scan_cmd[5])][:])
+                mot2_arr = np.asarray(f["scan/data/"+str(scan_cmd[5])][:])
                 mot2_name = str(scan_cmd[5])            
             f.close()
             for i in range(mot1_arr.shape[0]):
@@ -2193,7 +2210,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                         mot1a_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
                         mot1b = enc_vals[enc_names.index(mot_list[1])]
                         mot1b_contrib = dictionary["axes"]["axis0"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
-                        mot1_arr = mot1a_contrib*(np.array(mot1a)-pivot[0])+mot1b_contrib*(np.array(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
+                        mot1_arr = mot1a_contrib*(np.asarray(mot1a)-pivot[0])+mot1b_contrib*(np.asarray(mot1b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                         mot1_name = str(scan_cmd[1])
                     except Exception:
                         try:
@@ -2203,7 +2220,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                 mot1_name = enc_names[0]
                             else:
                                 f2 = h5py.File(sc_id+'.nxs','r')
-                                mot1_arr = np.array(f2["scan/data/"+str(scan_cmd[1])][:])
+                                mot1_arr = np.asarray(f2["scan/data/"+str(scan_cmd[1])][:])
                                 mot1_name = str(scan_cmd[1])
                                 f2.close()
                         except KeyError:
@@ -2236,7 +2253,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                         mot2a_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[0]]["contribution"]
                         mot2b = enc_vals[enc_names.index(mot_list[1])]
                         mot2b_contrib = dictionary["axes"]["axis1"]["virtual_motor_config"]["real_members"][mot_list[1]]["contribution"]
-                        mot2_arr = mot2a_contrib*(np.array(mot2a)-pivot[0])+mot2b_contrib*(np.array(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
+                        mot2_arr = mot2a_contrib*(np.asarray(mot2a)-pivot[0])+mot2b_contrib*(np.asarray(mot2b)-pivot[1]) + pivot[0] #just took first as in this case it's twice the same i.e. [250,250]
                         mot2_name = str(scan_cmd[5])
                     except Exception:
                         try:
@@ -2246,7 +2263,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                 mot2_name = enc_names[1]
                             else:
                                 f2 = h5py.File(sc_id+'.nxs','r')
-                                mot2_arr = np.array(f2["scan/data/"+str(scan_cmd[5])][:])
+                                mot2_arr = np.asarray(f2["scan/data/"+str(scan_cmd[5])][:])
                                 mot2_name = str(scan_cmd[5])
                                 f2.close()
                         except KeyError:
@@ -2273,7 +2290,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                     mot2.append(mot2_arr[i])
                 f.close()
                 print("read")
-        # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.array
+        # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.asarray
         # let's translate scan command to figure out array dimensions we want to fill
         #   1D scan (ascan, dscan, timescan, ...) contain 7 parts, i.e. dscan samx 0 1 10 1 False
         #       sometimes False at end appears to be missing
@@ -2508,10 +2525,10 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
 #   syntax: h5id15convert('exp_file.h5', '3.1', (160,1), mot1_name='hry', mot2_name='hrz')
 #   when scanid is an array or list of multiple elements, the images will be stitched together to 1 file
 def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
-    scan_dim = np.array(scan_dim)
-    scanid = np.array(scanid)
+    scan_dim = np.asarray(scan_dim)
+    scanid = np.asarray(scanid)
     if scan_dim.size == 1:
-        scan_dim = np.array((scan_dim, 1))
+        scan_dim = np.asarray((scan_dim, 1))
     if atol is None:
         atol = 1e-4
 
@@ -2520,7 +2537,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
     else:
         scan_suffix = '_scan'+str(scanid[0]).split(".")[0]+'-'+str(scanid[-1]).split(".")[0]
 
-    if np.array(h5id15).size == 1:
+    if np.asarray(h5id15).size == 1:
         h5id15 = [h5id15]*scanid.size
     else: # assumes we have same amount of scan nrs as h5id15 files!
         lasth5 = h5id15[-1].split('/')[-1].split('.')[0]
@@ -2546,49 +2563,49 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 scan_cmd = f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
             except Exception:
                 scan_cmd = f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
-            spectra0_temp = np.array(f[sc_id+'/measurement/'+ch0id])
+            spectra0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id])
             spectra0 = np.zeros((sc_dim[0], sc_dim[1], spectra0_temp.shape[1]))
             for i in range(0, spectra0_temp.shape[1]):
                 spectra0[:,:,i] = spectra0_temp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-            icr0 = np.array(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            ocr0 = np.array(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            icr0 = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            ocr0 = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             if ch1id is not None:
-                spectra1_temp = np.array(f[sc_id+'/measurement/'+ch1id])
+                spectra1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id])
                 spectra1 = np.zeros((sc_dim[0], sc_dim[1], spectra1_temp.shape[1]))
                 for i in range(0, spectra1_temp.shape[1]):
                     spectra1[:,:,i] = spectra1_temp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-                icr1 = np.array(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                ocr1 = np.array(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            i0 = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                icr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                ocr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            i0 = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             if i0corid is not None:
                 try:
-                    i0cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
+                    i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
                 except KeyError:
                     try:
-                        i0cor = np.average(np.array(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
+                        i0cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
                     except KeyError:
                         print("***ERROR: no viable i0cor value obtained. Set to 1.")
                         i0cor = 1.
                 i0 = i0/np.average(i0) * i0cor
             if i1id is not None:
-                i1 = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                i1 = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 if i1corid is not None:
                     try:
-                        i1cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
+                        i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
                     except KeyError:
                         try:
-                            i1cor = np.average(np.array(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
+                            i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
                         except KeyError:
                             print("***ERROR: no viable i1cor value obtained. Set to 1.")
                             i1cor = 1.
                     i1 = i1/np.average(i1) * i1cor
             try:
-                mot1 = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                mot2 = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot1 = np.asarray(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot2 = np.asarray(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             except KeyError:
-                mot1 = np.array(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
-                mot2 = np.array(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
-            tm = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot1 = np.asarray(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
+                mot2 = np.asarray(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
+            tm = np.asarray(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             f.close()
 
             # find direction in which mot1 and mot2 increase  #TODO: this probably fails in case of line scans...
@@ -2616,49 +2633,49 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 scan_cmd += ' '+(f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
                 
             #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
-            spectra0_tmp = np.array(f[sc_id+'/measurement/'+ch0id])
+            spectra0_tmp = np.asarray(f[sc_id+'/measurement/'+ch0id])
             spectra0_temp = np.zeros((sc_dim[0], sc_dim[1], spectra0_tmp.shape[1]))
             for i in range(0, spectra0_tmp.shape[1]):
                 spectra0_temp[:,:,i] = spectra0_tmp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-            icr0_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            ocr0_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            icr0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            ocr0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             if ch1id is not None:
-                spectra1_tmp = np.array(f[sc_id+'/measurement/'+ch1id])
+                spectra1_tmp = np.asarray(f[sc_id+'/measurement/'+ch1id])
                 spectra1_temp = np.zeros((sc_dim[0], sc_dim[1], spectra1_temp.shape[1]))
                 for i in range(0, spectra1_tmp.shape[1]):
                     spectra1_temp[:,:,i] = spectra1_tmp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-                icr1_temp = np.array(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                ocr1_temp = np.array(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            i0_temp = np.array(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                icr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                ocr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            i0_temp = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             if i0corid is not None:
                 try:
-                    i0cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
+                    i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
                 except KeyError:
                     try:
-                        i0cor = np.average(np.array(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
+                        i0cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
                     except KeyError:
                         print("***ERROR: no viable i0cor value obtained. Set to 1.")
                         i0cor = 1.
                 i0_temp = i0_temp/np.average(i0_temp) * i0cor
             if i1id is not None:
-                i1_temp = np.array(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                i1_temp = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 if i1corid is not None:
                     try:
-                        i1cor = np.average(np.array(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
+                        i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
                     except KeyError:
                         try:
-                            i1cor = np.average(np.array(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
+                            i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
                         except KeyError:
                             print("***ERROR: no viable i1cor value obtained. Set to 1.")
                             i1cor = 1.
                     i1_temp = i1_temp/np.average(i1_temp) * i1cor
             try:
-                mot1_temp = np.array(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                mot2_temp = np.array(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot1_temp = np.asarray(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot2_temp = np.asarray(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             except KeyError:
-                mot1_temp = np.array(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
-                mot2_temp = np.array(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
-            tm_temp = np.array(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                mot1_temp = np.asarray(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
+                mot2_temp = np.asarray(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
+            tm_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             f.close()
 
             mot_flag = 0 #TODO: if mot1_temp.shape is larger than mot1 it crashes...
@@ -2733,7 +2750,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                     if mot2.min() < mot2_temp.min():
                         # mot2 should come first, followed by mot2_temp
                         if mot2_id == 0:
-                            keep_id = np.array(np.where(mot2[:,0] < mot2_temp.min())).max()+1 #add one as we also need last element of id's
+                            keep_id = np.asarray(np.where(mot2[:,0] < mot2_temp.min())).max()+1 #add one as we also need last element of id's
                             spectra0 = np.concatenate((spectra0[0:keep_id,:,:], spectra0_temp),axis=mot1_id)
                             icr0 = np.concatenate((icr0[0:keep_id,:], icr0_temp), axis=mot1_id)
                             ocr0 = np.concatenate((ocr0[0:keep_id,:], ocr0_temp), axis=mot1_id)
@@ -2748,7 +2765,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                             mot2 = np.concatenate((mot2[0:keep_id,:], mot2_temp), axis=mot1_id)
                             tm = np.concatenate((tm[0:keep_id,:], tm_temp), axis=mot1_id)
                         else:
-                            keep_id = np.array(np.where(mot2[0,:] < mot2_temp.min())).max()+1 #add one as we also need last element of id's
+                            keep_id = np.asarray(np.where(mot2[0,:] < mot2_temp.min())).max()+1 #add one as we also need last element of id's
                             spectra0 = np.concatenate((spectra0[:,0:keep_id,:], spectra0_temp),axis=mot1_id)
                             icr0 = np.concatenate((icr0[:,0:keep_id], icr0_temp), axis=mot1_id)
                             ocr0 = np.concatenate((ocr0[:,0:keep_id], ocr0_temp), axis=mot1_id)
@@ -2764,7 +2781,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                             tm = np.concatenate((tm[:,0:keep_id], tm_temp), axis=mot1_id)
                     else:
                         # first mot2_temp, followed by remainder of mot2 (where no more overlap)
-                        keep_id = np.array(np.where(mot2_temp[mot2_id] < mot2.min())).max()+1 #add one as we also need last element of id's
+                        keep_id = np.asarray(np.where(mot2_temp[mot2_id] < mot2.min())).max()+1 #add one as we also need last element of id's
                         if mot2_id == 0:
                             spectra0 = np.concatenate((spectra0_temp[:,0:keep_id,:], spectra0),axis=mot1_id)
                             icr0 = np.concatenate((icr0_temp[:,0:keep_id], icr0), axis=mot1_id)
@@ -2829,7 +2846,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                     if mot1.min() < mot1_temp.min():
                         # mot1 should come first, followed by mot1_temp
                         if mot1_id == 0:
-                            keep_id = np.array(np.where(mot1[:,0] < mot1_temp.min())).max()+1 #add one as we also need last element of id's
+                            keep_id = np.asarray(np.where(mot1[:,0] < mot1_temp.min())).max()+1 #add one as we also need last element of id's
                             spectra0 = np.concatenate((spectra0[0:keep_id,:,:], spectra0_temp),axis=mot1_id)
                             icr0 = np.concatenate((icr0[0:keep_id,:], icr0_temp), axis=mot1_id)
                             ocr0 = np.concatenate((ocr0[0:keep_id,:], ocr0_temp), axis=mot1_id)
@@ -2844,7 +2861,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                             mot2 = np.concatenate((mot2[0:keep_id,:], mot2_temp), axis=mot1_id)
                             tm = np.concatenate((tm[0:keep_id,:], tm_temp), axis=mot1_id)
                         else:
-                            keep_id = np.array(np.where(mot1[0,:] < mot1_temp.min())).max()+1 #add one as we also need last element of id's
+                            keep_id = np.asarray(np.where(mot1[0,:] < mot1_temp.min())).max()+1 #add one as we also need last element of id's
                             spectra0 = np.concatenate((spectra0[:,0:keep_id,:], spectra0_temp),axis=mot1_id)
                             icr0 = np.concatenate((icr0[:,0:keep_id], icr0_temp), axis=mot1_id)
                             ocr0 = np.concatenate((ocr0[:,0:keep_id], ocr0_temp), axis=mot1_id)
@@ -2861,7 +2878,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                     else:
                         # first mot1_temp, followed by remainder of mot1 (where no more overlap)
                         if mot1_id == 0:
-                            keep_id = np.array(np.where(mot1_temp[:,0] < mot1.min())).max()+1 #add one as we also need last element of id's
+                            keep_id = np.asarray(np.where(mot1_temp[:,0] < mot1.min())).max()+1 #add one as we also need last element of id's
                             spectra0 = np.concatenate((spectra0_temp[0:keep_id,:,:], spectra0),axis=mot1_id)
                             icr0 = np.concatenate((icr0_temp[0:keep_id,:], icr0), axis=mot1_id)
                             ocr0 = np.concatenate((ocr0_temp[0:keep_id,:], ocr0), axis=mot1_id)
@@ -2876,7 +2893,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                             mot2 = np.concatenate((mot2_temp[0:keep_id,:], mot2), axis=mot1_id)
                             tm = np.concatenate((tm_temp[0:keep_id,:], tm), axis=mot1_id)
                         else:
-                            keep_id = np.array(np.where(mot1_temp[0,:] < mot1.min())).max()+1 #add one as we also need last element of id's
+                            keep_id = np.asarray(np.where(mot1_temp[0,:] < mot1.min())).max()+1 #add one as we also need last element of id's
                             spectra0 = np.concatenate((spectra0_temp[:,0:keep_id,:], spectra0),axis=mot1_id)
                             icr0 = np.concatenate((icr0_temp[:,0:keep_id], icr0), axis=mot1_id)
                             ocr0 = np.concatenate((ocr0_temp[:,0:keep_id], ocr0), axis=mot1_id)
