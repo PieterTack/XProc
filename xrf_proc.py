@@ -1427,7 +1427,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
     with h5py.File(h5file, 'r') as file:
-        keys = [key for key in file['norm'].keys() if 'channel' in key]
+        keys = [key for key in file['fit'].keys() if 'channel' in key]
         I0 =  np.asarray(file['raw/I0'])
         tm = np.asarray(file['raw/acquisition_time'])
         mot1_raw = np.asarray(file['mot1'])
@@ -1443,7 +1443,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         mot2 = mot2_raw.copy()
         with h5py.File(h5file, 'r') as file:
             ims0 = np.squeeze(np.asarray(file['fit/'+chnl+'/ims']))
-            names0 = [n for n in file['fit/'+chnl+'/names']]
+            names0 = np.asarray([n for n in file['fit/'+chnl+'/names']])
             sum_fit0 = np.asarray(file['fit/'+chnl+'/sum/int'])
             sum_bkg0 = np.asarray(file['fit/'+chnl+'/sum/bkg'])
         if len(ims0.shape) == 2 or len(ims0.shape) == 1:
@@ -2104,9 +2104,14 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         mot2 = []
         files = list("")
         # actual spectrum scan files are in dir scanid/scan_0XXX/xspress3_01
-        for file in sorted(os.listdir(sc_id+"/"+ch0[0])):
-            if file.endswith(".nxs"):
-                files.append(file)
+        if type(ch0[0]) == type(str()):
+            for file in sorted(os.listdir(sc_id+"/"+ch0[0])):
+                if file.endswith(".nxs"):
+                    files.append(file)
+        else: #ch0 is a list
+            for file in sorted(os.listdir(sc_id+"/"+ch0[0][0])):
+                if file.endswith(".nxs"):
+                    files.append(file)
         for file in files:
             spe0_arr, icr0_arr, ocr0_arr = read_P06_spectra(file, sc_id, ch0)
             if ch1 is not None:
@@ -2194,6 +2199,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
                 print("Reading " +sc_id+pilcid+file +"...", end=" ")
                 f = h5py.File(sc_id+pilcid+file, 'r')
+                counter_id = f['entry/data/counter']
                 enc_vals = []
                 for i in range(10):
                     if 'encoder_'+str(i) in list(f['entry/data'].keys()):
@@ -2286,8 +2292,9 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                     mot2_arr = enc_vals[1]
                                     mot2_name = enc_names[1]
                 for i in range(mot1_arr.shape[0]):
-                    mot1.append(mot1_arr[i])
-                    mot2.append(mot2_arr[i])
+                    if counter_id[i] == 1:
+                        mot1.append(mot1_arr[i])
+                        mot2.append(mot2_arr[i])
                 f.close()
                 print("read")
         # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.asarray
