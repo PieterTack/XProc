@@ -537,7 +537,10 @@ def div_by_cnc(h5file, cncfile, channel=None):
 #       using concentration values from the provided cnc files.
 #   If keyword div_by_rhot is not None, the calculated aerial concentration is divided by a user-supplied div_by_rhot [cm²/g] value
 #       type: float
-def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, div_by_rhot=None):
+#   A mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
+#       or a string data path within the h5file containing a 2D array of size equal to the h5file image size, where 0 values represent pixels to omit
+#       from the quantification and 1 values are pixels to be included. Alternatively, a 2D array can be directly supplied as argument.
+def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, div_by_rhot=None, mask=None):
     import plotims
 
 
@@ -627,6 +630,11 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     h5_sum = np.asarray(file['norm/'+channel+'/sum/int'])
     h5_sum_err = np.asarray(file['norm/'+channel+'/sum/int_stddev'])/h5_sum[:]
     h5_normto = np.asarray(file['norm/I0'])
+    tmnorm = str(file['norm'].attrs["TmNorm"])
+    if tmnorm == "True":
+        tmnorm = True
+    else:
+        tmnorm = False
     if absorb is not None:
         h5_spectra = np.asarray(file['raw/'+channel+'/spectra'])
         try:
@@ -642,8 +650,67 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         mot2 = np.asarray(file['mot2'])
     file.close()
 
-#TODO: add option to provide a mask from which new sumspec etc is calculated. 
-
+    # add option to provide a mask from which new sumspec etc is calculated. 
+    if mask is not None:
+        # check whether mask is a string to a h5file path, or an array
+        if type(mask) == type(str()):
+            if 'clr' in mask.lower():
+                # a cluster ID is provided as mask, so change mask to the appropriate path
+                clrid = mask.split('/')[-1][3:]
+                with h5py.File(h5file, 'r') as file:
+                    if ('kmeans/'+channel+'/ims' in file) is True:
+                        mask = np.asarray(file['kmeans/'+channel+'/ims'])
+                        mask = np.where(mask==clrid, 1, 0)
+                    else:
+                        print("Warning: No kmeans/"+channel+"/ims path in "+h5file)
+                        print("    No mask was applied to further processing")     
+                        mask = False
+            else:
+                # 'clr' or 'CLR' was not in the string, so likely another h5file path was provided
+                with h5py.File(h5file, 'r') as file:
+                    if (mask in file) is True:
+                        mask = np.asarray(file[mask])
+                    else:
+                        print("Warning: provided mask "+mask+" is not a path in "+h5file)
+                        print("    No mask was applied to further processing")      
+                        mask = False
+        elif type(mask) == type(list()) and type(mask[0]) == type(str()):
+            # in this case kmeans cluster paths should have been supplied.
+            with h5py.File(h5file, 'r') as file:
+                if ('kmeans/'+channel+'/ims' in file) is True:
+                    k_ims = np.asarray(file['kmeans/'+channel+'/ims'])
+                    temp = np.zeros(k_ims.shape)
+                    for clr in mask:
+                        clrid = mask.split('/')[-1][3:]
+                        temp += np.where(k_ims == clrid, 1, 0)
+                    mask = temp 
+                else:
+                    print("Warning: No kmeans/"+channel+"/ims path in "+h5file)
+                    print("    No mask was applied to further processing")  
+                    mask = False
+        # mask is now likely an array. Check whether the dimensions match the h5_ims shape and whether values are binary
+        if mask is not False:
+            mask = np.asarray(mask)            
+            if len(mask.shape) != 2 or mask.shape[0] != h5_ims.shape[1] or mask.shape[1] != h5_ims.shape[2]:
+                print('Warning: mask shape does not match h5file ims shape: ', mask.shape)
+                print("    No mask was applied to further processing")
+            elif ((mask==0) | (mask==1)).all() is False:
+                print("Warning: user supplied mask does not contain binary values (0 or 1).")
+                print("    No mask was applied to further processing")
+            else:
+                # Mask should be appropriate for further processing
+                with h5py.File(h5file, 'r') as file:
+                    I0 = np.asarray(file["raw/I0"])*mask
+                    tm = np.asarray(file["raw/acquisition_time"])*mask
+                for i in range(0, h5_ims.shape[0]):
+                    h5_ims[i,:,:] *= mask
+                    h5_ims_err[i,:,:] *= mask
+                    if tmnorm is True:
+                        h5_sum[i] = np.sum(h5_ims[i,:,:])/(np.sum(I0)*np.sum(tm))*h5_normto
+                    else:
+                        h5_sum[i] = np.sum(h5_ims[i,:,:])/(np.sum(I0))*h5_normto
+                    h5_sum_err[i] = np.sqrt(np.sum(h5_ims_err[i,:,:]**2))
+        
     h5_ims = (h5_ims / h5_normto)  #These are intensities for 1 I0 count.
     h5_sum = (h5_sum / h5_normto)
     # remove Compt and Rayl signal from h5, as these cannot be quantified
@@ -673,8 +740,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             for i in range(0, ims.shape[0]):
                 ims[i,:,:] = ims[i,:,:] / h5_ims[list(h5_names).index(norm),:,:] #TODO: we can get some division by zero error here...
                 sumint[i] = sumint[i] / h5_sum[list(h5_names).index(norm)]
-                ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:] + h5_ims_err[list(h5_names).index(norm),:,:]*h5_ims_err[list(h5_names).index(norm),:,:])
-                sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i] + h5_sum_err[list(h5_names).index(norm)]*h5_sum_err[list(h5_names).index(norm)])
+                ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]**2 + h5_ims_err[list(h5_names).index(norm),:,:]**2)
+                sumint_err[i] = np.sqrt(sumint_err[i]**2 + h5_sum_err[list(h5_names).index(norm)]**2)
         else:
             print("ERROR: quant_with_ref: norm signal not present in h5file "+h5file)
             return False
@@ -1231,7 +1298,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
 #   DL = 3*sqrt(Ib)/Ip * Conc
 #   calculates 1s and 1000s DL
 #   Also calculates elemental yields (Ip/conc [(ct/s)/(ug/cm²)]) 
-def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)"):
+def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
     # read in cnc file data
     cnc = read_cnc(cncfile)
     
@@ -1242,10 +1309,16 @@ def calc_detlim(h5file, cncfile, tmnorm=False, plotytitle="Detection Limit (ppm)
             tm = np.asarray(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
             I0 = np.asarray(file['raw/I0'])
             I0norm = np.asarray(file['norm/I0'])
+            tmnorm = str(file['norm'].attrs["TmNorm"])
     except Exception:
         print("ERROR: calc_detlim: cannot open normalised data in "+h5file)
         return
 
+    if tmnorm == "True":
+        tmnorm = True
+    else:
+        tmnorm = False
+        
     # correct tm for appropriate normalisation factor
     #   tm is time for which DL would be calculated using values as reported, taking into account the previous normalisation factor
     tm = np.sum(tm)
@@ -1632,6 +1705,11 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             file.create_dataset('norm/'+chnl+'/sum/bkg_stddev', data=sum_bkg0*sum_bkg0_err, compression='gzip', compression_opts=4)
             dset = file['norm']
             dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            if tmnorm is True:
+                dset.attrs["TmNorm"] = "True"
+            else:
+                dset.attrs["TmNorm"] = "False"
+                
     print("Done")
     
 ##############################################################################
