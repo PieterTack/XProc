@@ -1109,8 +1109,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     return True
 
 ##############################################################################
-#   tm and ref are 1D str arrays denoting name and measurement time (including unit!) of corresponding data
-#TODO: something still wrong with element labels on top of scatter plots
 def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None, ytitle="Detection Limit (ppm)"):
     """
     Create detection limit image that is of publishable quality, including 3sigma error bars.
@@ -1123,7 +1121,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     el_names : string array
         String array containing the element labels for which data is provided.
     tm : float array or list, optional
-        Measurement times associated with the provided detection limits. The default is None.
+        Measurement times, including the unit, associated with the provided detection limits. The default is None.
     ref : string array or list, optional
         Labels of the reference materials for which data is provided. The default is None.
     dl_err : float array, optional

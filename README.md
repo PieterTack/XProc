@@ -433,7 +433,7 @@ dl : float array
 el_names : string array
     String array containing the element labels for which data is provided.
 tm : float array or list, optional
-    Measurement times associated with the provided detection limits. The default is None.
+    Measurement times, including the unit, associated with the provided detection limits. The default is None.
 ref : string array or list, optional
     Labels of the reference materials for which data is provided. The default is None.
 dl_err : float array, optional
