@@ -207,7 +207,7 @@ class Spc():
             self.rv['ICR'] = np.total(self.rv['Data'])
             self.rv['OCR'] = self.rv['ICR'] # ICR and OCR are identical in this case as data is already deadtime corrected (i.e. acquired for given livetime)
             
-            # TODO: no info on motor positions is found in this file
+            # Notes: no info on motor positions is found in this file
             # We could also consider importing the Eagle-quantified data, for further usage...
             # To read in all data fields: h.seek(0); header = np.fromfile(h, dtype = spc_dtype, count=1)self.rv[]; for name in header.dtype.names: self.rv[name] = header[name][0] if len(header[name]) == 1 else header[name]
             
@@ -518,7 +518,7 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
     
     # calculate cluster sumspectra
     #   first check if raw spectra shape is identical to clusters shape, as otherwise it's impossible to relate appropriate spectrum to pixel
-    #TODO: in case of timetriggered scans cluster.ravel indices may not match the appropriate cluster point!
+    # Warning: in case of timetriggered scans cluster.ravel indices may not match the appropriate cluster point!
     if nosumspec is False:
         if spectra.shape[0] == clusters.size:
             sumspec = []
@@ -799,7 +799,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 with h5py.File(h5file, 'r') as file:
                     if ('kmeans/'+channel+'/ims' in file) is True:
                         mask = np.asarray(file['kmeans/'+channel+'/ims'])
-                        mask = np.where(mask==clrid, 1, 0)
+                        mask = np.where(mask==float(clrid), 1, 0)
                     else:
                         print("Warning: No kmeans/"+channel+"/ims path in "+h5file)
                         print("    No mask was applied to further processing")     
@@ -820,8 +820,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     k_ims = np.asarray(file['kmeans/'+channel+'/ims'])
                     temp = np.zeros(k_ims.shape)
                     for clr in mask:
-                        clrid = mask.split('/')[-1][3:]
-                        temp += np.where(k_ims == clrid, 1, 0)
+                        clrid = clr.split('/')[-1][3:]
+                        temp += np.where(k_ims == float(clrid), 1, 0)
                     mask = temp 
                 else:
                     print("Warning: No kmeans/"+channel+"/ims path in "+h5file)
@@ -877,7 +877,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         if norm in h5_names:
             # print(np.nonzero(h5_ims[list(h5_names).index(norm),:,:]==0)[0])
             for i in range(0, ims.shape[0]):
-                ims[i,:,:] = ims[i,:,:] / h5_ims[list(h5_names).index(norm),:,:] #TODO: we can get some division by zero error here...
+                ims[i,:,:] = ims[i,:,:] / h5_ims[list(h5_names).index(norm),:,:] #Note: we can get some division by zero error here...
                 sumint[i] = sumint[i] / h5_sum[list(h5_names).index(norm)]
                 ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]**2 + h5_ims_err[list(h5_names).index(norm),:,:]**2)
                 sumint_err[i] = np.sqrt(sumint_err[i]**2 + h5_sum_err[list(h5_names).index(norm)]**2)
@@ -961,7 +961,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             # also do not correct any point where ratio_ka1_kb1 > rate_ka1/rate_kb1
             #   these points would suggest Ka was less absorbed than Kb
             ratio_ka1_kb1[np.where(ratio_ka1_kb1 > rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j]
-            ratio_ka1_kb1[np.where(ratio_ka1_kb1 <= 0.55*rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j] #TODO: this value may be inappropriate...
+            ratio_ka1_kb1[np.where(ratio_ka1_kb1 <= 0.55*rate_ka1[j]/rate_kb1[j])] = rate_ka1[j]/rate_kb1[j] #Note: this value may be inappropriate...
             ratio_ka1_kb1[np.isnan(ratio_ka1_kb1)] = rate_ka1[j]/rate_kb1[j]
             # calculate corresponding layer thickness per point through matrix defined by cncfiles
             rhot[j,:,:] = (np.log(ratio_ka1_kb1[:,:]) - np.log(rate_ka1[j]/rate_kb1[j])) / (mu_kb1[j] - mu_ka1[j]) # rho*T for each pixel based on Ka1 and Kb1 emission ratio
@@ -1109,8 +1109,6 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     return True
 
 ##############################################################################
-#   tm and ref are 1D str arrays denoting name and measurement time (including unit!) of corresponding data
-#TODO: something still wrong with element labels on top of scatter plots
 def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None, ytitle="Detection Limit (ppm)"):
     """
     Create detection limit image that is of publishable quality, including 3sigma error bars.
@@ -1123,7 +1121,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     el_names : string array
         String array containing the element labels for which data is provided.
     tm : float array or list, optional
-        Measurement times associated with the provided detection limits. The default is None.
+        Measurement times, including the unit, associated with the provided detection limits. The default is None.
     ref : string array or list, optional
         Labels of the reference materials for which data is provided. The default is None.
     dl_err : float array, optional
@@ -1141,8 +1139,9 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
         returns False on error.
 
     """
-    tickfontsize = 22
-    titlefontsize = 26
+    tickfontsize = 20
+    toptickfontsize = 8
+    titlefontsize = 22
 
     # check shape of dl. If 1D, then only single curve selected. 2D array means several DLs
     dl = np.asarray(dl, dtype='object')
@@ -1166,12 +1165,16 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     if len(el_names.shape) == 1 and type(el_names[0]) is type(str()):
         el_names = np.asarray(el_names, dtype='str')
         all_names = np.asarray([str(name) for name in np.nditer(el_names)])
+        all_dl = np.nditer(dl)
     else:
         all_names = []
+        all_dl = []
         for i in range(0,len(el_names)):
             for j in range(0, len(el_names[i])):
                 all_names.append(el_names[i][j])
+                all_dl.append(dl[i][j])
         all_names = np.asarray(all_names, dtype='str')
+        all_dl = np.asarray(all_dl, dtype='float')
     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in all_names])
     # count unique Z's
     unique_z = np.unique(el_z)
@@ -1185,28 +1188,22 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     
     # add axis on top of graph with element and line names
     unique_el, unique_id = np.unique(all_names, return_index=True) # sorts unique_z names alphabetically instead of increasing Z!!
-    el_labels = ["-".join(n.split(" ")) for n in all_names[unique_id]]
+    dl_av = [np.average(all_dl[np.where(all_names == tag)]) for tag in unique_el]
+    el_labels = ["-".join(n.split(" ")) for n in unique_el]
     z_temp = el_z[unique_id]
     unique_el = np.asarray(el_labels)[np.argsort(z_temp)]
+    dl_av = np.asarray(dl_av)[np.argsort(z_temp)]
     z_temp = z_temp[np.argsort(z_temp)]
     # if for same element/Z multiple lines, join them.
     # K or Ka should be lowest, L above, M above that, ... (as typically K gives lowest DL, L higher, M higher still...)
     unique_z, unique_id = np.unique(z_temp, return_index=True)
     if unique_z.size != z_temp.size:
-        new_z = np.zeros(unique_z.size)
+        new_z = unique_z
         new_labels = []
         for i in range(0, unique_z.size):
-            for j in range(unique_id[i], z_temp.size):
-                if z_temp[unique_id[i]] == z_temp[j]: # same Z
-                    new_z[i] = z_temp[unique_id[i]]
-                    new_labels.append(el_labels[unique_id[i]])
-                    if el_labels[unique_id[i]].split("-")[1] != el_labels[j].split("-")[1]: # different linetype
-                        if el_labels[unique_id[i]].split("-")[1] == 'K' or el_labels[unique_id[i]].split("-")[1] == 'K$/alpha$':
-                            new_labels = new_labels[:-2]
-                            new_labels.append(el_labels[j] + "\n" + el_labels[unique_id[i]])
-                        else:
-                            new_labels = new_labels[:-2]
-                            new_labels.append(el_labels[unique_id[i]] + "\n" + el_labels[j])
+            z_indices = np.where(z_temp == unique_z[i])[0]
+            dl_order = np.flip(np.argsort(dl_av[z_indices]))
+            new_labels.append("\n".join(unique_el[z_indices][dl_order]))
         new_labels = np.asarray(new_labels)
     else:
         new_z = np.asarray(z_temp)
@@ -1225,7 +1222,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             plt.bar(bar_x, dl, yerr=dl_err, label=str(ref)+'_'+str(tm), capsize=3)
             ax = plt.gca()
             ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-            ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+            ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
         else:
             plt.errorbar(el_z, dl, yerr=dl_err, label=str(ref)+'_'+str(tm), linestyle='', fmt=next(marker), capsize=3)
             ax = plt.gca()
@@ -1233,7 +1230,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             plt.xlabel("Atomic Number (Z)", fontsize=titlefontsize)
             secaxx = ax.secondary_xaxis('top')
             secaxx.set_xticks(new_z)
-            secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+            secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
             # fit curve through points and plot as dashed line in same color
             try:
                 fit_par = np.polyfit(el_z, np.log(dl), 2)
@@ -1273,7 +1270,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0:
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=label_prefix+str(tm[i]), linestyle='', fmt=next(marker), capsize=3)
@@ -1283,7 +1280,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(np.asarray(dl[i], dtype='float64')), 2)
@@ -1318,7 +1315,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0:
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=str(ref[i])+label_suffix, linestyle='', fmt=next(marker), capsize=3)
@@ -1328,7 +1325,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(dl[i]), 2)
@@ -1369,7 +1366,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0 and j == 0:
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i,j]])
                     plt.errorbar(el_z, dl[i,j], yerr=dl_err[i,j], label=str(ref[i])+'_'+str(tm[j]), linestyle='', fmt=next(marker), capsize=3)
@@ -1379,7 +1376,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(dl[i,j]), 2)
@@ -1421,7 +1418,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0 and j == 0:
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names_tmp])
                     plt.errorbar(el_z, dl_tmp, yerr=dl_err_tmp, label=str(ref[i])+'_'+str(tm_tmp[j]), linestyle='', fmt=next(marker), capsize=3)
@@ -1431,7 +1428,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(dl_tmp), 2)
@@ -1484,16 +1481,15 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
     cnc = read_cnc(cncfile)
     
     # read h5 file
-    try:
-        with h5py.File(h5file, 'r') as file:
-            keys = [key for key in file['norm'].keys() if 'channel' in key]
-            tm = np.asarray(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
-            I0 = np.asarray(file['raw/I0'])
-            I0norm = np.asarray(file['norm/I0'])
-            tmnorm = str(file['norm'].attrs["TmNorm"])
-    except Exception:
-        print("ERROR: calc_detlim: cannot open normalised data in "+h5file)
-        return
+    with h5py.File(h5file, 'r') as file:
+        if 'norm' not in file.keys():
+            print("ERROR: calc_detlim: cannot open normalised data in "+h5file)
+            return
+        keys = [key for key in file['norm'].keys() if 'channel' in key]
+        tm = np.asarray(file['raw/acquisition_time']) # Note this is pre-normalised tm! Correct for I0 value difference between raw and I0norm
+        I0 = np.asarray(file['raw/I0'])
+        I0norm = np.asarray(file['norm/I0'])
+        tmnorm = str(file['norm'].attrs["TmNorm"])
 
     if tmnorm == "True":
         tmnorm = True
@@ -2299,7 +2295,7 @@ def ConvDeltaCsv(csvfile):
                 print("WARNING: measurement %s does not have a matching 10keV mode measurement. Measurement exempt from H5 file." % file[key][rowheads.index('TestID')])
             else: #the measurement in 'key' has an accompanying 10keV mode measurement in 'key+1'
                 i1.append(0) #no transmission counter registered
-                mot1.append(file[key][rowheads.index('TestID')]) #TODO: have to make it clear in rest of software whether mot1 contains actual motor positions, or rather scan IDs.
+                mot1.append(file[key][rowheads.index('TestID')])
                 mot2.append(np.nan)
                 
                 i0_0.append(float(file[key][rowheads.index('TubeCurrentMon')]))
@@ -3093,7 +3089,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             tm = np.asarray(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             f.close()
 
-            # find direction in which mot1 and mot2 increase  #TODO: this probably fails in case of line scans...
+            # find direction in which mot1 and mot2 increase
             if mot1.size > 1:
                 if np.allclose(mot1[0,:], mot1[1,:], atol=atol):
                     mot1_id = 1
