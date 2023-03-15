@@ -8,12 +8,36 @@ Created on Mon Jan 16 12:32:27 2023
 import numpy as np
 
 ##############################################################################
-# Convert XProcH5 intensity data to csv format
-#   Column headers are the respective element names, whereas rows represent the different motor1 coordinates
-#       (in handheld XRF data these are the separate file names)
 #TODO: we may want to expand this function to allow for multiple h5files and h5dirs combined to a single csv file. At that point,
 #   we should include an additional column stating the respective h5file name, and, more importantly, make sure all elements are represented across all files
 def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
+    """
+    Convert XProcH5 intensity data to csv format (column separation by ;)
+    Column headers are the respective element names, whereas rows represent the different motor1 coordinates
+        (in handheld XRF data these are the separate file names)
+
+    Parameters
+    ----------
+    h5file : string
+        File directory path to the H5 file containing the data.
+    h5dir : string
+        Data directory within the H5 file containing the data to be converted, e.g. "/norm/channel00/ims". 
+        A 'names' directory should be present in the same parent folder, or the grandeparent folder in case of sumspectra results. 
+    csvfile : string
+        Output file path name.
+    overwrite : Boolean, optional
+        If True, allows to overwrite the csvfile. The default is False, preventing overwriting CSV files.
+
+    Raises
+    ------
+    ValueError
+        Returned when the supplied CSVfile already exists and overwrite is False.
+
+    Returns
+    -------
+    None.
+
+    """
     import h5py
     import os
 
@@ -54,8 +78,25 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         
     
 ##############################################################################
-# join two files together, stitched one after the other
-def XProcH5_combine(files=['A0186_1_3_xrfct_0003_scan1.h5', 'A0186_1_3_xrfct_0004_scan1.h5', 'A0186_1_3_xrfct_0005_scan1.h5'], newfile='A0186_1_3_xrfct_scan1.h5', ax=0):
+def XProcH5_combine(files, newfile, ax=0):
+    """
+    Join two files together, stitched one after the other. This only combines raw files, 
+    and as such should be done before any fitting or further processing.
+
+    Parameters
+    ----------
+    files : list of strings, optional
+        The H5 file paths to be combined.
+    newfile : string, optional
+        H5 file path of the new file.
+    ax : integer, optional
+        Axis along which the data should be concatenated. The default is 0.
+
+    Returns
+    -------
+    None.
+
+    """
     import h5py
     import numpy as np
     
@@ -156,10 +197,26 @@ def XProcH5_combine(files=['A0186_1_3_xrfct_0003_scan1.h5', 'A0186_1_3_xrfct_000
     print("Done")
 
 ##############################################################################
-# delete a line from a fitted dataset (can be useful when data interpolation has to occur but there are empty pixels)
-#   Note that this also removes lines from I0, I1, acquisition_time, mot1 and mot2! 
-#       If you want to recover this data one has to re-initiate processing from the raw data.
 def rm_line(h5file, lineid, axis=1):
+    """
+    Delete a line or group of lines from a fitted dataset (can be useful when data interpolation has to occur but there are empty pixels)
+    Note that this also removes lines from I0, I1, acquisition_time, mot1 and mot2! 
+        If you want to recover this data one has to re-initiate processing from the raw data.
+
+    Parameters
+    ----------
+    h5file : string
+        File directory path to the H5 file containing the data to be removed.
+    lineid : (list of) integer(s)
+        Line id integers to be removed.
+    axis : integer, optional
+        axis along which the lines should be removed (i.e. row or column). The default is 1.
+
+    Returns
+    -------
+    None.
+
+    """
     import h5py
     
     f = h5py.File(h5file, 'r+')
@@ -255,6 +312,24 @@ def rm_line(h5file, lineid, axis=1):
 #   Make sure it is also ordered similarly etc...
 #   Use at your own risk.
 def add_h5s(h5files, newfilename):
+    """
+    Sum together multiple h5 files of the same dimensions.
+      Make sure it is also ordered similarly etc...
+      Motor positions are averaged.
+      Use at your own risk.
+
+    Parameters
+    ----------
+    h5file : string
+        File paths to the H5 files containing the data to be summed.
+    newfilename : string
+        File path to the newly generated H5 file.
+
+    Returns
+    -------
+    None.
+
+    """
     import h5py
     
     if type(h5files) is not type(list()):
