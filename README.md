@@ -140,74 +140,234 @@ Functions can then be used following, e.g.:
 
 Due to differences in beamline data formats, typically separate “conversion” functions are required for different beamlines. Currently, the following functions are supported:
 
->	`ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True)`
->	* h5id15: (string) beamline stored h5 data file location, e.g. ‘id15/NIST_611_0001.h5’. A list of strings can be supplied to combine different measurements into 1 file, in which case the scanid argument should also be a list of identical length.
->	* scanid: (string) the identifier of the relevant scan in the h5 file, typically the scan number followed by .1, e.g. ‘4.1’. A list of strings can be supplied to combine different scans into 1 file, in which case all scanid’s are obtained from the same h5id15 file.
->	* scan_dim: (tuple) the scan dimensions, i.e. (10,10) for a 10×10 mapping
->	* mot1_name: [optional] (string) the name of mot1, the least moving motor, default: ‘hry’
->	* mot2_name: [optional] (string) the name of mot2, the most moving motor, default: ‘hrz’
->	* ch0id: [optional] (string) the detector identifier mnemonic for channel00
->	* ch1id: [optional] (string) the detector identifier mnemonic for channel01
->	* i0id: [optional] (string) the identifier mnemonic for I0
->	* i0corid: [optional] (string) If not None (default), the identifier mnemonic for the signal with which I0 should be corrected
->	* i1id: [optional] (string) the identifier mnemonic for I1
->	* i1corid: [optional] (string) If not None (default), the identifier mnemonic for the signal with which I1 should be corrected
->	* icrid: [optional] (string) the identifier mnemonic for the detector ICR data
->	* ocrid: [optional] (string) the identifier mnemonic for the detector OCR data
->	* atol: [optional] (float) the absolute tolerance parameter as used by the numpy.allclose() function to determine the motor incremental direction. Default: None, which corresponds to 1e-4.
->	* sort: [optional] (Boolean) if True (default) the data is sorted based on the corresponding motor positions
->	* Returns False on error, on success stores data in a new h5 file.
+```
+def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
+Convert ID15A bliss H5 format to our H5 structure file
 
->	`ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch2=['xspress3_01','channel02'])`
->	* Scanid: (string) general scan directory path, e.g. '/data4/202010_p06_brenker/data/orl0/scan_00142'. A list of strings can be supplied to combine multiple scans into a single file.
->	* Sort: [optional] (Boolean) if True, the data is ordered based on the sorting of mot1 and mot2. Sorting is required in order to obtain appropriate image results in case of e.g. snake scans. However, in some cases it is better to omit sorting in the merge step, and only do it after the fitting procedure (during data normalisation step), e.g. in the case of scans that are time triggered instead of motor position triggered.
->	* ch0: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel00. Each list item can be another list in the case when multiple detectors should be summed for channel00 in the merged file (e.g. ch0 = ['xspress3_01', ['channel00','channel02']])
->	* ch1: [optional] (list of strings) Contains the detector mnemonics for the detector identifier(s) of channel01. Each list item can be another list in the case when multiple detectors should be summed for channel02 in the merged file (e.g. ch2 = ['xspress3_01', ['channel00','channel02']])
->	* Returns False on error, on success stores data in a new h5 file with suffix ‘_merge.h5’
+
+Parameters
+----------
+h5id15 : String
+    File path of the bliss H5 file to convert.
+scanid : (list of) String(s)
+    Scan identifier within the bliss H5 file, e.g. '1.1'. When scanid is an array or list of multiple elements, 
+    the images will be stitched together to 1 file.
+scan_dim : tuple
+    The scan dimensions of the data contained within the bliss H5 file.
+mot1_name : string, optional
+    Motor 1 identifier within the bliss H5 file. The default is 'hry'.
+mot2_name : String, optional
+    Motor 2 identifier within the bliss H5 file. The default is 'hrz'.
+ch0id : string, optional
+    detector channel 0 identifier within the bliss H5 file. The default is 'falconx_det0'.
+ch1id : string, optional
+    detector channel 1 identifier within the bliss H5 file. The default is 'falconx2_det0'.
+i0id : string, optional
+    I0 (incident beam flux) identifier within the bliss H5 file. The default is 'fpico2'.
+i0corid : string, optional
+    I0 signal correction signal identifier within the bliss H5 file. The default is None.
+i1id : string, optional
+    I1 (transmitted beam flux) identifier within the bliss H5 file. The default is 'fpico3'.
+i1corid : string, optional
+    I1 signal correction signal identifier within the bliss H5 file. The default is None.
+icrid : string, optional
+    ICR identifier within the bliss H5 file. The same identifier label is used for multiple detectors. The default is 'trigger_count_rate'.
+ocrid : string, optional
+    OCR identifier within the bliss H5 file. The same identifier label is used for multiple detectors. The default is 'event_count_rate'.
+atol : float, optional
+    Absolute tolerance used by numpy.allclose() when comparing motor coordinate positions to determine the motor position array incremental direction.
+    The default is None, indicating a value of 1e-4.
+sort : Boolean, optional
+    If True the data is sorted following the motor encoder positions. The default is True.
+
+Returns
+-------
+bool
+    Returns False upon failure.
+
+```
+
+```
+def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, readas1d=False):
+Merges separate P06 nxs files to 1 handy H5 file containing 2D array of spectra, relevant motor positions, 
+I0 counter, ICR, OCR and mesaurement time.
+
+
+Parameters
+----------
+scanid : string
+    Scan identifier.
+sort : Boolean, optional
+    If True the data is sorted following the motor encoder positions. The default is True.
+ch0 : (list of) String(s), optional
+    First detector channel identifiers. This can be a list of strings, or a list of lists where each combination 
+    of ch0[0] and ch0[1] strings are combined to generate unique detector identifiers, which are then summed to a single spectrum.
+    The default is ['xspress3_01','channel00'].
+ch1 : (list of) String(s), optional
+    Similar as ch0, but then for a second detector. The default is None.
+readas1d : Boolean, optional
+    If True, data is read as a single 1 dimensional array and no reshaping of the scan to a 2D image is attempted. The default is False.
+
+Returns
+-------
+None.
+
+```
+
+```
+def ConvDeltaCsv(csvfile):
+Read the Delta Premium handheld CSV files and restructure as H5 for further processing
+
+
+Parameters
+----------
+csvfile : String
+    File path to the CSV file to be converted.
+
+Returns
+-------
+None.
+
+```
+
+```
+def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
+Read the EDAX EagleIII SPC files and restructure as H5 for further processing
+Example: ConvEdaxSpc('/data/eagle/folder/a', 'a_merge.h5', (30,1), coords=[22.3, 17, 0.05, 0.])
+
+Parameters
+----------
+spcprefix : String
+    File path prefix to the SPC files that should be converted to a H5 file.
+    The function uses this prefix to identify all SPC files, appending it with '*.spc'
+outfile : String
+    File path name for the converted H5 file.
+scandim : list of length 2
+    Dimensions of the scan [X, Y].
+coords : list of length 4, optional
+    If coords is provided, motor positions are calculated. coords=[Xstart, Ystart, Xincr, Yincr]
+    Where Xstart and Ystart are the position coordinates of the first measurement (a11.SPC)
+    and Xincr and Yincr are the step sizes of X and Y motors, in mm. The software assumes that
+    X is the 'fast moving' motor, i.e. makes most steps during the scan and that no snake-pattern scans are performed. 
+    The default is [0,0,1,1].
+
+Raises
+------
+ValueError
+    A ValueError is raised when the number of found SPC files does not match the provided scandim dimensions.
+
+Returns
+-------
+None.
+
+```
+
+
+
 
 #### Fitting XRF data
 Xrf_proc makes use of the PyMca5 python library in order to process XRF spectra. As such, when reporting data processed with xrf_proc in literature, it is strongly advised to at least also cite the PyMca software package.1
 This process assumes a PyMca fit configuration file was created before running fit_xrf_batch(). This can be done by loading in the uniformalised h5 file in the PyMca gui (version>=5.3) and making a configuration file based on the /raw/maxpsec and /raw/sumspec data directories. Alternatively, one can launch xrf_config_gui.py for a GUI combining the PyMca fitting algorithm and configuration structure, with some useful functionalities such as the KLM line library as found in for instance the AXIL software package.
 
->	`Fit.fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None)`
->	* h5file: (string) The uniform structured h5 file path containing the raw data to be fitted.
->	* cfgfile: (string) The PyMca configuration file path to be used for the fitting procedure. A list of paths with length equal to the amount of detector channels contained in the h5file, where each detector channel will then be fitted with the corresponding configuration file from the list. Note: if one wants to apply the fast linear PyMca fit (see standard option) a simple SNIP background should be used. In any case, this is often also sufficient for more detailed fits.
->	* standard: [optional] (string) if None (default) no detection limits or elemental yields will be determined. Additionally, a fast linear fit will be applied providing a very fast and fairly reliable fit result. (note: differences mainly occur in very heterogeneous and/or noisy datasets). For a more detailed fit (e.g. with more complicated spectral background and/or point-per-point fitting) a non-None value should be supplied (e.g. ‘something’). When fitting a standard reference material measurement it can be useful to calculate detection limits and/or elemental yields. To do so, supply the cnc-file path destination as a string.
->	* ncores: [optional] (int) The amount of cores to use. If None (default) then the maximum amount of cores-1 will be used for the fitting, as defined by multiprocessing.cpu_count(). A value of -1 or 0 has the same result. Any other integer defines the amount of cores to use. Multicore processing is only applied when standard is not None.
->	* verbose: if not None (default) the function will print much more information to the standard output window. Note that this can also slow down the fitting process considerably.
->	* Fitted data for each detector channel is written in h5file. Note that consecutive calls to fit_xrf_batch() will always overwrite the last data.
+```
+def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
+Fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
+The cfg file should use the SNIP background subtraction method. Others will fail as considered 'too slow' by the PyMca fast linear fit routine itself.
+Additionally, using the standard option also integrates the individual spectra, not only the sum spectrum, without fast linear fit. This can take a long time!!
+   
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data.
+cfgfile : string
+    File path to the PyMca-type CFG configuration file containing the fitting parameters.
+standard : NoneType, optional
+    If not a NoneType (e.g. string) then all spectra are integrated separately without using the fast linear fit procedure. The default is None.
+ncores : Integer, optional
+    The amount of cores over which the multiprocessing package should split the task. Values of -1, 0 and None allow the system to use all available cores, minus 1. The default is None.
+verbose : Boolean, optional
+    If not None, the PyMca fit returns errors encountered during the procedure. The default is None.
+
+Returns
+-------
+None.
+
+```
 
 When calling this routine, make sure h5file is not accessed by any other program (e.g. still open in pymca or HDFView, …) to prevent file corruption.
 
 #### Data normalisation
 Corrections for detector dead time, primary beam intensity fluctuations and acquisition times can be made using 
 
->	`norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False)`
->	* h5file: (string) The uniform structured h5 file path containing the fitted data to be normalised.
->	* I0norm: [optional] (float) I0 value to which each pixel must be normalised. If None (default) the data is normalised to the maximum I0 value in /raw/I0.
->	* snake: [optional] (Boolean) If True the data is treated for snake mesh scans, where each consecutive line in mot1 is approached from the opposite direction, by interpolating the data to a regular motor position grid. This function also correct for the half-pixel shift often accompanied with such processes. If False (default) the motor position interpolation etc is ignored.
->	* sort: [optional] (Boolean) If True data is sorted. It is advised to sort the data here, if it was not sorted by fit_xrf_batch(). Sorting is required for snake mesh scans. Default: False (as it is assumed sorting already occurred in fit_xrf_batch() )
->	* timetriggered: [optional] (Boolean) In case of time triggered detector readout, usually more datapoints are available than expected from the regular grid scan pattern. As such, data has to be interpolated to a regular grid. The code has some algorithms to detect this case automatically, but if certain this data is time triggered it is safest to state so by setting this parameter to True. Additionally, if timetriggered is True one should typically also define snake as True to make full use of the interpolation algorithms. Default: False. 
->	* tmnorm: [optional] (Boolean) Default is False. When set True, the data will be additionaly normalised for the measurement time (tm) specified for each scan point in the H5 file. Usually this data is already contained within the I0 value, so be wary to normalise for tm again.
->	* halfpixshift: [optional] (Boolean) Default is True. This parameter is only used when snake is set to True. When False, the half-pixel shift correction, which typically is required for appropriate data interpolation during snake scans, is omitted.
->	* Normalised data for each detector channel is written in h5file. Note that consecutive calls to norm_xrf_batch() will always overwrite the last data.
+```
+def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, halfpixshift=True, mot2nosort=False):
+Function to normalise IMS images to detector deadtime and I0 values.
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data.
+I0norm : integer, optional
+    When I0norm is supplied, a (long) int should be provided to which I0 value one should normalise. Otherwise the max of the I0 map is used. The default is None.
+snake : Boolean, optional
+    If the scan was performed following a snake-like pattern, set to True to allow for appropriate image reconstruction. The default is False.
+sort : Boolean, optional
+    Sorts the data using the motor positions. Typically this is already done during initial raw data conversion, but in some occassions it may be opportune
+    to omit it there and perform it during the normalisation step. The default is False.
+timetriggered : Boolean, optional
+    If data is collected following a time triggered scheme rather than position triggered, then motor position interpolation is done differently.
+    The default is False.
+tmnorm : Boolean, optional
+    When I0 values are not scaled for acquisition time, then additional normalisation for acquisition time can be performed by setting tmnorm to True. The default is False.
+halfpixshift : Boolean, optional
+    This value is only used when snake is True. Implements a half pixel shift in the motor encoder positions to account of the bidirectional event triggering. The default is True.
+mot2nosort : Boolean, optional
+    When sort is True, mot2nosort can be set to True to omit sorting using the mot2 encoder values. The default is False.
+
+Returns
+-------
+None.
+
+```
 When calling this routine, make sure h5file is not accessed by any other program (e.g. still open in pymca or HDFView, …) to prevent file corruption.
 
 #### Distribution images
 Xrf_proc also has convenient, built-in functions to plot and save the (normalised) fitted data images. 
 Data is plotted in a collated image, with intensity and scale bars. The viridis colour scale is used.
 
->	`hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None, clim=None)`
->	* h5file: (string) The uniformly structured h5 file path containing the data to plot.
->	* datadir: (string) The data directory within the h5 file containing the information to plot, e.g. ‘norm’
->	* ncols: (int) The amount of columns to distribute the elemental distribution images in on the collated image.
->	* pix_size: (float) The size of a single pixel along the horizontal direction of the scan, in µm.
->	* scl_size: (float) The size of the scale bare to draw on the images along the horizontal direction of the scan, in µm.
->	* log: [optional] (Boolean) True to plot the intensity as a log10 scale. False (default) for a linear scale.
->	* rotate: [optional] (int) default is 0 (no rotation). An amount of degrees (rounded to the nearest 90) with which the image should be rotated, following the numpy.rot90() function.
->	* fliph: [optional] (Boolean) Default is False, set True to flip the image horizontally. This operation is performed after rotation, when requested.
->	* cb_opts: [optional] (plotims.Colorbar_opt class). When None (default) the default colorbar settings of plotims are used.
->	* clim: [optional] (list of 2 floats) Default is None. If not None, the image intensities will be limited between the fractions defined by clim as follows: [lower limit, upper limit]. It is advised to use values between 0 and 1, e.g. clim=[0.1, 0.9] to limit the image values between min+0.1*(max-min) and min+0.9*(max-min)
+```
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None, clim=None):
+Generate publishing quality overview images of all fitted elements in H% file (including scale bars, colorbar, ...)
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data.
+h5dir : string
+    Data directory within the H5 file containing the data to be analysed.
+ncols : integer
+    Amount of columns in which the overview image will be displayed.
+pix_size : float
+    Image pixel size in µm.
+scl_size : float
+    Image scale bar size to be displayed in µm.
+log : Boolean, optional
+    If True, the Briggs logarithm of the data is displayed. The default is False.
+rotate : integer, optional
+    Amount of degrees, rounded to nearest 90, over which images should be rotated. The default is 0.
+fliph : Boolean, optional
+    If True, data is flipped over the horizontal image axes (after optional rotation). The default is False.
+cb_opts : Plotims.Colorbar_opt class, optional
+    User supplied intensity scale colorbar options for imaging. The default is None.
+clim : list, optional
+    List containing the lower and upper intensity limit to apply to the plots. The default is None, indicating no specific limits.
+
+Returns
+-------
+None.
+
+```
 
 The function automatically plots channel00 detector channel. If present, also plots the channel02. Images are stored as .png files with suffix ‘_ch0_overview.png’ and ‘_ch2_overview.png’ respectively, optionally preceded by ‘_log’ in case of log scaling.
 
@@ -216,90 +376,283 @@ Following functions will often require information on the quantitative compositi
   
 It is important to note that the value under ‘Number of elements’ matches the amount of rows below ‘Z’ perfectly. Additionally, it is advised that the sum of the certified concentrations equals 1000000 ppm (i.e. 100%). 
 
->	`read_cnc(cncfile)`
->	* cncfile: (string) File path of the concentration file
->	* returns a dictionary-like Cnc class object, with following items: name (string), z (int array), conc (float array), err (float array), density (float), mass (float), density (float) and thickness (float). The units of each match the units used in the original concentration file.
+```
+def read_cnc(cncfile):
+Read in the data of a concentration (.cnc) file.
+
+Parameters
+----------
+cncfile : String
+    .cnc file path.
+
+Returns
+-------
+rv : Cnc() Class
+    Cnc class containing the data contained within the .cnc file.
+
+```
 
 #### Detection limits and elemental yields
 Detection limits are calculated based on the net peak intensity (Ip,i¬) and background intensity (Ib,i) for a given element as obtained from an XRF sum spectrum, as well as well as the certified concentration of the corresponding element (ci) within the reference material: 
 $〖DL〗_i=(3∙ \sqrt(I_(p,i) ))⁄I_(b,i) ∙c_i$
 Error estimation is performed by standard error propagation rules, taking into account the certified concentration error if available (if not available, the concentration is considered a constant with no error).
 
->	`calc_detlim(h5file, cncfile)`
->	* h5file: (string) The uniformly structured h5 file path containing the normalised data corresponding to a reference material measurement.
->	* cncfile: (string) The concentration file path corresponding to the reference material under investigation.
+```
+def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
+Calculate detection limits following the equation DL = 3*sqrt(Ib)/Ip * Conc
+  Calculates 1s and 1000s DL
+  Also calculates elemental yields (Ip/conc [(ct/s)/(ug/cm²)]) 
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data.
+cncfile : string
+    File directory path to the CNC file containing the reference material composition information.
+ytitle : String, optional
+    Label to be used for the y-axis title during detection limit plotting. The default is "Detection Limit (ppm)".
+
+Yields
+------
+None.
+
+```
 
 As detection limits are calculated, the function also calculates the elemental yield for all elements present in both XRF fitting and concentration file. These yields are expressed as ppm/count/s, for straightforward semi-quantitative concentration estimates of the normalised scan data. Note that no correction for self-absorption or probed sample mass are taken into account here (which is available using the quant_with_ref() function).
 In order to make plots of the detection limit values, for more straightforward data interpretation, the plot_detlim() function can be called. This function is also automatically called at the end of calc_detlim() for further improved convenience.
 
->	`plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None)`
->	* dl: (float) nD array of dimensions ([n_ref, ][n_tm, ]n_elements). In its simplest form (DLs for a single reference materials and measurement time) this is an array of N elements where N are the amount of elements for which detection limits were calculated. Providing multiple measurement times or reference materials plots all of these on the same graph. Note that plotting a large variety of datasets on a single figure can quickly make the image very crowded and confusing.
->	* el_names: (string) Array containing the fluorescence line names for which the detection limits were calculated.
->	* tm: [optional] (float) The different measurement times for which data is provided in dl. Default is None, denoting all values in dl correspond to the same measurement time.
->	* ref: [optional] (string) Array containing the names of the different references for which data is provided in dl. Default is None, denoting all values in dl correspond to the same reference material.
->	* dl_err: [optional] (float) Array of same shape as dl containing the 1-sigma absolute errors on dl. Plot_detlim() always displays the 3-sigma error bars. Default is None, when error bar plotting is omitted.
->	* bar: [optional] (Boolean) If True a histogram style plot is displayed. If False (default) a scatter plot is provided.
->	* save: [optional] (string) If None (default) the plot is not displayed, if not None the image is saved in the location provided here. 
+```
+def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None, ytitle="Detection Limit (ppm)"):
+Create detection limit image that is of publishable quality, including 3sigma error bars.
+
+
+Parameters
+----------
+dl : float array
+    Float array of dimensions ([n_ref, ][n_tm, ]n_elements) containing the detection limit data.
+el_names : string array
+    String array containing the element labels for which data is provided.
+tm : float array or list, optional
+    Measurement times associated with the provided detection limits. The default is None.
+ref : string array or list, optional
+    Labels of the reference materials for which data is provided. The default is None.
+dl_err : float array, optional
+    Error values (1sigma) corresponding to the detection limit values. The default is None.
+bar : Boolean, optional
+    If True the default scatter plot is replaced by a bar-plot (histogram plot). The default is False.
+save : String, optional
+    File path directory in which the detection limit plot will be saved. The default is None, meaning plot will not be saved.
+ytitle : String, optional
+    Label to be used for the y-axis title. The default is "Detection Limit (ppm)".
+
+Returns
+-------
+bool
+    returns False on error.
+
+```
 
 On the scatter plots a best fit curve is added, to display the general trend of detection limit as a function of atomic number.
 
-  #### Reference based quantification
+#### Reference based quantification
 Quantification based on comparison with reference materials can be a powerful and straightforward tool to obtain semi-quantitative information on the elemental composition of a sample. The xrf_proc package can provide this information. Do note that it is still up to the user’s discretion to judge the reliability of the obtained results.
 
->	`quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False)`
->	* h5file: (string) File path location of the H5 file containing normalised data.
->	* reffiles: (string) File path location of the H5 file containing elemental yield (el_yield) data as calculated by calc_detlim(), corresponding to the measurement of a reference material. A list of file paths can be provided, in which case the average elemental yield will be calculated for each element over all reference files. If an element in the h5file is not present in the listed refs, its yield is estimated through linear interpolation of the closest neighbouring atoms with the same line type. If Z is at the start or end of the reference elements, the yield will be extrapolated from the first or last 2 elements in the reference. If only 1 element in the reference has the same line type as the quantifiable element, but does not have the same Z, the same yield is used regardless as inter/extrapolation is impossible.
->	* channel: [optional] (string) The detector channel to quantify. Default is ‘channel00’
->	* norm: [optional] (string) The signal to which the elemental yields should be corrected (e.g. ‘Compt’, ‘Fe K’). The provided signal has to be present in all reffiles and h5file. If None (default) no normalisation is performed, and elemental yields are used as-is.
->	* absorb: [optional] (string tuple (['element'], 'cnc file')) The element that will be used to determine the self-absorption factor for each pixel (e.g. ‘Fe’) and the concentration file corresponding to the average sample (matrix) composition. If None (default) no self-absorption will be performed. The element will be used to find Ka and Kb line intensities and correct for their respective ratio using concentration values from the provided concentration file. Theoretical line intensity ratios are derived from the Xraylib library if available, and from PyMca5 internal libraries elsewise.
->	* snake: [optional] (Boolean) If this data corresponds to a snake mesh scan, set True. Otherwise set False (default). As the intensity ratio and corresponding self-absorption correction factor are determined from the raw data, interpolation to the appropriate motor position grid has to be performed in order to be able to match the correction factors to the normalised XRF data.
+```
+def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, div_by_rhot=None, mask=None):
+Quantify XRF data, making use of elemental yields as determined from reference files
+  h5file and reffiles should both contain a norm/ data directory as determined by norm_xrf_batch()
+  The listed ref files should have had their detection limits calculated by calc_detlim() before
+      as this function also calculates element yields.
+  If an element in the h5file is not present in the listed refs, its yield is estimated through linear interpolation of the closest neighbouring atoms with the same linetype.
+      if Z is at the start of end of the reference elements, the yield will be extrapolated from the first or last 2 elements in the reference
+      if only 1 element in the reference has the same linetype as the quantifiable element, but does not have the same Z, the same yield is used nevertheless as inter/extrapolation is impossible
+  A mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
+      or a string data path within the h5file containing a 2D array of size equal to the h5file image size, where 0 values represent pixels to omit
+      from the quantification and 1 values are pixels to be included. Alternatively, a 2D array can be directly supplied as argument.
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data to be quantified.
+reffiles : (list of) string(s).
+    File directory path(s) to the H5 file(s) containing the data corresponding to measurement(s) on referene material(s).
+channel : string, optional
+    H5 file (detector) channel in the quant/ directory for which data should be processed. The default is 'channel00'.
+norm : String, optional
+    String of element name as it is included in the /names data directory within the H5 file. 
+    If keyword norm is provided, the elemental yield is corrected for the intensity of this signal
+    the signal has to be present in both reference and XRF data fit. The default is None.
+absorb : tuple (['element'], 'cnc file'), optional
+    If keyword absorb is provided, the fluorescence signal in the XRF data is corrected for absorption through sample matrix.
+    The element will be used to find Ka and Kb line intensities and correct for their respective ratio
+    using concentration values from the provided cnc files. The default is None, performing no absorption correction.
+snake : Boolean, optional
+    If the scan was performed following a snake-like pattern, set to True to allow for appropriate image reconstruction. The default is False.
+div_by_rhot : float or None, optional
+    If keyword div_by_rhot is not None, the calculated aerial concentration is divided by a user-supplied div_by_rhot [cm²/g] value. The default is None.
+mask : String, list of strings, 2D binary integer array or None, optional
+    A data mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
+        or a string data path within the H5 file containing a 2D array of size equal to the H5 file image size, where 0 values represent pixels to omit
+        from the quantification and 1 values are pixels to be included. Alternatively, a 2D array can be directly supplied as argument. The default is None.
+
+Yields
+------
+bool
+    Returns False on error.
+
+```
 
 For some purposes it may be useful to present the quantified data, divided by a mean matrix composition, as is for instance regularly done when comparing quantified results of chondritic materials. For this purpose, one can use div_by_cnc():
 
->	`div_by_cnc(h5file, cncfile, channel=None)`
->	* h5file: (string) The H5 file path location, containing quantified data.
->	* cncfile: (string) The concentration file path location, corresponding to the matrix composition for which the quantified h5file data should be normalised.
->	* channel: [optional] (string) The detector channel to perform this division for. If None (default) the calculations are performed or all detector channels in the h5file.
+```
+def div_by_cnc(h5file, cncfile, channel=None):
+Divide quantified images by the corresponding concentration value of the same element in the cncfile to obtain relative difference images
+  If an element in the h5file is not present in the cncfile it is omitted from further processing.
+
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data.
+cncfile : string
+    File directory path to the CNC file containing the reference material composition information.
+channel : string, optional
+    H5 file (detector) channel in the quant/ directory for which data should be processed. The default is None, which results in the calculation being performed on the lowest indexed channel (channel00).
+
+Returns
+-------
+None.
+
+```
 
 #### Statistical analysis
 A typical step in XRF data analysis, following fitting and normalisation procedures, is to perform data reduction methods such as K-means clustering and/or principal component analysis (PCA). The following functions allow one to do so with minimal effort:
 
->	`h5_kmeans(h5file, h5dir, nclusters=5, el_id=None)`
->	* h5file: (string) The H5 file path location, containing the data on which to perform the K-means clustering.
->	* h5dir: (string) The directory of the data to be clustered within the H5 file structure, e.g. ‘norm/channel02/ims’
->	* nclusters: [optional] (int) The amount of K-means cluster to divide the data into. By default, 5 clusters are requested.
->	* el_id: [optional] (int) List containing the element indices corresponding to the data segments that should be included in the K-means clustering process. If None (default) all elements within h5dir are included.
->	* Upon completion, h5file will contain the image indicating which cluster each pixel was attributed to, as well as sum spectra corresponding to each cluster group (sum spectra are not normalised for the amount of pixels contained within the cluster etc)
+```
+def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
+Perform Kmeans clustering on a h5file dataset.
+  Before clustering data is whitened using the Scipy whiten() function.
 
->	`h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False) `
->	* h5file: (string) The H5 file path location, containing the data on which to perform the PCA analysis
->	* h5dir: (string) 
->	* nclusters: (string) The directory of the data to be clustered within the H5 file structure, e.g. ‘norm/channel02/ims’
->	* el_id: [optional] (int) List containing the element indices corresponding to the data segments that should be included in the K-means clustering process. If None (default) all elements within h5dir are included.
->	* kmeans: [optional] (Boolean) If True, K-means clustering will be performed on the PCA score images using the same amount of clusters as defined in nclusters. If False (True) K-means clustering will be omitted.
->	* Upon completion, PCA score images, eigenvectors (loadings) and principal component eigenvalues (RVE) are stored. If the kmeans option was True also Kmeans data are stored in the kmeans/ directory within the H5 file.
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data.
+h5dir : string
+    Data directory within the H5 file containing the data to be analysed.
+nclusters : integer, optional
+    The amount of Kmeans clusters to reduce the data to. The default is 5.
+el_id : List of integers, optional
+    List of integers indexing the N variables/elements to be used for Kmeans clustering. The default is None, denoting the usage of all variables.
+nosumspec : Boolean, optional
+    If True, no sumspectra are calculated and stored in the H5 file for each Kmeans cluster. The default is False.
+
+Returns
+-------
+None.
+
+```
+
+```
+def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
+Perform PCA analysis on a h5file dataset. 
+Before clustering, the routine performs a sqrt() normalisation on the data to reduce intensity differences between elements
+  a selection of elements can be given in el_id as their integer values corresponding to their array position in the dataset (first element id = 0)
+  kmeans can be set as an option, which will perform Kmeans clustering on the PCA score images and extract the respective sumspectra
+
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data.
+h5dir : string
+    Data directory within the H5 file containing the data to be analysed.
+nclusters : integer, optional
+    The amount of PCA clusters to reduce the data to. The default is 5.
+el_id : List of integers, optional
+    List of integers indexing the N variables/elements to be used for PCA analysis. The default is None, denoting the usage of all variables.
+kmeans : Boolean, optional
+    If True, will perform Kmeans clustering on the PCA score images and extract the respective sumspectra. The default is False.
+
+Returns
+-------
+None.
+
+```
 
 Although these functions are useful to perform clustering on readily available data within the H5 files, it can be useful to have access to general PCA and Kmeans functions to be used on any dataset:
 
->	`Kmeans(rawdata, nclusters=5, el_id=None)`
->	* rawdata: (float) 2D float array containing the data to be clustered of shape M×N with N the amount of elements and M the data points. Alternatively, a 3D float array can be supplied of shape N×M×L (M×L being the shape of the data image, multiplied by N elements) 
->	* nclusters: [optional] (int) The amount of K-means cluster to divide the data into. Default: 5.
->	* el_id: [optional] (int) List containing the element indices along axis N. If None (default) all elements are included.
->	* Returns two arguments: clusters, distortion. Clusters contains the attributed cluster index for each data point. Distortion is the distance of each point and its cluster centre as provided by the scipy.cluster.vq.vq() function.
+```
+def Kmeans(rawdata, nclusters=5, el_id=None, whiten=True):
+Perform Kmeans clustering on a dataset.
 
->	`PCA(rawdata, nclusters=5, el_id=None)`	
->	* rawdata: (float) 2D float array containing the data to be clustered of shape M×N with N the amount of elements and M the data points. Alternatively, a 3D float array can be supplied of shape N×M×L (M×L being the shape of the data image, multiplied by N elements)
->	* nclusters: [optional] (int) The amount of principal components to divide the data into. Default: 5.
->	* el_id: [optional] (int) List containing the element indices along axis N. If None (default) all elements are included.
->	* Returns 3 arguments: scores, evals, evecs which are the principal component scores (images), eigenvalues (RVE, not yet normalised) and eigenvectors (loading values) respectively.
+Parameters
+----------
+rawdata : Float array
+    2D or 3D array which will be clustered. Variables/elements are the first dimension.
+nclusters : integer, optional
+    The amount of Kmeans clusters to reduce the data to. The default is 5.
+el_id : List of integers, optional
+    List of integers indexing the N variables/elements to be used for Kmeans clustering. The default is None, denoting the usage of all variables.
+whiten : Boolean, optional
+    If True, data is whitened using the whiten() scipy function. The default is True.
+
+Returns
+-------
+clusters : integer array
+    1D or 2D array matching the rawdata shape, for which the integer value denotes the cluster to which each pixel was attributed.
+centroids : float array
+    Kmeans cluster centroid values.
+
+```
+
+```
+def PCA(rawdata, nclusters=5, el_id=None):
+returns: data transformed in 5 dims/columns + regenerated original data
+pass in: data as 2D NumPy array of dimension [M,N] with M the amount of observations and N the variables/elements
+
+
+Parameters
+----------
+rawdata : array
+    2D NumPy array of dimension [M,N] with M the amount of observations and N the variables/elements.
+nclusters : integer, optional
+    The amount of PCA clusters to reduce the data to. The default is 5.
+el_id : list of integers, optional
+    List of integers indexing the N variables/elements to be used for PCA analysis. The default is None, denoting the usage of all variables.
+
+Returns
+-------
+scores : float
+    PCA scores (images).
+evals : float
+    PCA eigenvalues (RVE, not yet normalised).
+evecs : float
+    PCA eigenvectors (loading values).
+
+```
 
 Additionally, although this function is not a part of xrf_proc.py but of plotims.py, a convenient tool for statistical analysis can be the studying of correlation plots. This can be fairly easily done using the `plotims.plot_correl()` function:
 
->	`plot_correl(imsdata, imsnames, el_id=None, save=None)`	
->	* imsdata: (float) N*M*Y array containing the signal intensities of N*M datapoints for Y elements .
->	* imsnames: (string) array of Y elements, containing the names of the corresponding elements
->	* el_id: [optional] (int) list containing the indices of the elements to include in the plot
->	* save: [optional] (string) File path to save the created image
+```
+def plot_correl(imsdata, imsnames, el_id=None, save=None):
+Display correlation plots.
+
+Parameters
+----------
+imsdata : float array
+    imsdata is a N*M*Y float array containing the signal intensities of N*M datapoints for Y elements.
+imsnames : string
+    imsnames is a string array of Y elements, containing the names of the corresponding elements.
+el_id : integer list, optional
+    el_id should be a integer list containing the indices of the elements to include in the plot. The default is None.
+save : string, optional
+    File path as which the image should be saved. The default is None.
+
+Returns
+-------
+None.
+
+```
 
 The generated image will display the correlation scatter plots in the top right half, including a best linear fit (black dashed line) and 95% confidence interval as well as R² values for the linear fit correlation. The main diagonal contains the intensity distribution histogram plots of each variable. The lower left half contains kernel density distribution plots, as well as the Pearson correlation coefficients with a marking of the confidence interval (***: 0.1%CI, **:1%CI, *:5%CI, no stars: <5%CI).
 
