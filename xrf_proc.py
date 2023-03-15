@@ -799,7 +799,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 with h5py.File(h5file, 'r') as file:
                     if ('kmeans/'+channel+'/ims' in file) is True:
                         mask = np.asarray(file['kmeans/'+channel+'/ims'])
-                        mask = np.where(mask==clrid, 1, 0)
+                        mask = np.where(mask==float(clrid), 1, 0)
                     else:
                         print("Warning: No kmeans/"+channel+"/ims path in "+h5file)
                         print("    No mask was applied to further processing")     
@@ -821,7 +821,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     temp = np.zeros(k_ims.shape)
                     for clr in mask:
                         clrid = clr.split('/')[-1][3:]
-                        temp += np.where(k_ims == clrid, 1, 0)
+                        temp += np.where(k_ims == float(clrid), 1, 0)
                     mask = temp 
                 else:
                     print("Warning: No kmeans/"+channel+"/ims path in "+h5file)
@@ -1141,8 +1141,9 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
         returns False on error.
 
     """
-    tickfontsize = 22
-    titlefontsize = 26
+    tickfontsize = 20
+    toptickfontsize = 8
+    titlefontsize = 22
 
     # check shape of dl. If 1D, then only single curve selected. 2D array means several DLs
     dl = np.asarray(dl, dtype='object')
@@ -1189,30 +1190,22 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
     
     # add axis on top of graph with element and line names
     unique_el, unique_id = np.unique(all_names, return_index=True) # sorts unique_z names alphabetically instead of increasing Z!!
-    el_labels = ["-".join(n.split(" ")) for n in all_names[unique_id]]
+    dl_av = [np.average(all_dl[np.where(all_names == tag)]) for tag in unique_el]
+    el_labels = ["-".join(n.split(" ")) for n in unique_el]
     z_temp = el_z[unique_id]
-    print(el_labels)
-    print(z_temp)
     unique_el = np.asarray(el_labels)[np.argsort(z_temp)]
+    dl_av = np.asarray(dl_av)[np.argsort(z_temp)]
     z_temp = z_temp[np.argsort(z_temp)]
     # if for same element/Z multiple lines, join them.
     # K or Ka should be lowest, L above, M above that, ... (as typically K gives lowest DL, L higher, M higher still...)
     unique_z, unique_id = np.unique(z_temp, return_index=True)
     if unique_z.size != z_temp.size:
-        new_z = np.zeros(unique_z.size)
+        new_z = unique_z
         new_labels = []
         for i in range(0, unique_z.size):
-            for j in range(unique_id[i], z_temp.size):
-                if z_temp[unique_id[i]] == z_temp[j]: # same Z
-                    new_z[i] = z_temp[unique_id[i]]
-                    new_labels.append(el_labels[unique_id[i]])
-                    if el_labels[unique_id[i]].split("-")[1] != el_labels[j].split("-")[1]: # different linetype
-                        if el_labels[unique_id[i]].split("-")[1] == 'K' or el_labels[unique_id[i]].split("-")[1] == 'K$/alpha$':
-                            new_labels = new_labels[:-2]
-                            new_labels.append(el_labels[j] + "\n" + el_labels[unique_id[i]])
-                        else:
-                            new_labels = new_labels[:-2]
-                            new_labels.append(el_labels[unique_id[i]] + "\n" + el_labels[j])
+            z_indices = np.where(z_temp == unique_z[i])[0]
+            dl_order = np.flip(np.argsort(dl_av[z_indices]))
+            new_labels.append("\n".join(unique_el[z_indices][dl_order]))
         new_labels = np.asarray(new_labels)
     else:
         new_z = np.asarray(z_temp)
@@ -1231,7 +1224,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             plt.bar(bar_x, dl, yerr=dl_err, label=str(ref)+'_'+str(tm), capsize=3)
             ax = plt.gca()
             ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-            ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+            ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
         else:
             plt.errorbar(el_z, dl, yerr=dl_err, label=str(ref)+'_'+str(tm), linestyle='', fmt=next(marker), capsize=3)
             ax = plt.gca()
@@ -1239,7 +1232,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
             plt.xlabel("Atomic Number (Z)", fontsize=titlefontsize)
             secaxx = ax.secondary_xaxis('top')
             secaxx.set_xticks(new_z)
-            secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+            secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
             # fit curve through points and plot as dashed line in same color
             try:
                 fit_par = np.polyfit(el_z, np.log(dl), 2)
@@ -1279,7 +1272,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0:
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=label_prefix+str(tm[i]), linestyle='', fmt=next(marker), capsize=3)
@@ -1289,7 +1282,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(np.asarray(dl[i], dtype='float64')), 2)
@@ -1324,7 +1317,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0:
                         ax.set_xticks(np.linspace(0,unique_el.size-1,num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i]])
                     plt.errorbar(el_z, dl[i], yerr=dl_err[i], label=str(ref[i])+label_suffix, linestyle='', fmt=next(marker), capsize=3)
@@ -1334,7 +1327,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(dl[i]), 2)
@@ -1375,7 +1368,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0 and j == 0:
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names[i,j]])
                     plt.errorbar(el_z, dl[i,j], yerr=dl_err[i,j], label=str(ref[i])+'_'+str(tm[j]), linestyle='', fmt=next(marker), capsize=3)
@@ -1385,7 +1378,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(dl[i,j]), 2)
@@ -1427,7 +1420,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                     ax = plt.gca()
                     if i == 0 and j == 0:
                         ax.set_xticks(np.linspace(0, unique_el.size-1, num=unique_el.size))
-                        ax.set_xticklabels(unique_el, fontsize=tickfontsize)
+                        ax.set_xticklabels(unique_el, fontsize=toptickfontsize)
                 else:
                     el_z = np.asarray([Elements.getz(name.split(" ")[0]) for name in el_names_tmp])
                     plt.errorbar(el_z, dl_tmp, yerr=dl_err_tmp, label=str(ref[i])+'_'+str(tm_tmp[j]), linestyle='', fmt=next(marker), capsize=3)
@@ -1437,7 +1430,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
                         ax.xaxis.set_minor_locator(MultipleLocator(1))
                         secaxx = ax.secondary_xaxis('top')
                         secaxx.set_xticks(new_z)
-                        secaxx.set_xticklabels(new_labels, fontsize=tickfontsize)
+                        secaxx.set_xticklabels(new_labels, fontsize=toptickfontsize)
                     # fit curve through points and plot as dashed line in same color
                     try:
                         fit_par = np.polyfit(el_z, np.log(dl_tmp), 2)
