@@ -140,7 +140,7 @@ Functions can then be used following, e.g.:
 
 Due to differences in beamline data formats, typically separate “conversion” functions are required for different beamlines. Currently, the following functions are supported:
 
-"""
+```
 def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
 Convert ID15A bliss H5 format to our H5 structure file
 
@@ -185,9 +185,9 @@ Returns
 bool
     Returns False upon failure.
 
-"""
+```
 
-"""
+```
 def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, readas1d=False):
 Merges separate P06 nxs files to 1 handy H5 file containing 2D array of spectra, relevant motor positions, 
 I0 counter, ICR, OCR and mesaurement time.
@@ -212,9 +212,9 @@ Returns
 -------
 None.
 
-"""
+```
 
-"""
+```
 def ConvDeltaCsv(csvfile):
 Read the Delta Premium handheld CSV files and restructure as H5 for further processing
 
@@ -228,9 +228,9 @@ Returns
 -------
 None.
 
-"""
+```
 
-"""
+```
 def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
 Read the EDAX EagleIII SPC files and restructure as H5 for further processing
 Example: ConvEdaxSpc('/data/eagle/folder/a', 'a_merge.h5', (30,1), coords=[22.3, 17, 0.05, 0.])
@@ -260,7 +260,7 @@ Returns
 -------
 None.
 
-"""
+```
 
 
 
@@ -269,7 +269,7 @@ None.
 Xrf_proc makes use of the PyMca5 python library in order to process XRF spectra. As such, when reporting data processed with xrf_proc in literature, it is strongly advised to at least also cite the PyMca software package.1
 This process assumes a PyMca fit configuration file was created before running fit_xrf_batch(). This can be done by loading in the uniformalised h5 file in the PyMca gui (version>=5.3) and making a configuration file based on the /raw/maxpsec and /raw/sumspec data directories. Alternatively, one can launch xrf_config_gui.py for a GUI combining the PyMca fitting algorithm and configuration structure, with some useful functionalities such as the KLM line library as found in for instance the AXIL software package.
 
-"""
+```
 def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
 Fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
 The cfg file should use the SNIP background subtraction method. Others will fail as considered 'too slow' by the PyMca fast linear fit routine itself.
@@ -293,14 +293,14 @@ Returns
 -------
 None.
 
-"""
+```
 
 When calling this routine, make sure h5file is not accessed by any other program (e.g. still open in pymca or HDFView, …) to prevent file corruption.
 
 #### Data normalisation
 Corrections for detector dead time, primary beam intensity fluctuations and acquisition times can be made using 
 
-"""
+```
 def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, halfpixshift=True, mot2nosort=False):
 Function to normalise IMS images to detector deadtime and I0 values.
 
@@ -329,14 +329,14 @@ Returns
 -------
 None.
 
-"""
+```
 When calling this routine, make sure h5file is not accessed by any other program (e.g. still open in pymca or HDFView, …) to prevent file corruption.
 
 #### Distribution images
 Xrf_proc also has convenient, built-in functions to plot and save the (normalised) fitted data images. 
 Data is plotted in a collated image, with intensity and scale bars. The viridis colour scale is used.
 
-"""
+```
 def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None, clim=None):
 Generate publishing quality overview images of all fitted elements in H% file (including scale bars, colorbar, ...)
 
@@ -367,7 +367,7 @@ Returns
 -------
 None.
 
-"""
+```
 
 The function automatically plots channel00 detector channel. If present, also plots the channel02. Images are stored as .png files with suffix ‘_ch0_overview.png’ and ‘_ch2_overview.png’ respectively, optionally preceded by ‘_log’ in case of log scaling.
 
@@ -376,7 +376,7 @@ Following functions will often require information on the quantitative compositi
   
 It is important to note that the value under ‘Number of elements’ matches the amount of rows below ‘Z’ perfectly. Additionally, it is advised that the sum of the certified concentrations equals 1000000 ppm (i.e. 100%). 
 
-"""
+```
 def read_cnc(cncfile):
 Read in the data of a concentration (.cnc) file.
 
@@ -390,14 +390,14 @@ Returns
 rv : Cnc() Class
     Cnc class containing the data contained within the .cnc file.
 
-"""
+```
 
 #### Detection limits and elemental yields
 Detection limits are calculated based on the net peak intensity (Ip,i¬) and background intensity (Ib,i) for a given element as obtained from an XRF sum spectrum, as well as well as the certified concentration of the corresponding element (ci) within the reference material: 
 $〖DL〗_i=(3∙ \sqrt(I_(p,i) ))⁄I_(b,i) ∙c_i$
 Error estimation is performed by standard error propagation rules, taking into account the certified concentration error if available (if not available, the concentration is considered a constant with no error).
 
-"""
+```
 def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
 Calculate detection limits following the equation DL = 3*sqrt(Ib)/Ip * Conc
   Calculates 1s and 1000s DL
@@ -416,12 +416,12 @@ Yields
 ------
 None.
 
-"""
+```
 
 As detection limits are calculated, the function also calculates the elemental yield for all elements present in both XRF fitting and concentration file. These yields are expressed as ppm/count/s, for straightforward semi-quantitative concentration estimates of the normalised scan data. Note that no correction for self-absorption or probed sample mass are taken into account here (which is available using the quant_with_ref() function).
 In order to make plots of the detection limit values, for more straightforward data interpretation, the plot_detlim() function can be called. This function is also automatically called at the end of calc_detlim() for further improved convenience.
 
-"""
+```
 def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=None, ytitle="Detection Limit (ppm)"):
 Create detection limit image that is of publishable quality, including 3sigma error bars.
 
@@ -450,14 +450,14 @@ Returns
 bool
     returns False on error.
 
-"""
+```
 
 On the scatter plots a best fit curve is added, to display the general trend of detection limit as a function of atomic number.
 
 #### Reference based quantification
 Quantification based on comparison with reference materials can be a powerful and straightforward tool to obtain semi-quantitative information on the elemental composition of a sample. The xrf_proc package can provide this information. Do note that it is still up to the user’s discretion to judge the reliability of the obtained results.
 
-"""
+```
 def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, div_by_rhot=None, mask=None):
 Quantify XRF data, making use of elemental yields as determined from reference files
   h5file and reffiles should both contain a norm/ data directory as determined by norm_xrf_batch()
@@ -500,11 +500,11 @@ Yields
 bool
     Returns False on error.
 
-    """
+```
 
 For some purposes it may be useful to present the quantified data, divided by a mean matrix composition, as is for instance regularly done when comparing quantified results of chondritic materials. For this purpose, one can use div_by_cnc():
 
-"""
+```
 def div_by_cnc(h5file, cncfile, channel=None):
 Divide quantified images by the corresponding concentration value of the same element in the cncfile to obtain relative difference images
   If an element in the h5file is not present in the cncfile it is omitted from further processing.
@@ -523,12 +523,12 @@ Returns
 -------
 None.
 
-"""
+```
 
 #### Statistical analysis
 A typical step in XRF data analysis, following fitting and normalisation procedures, is to perform data reduction methods such as K-means clustering and/or principal component analysis (PCA). The following functions allow one to do so with minimal effort:
 
-"""
+```
 def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
 Perform Kmeans clustering on a h5file dataset.
   Before clustering data is whitened using the Scipy whiten() function.
@@ -550,9 +550,9 @@ Returns
 -------
 None.
 
-"""
+```
 
-"""
+```
 def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
 Perform PCA analysis on a h5file dataset. 
 Before clustering, the routine performs a sqrt() normalisation on the data to reduce intensity differences between elements
@@ -577,11 +577,11 @@ Returns
 -------
 None.
 
-"""
+```
 
 Although these functions are useful to perform clustering on readily available data within the H5 files, it can be useful to have access to general PCA and Kmeans functions to be used on any dataset:
 
-"""
+```
 def Kmeans(rawdata, nclusters=5, el_id=None, whiten=True):
 Perform Kmeans clustering on a dataset.
 
@@ -603,9 +603,9 @@ clusters : integer array
 centroids : float array
     Kmeans cluster centroid values.
 
-"""
+```
 
-"""
+```
 def PCA(rawdata, nclusters=5, el_id=None):
 returns: data transformed in 5 dims/columns + regenerated original data
 pass in: data as 2D NumPy array of dimension [M,N] with M the amount of observations and N the variables/elements
@@ -629,11 +629,11 @@ evals : float
 evecs : float
     PCA eigenvectors (loading values).
 
-"""
+```
 
 Additionally, although this function is not a part of xrf_proc.py but of plotims.py, a convenient tool for statistical analysis can be the studying of correlation plots. This can be fairly easily done using the `plotims.plot_correl()` function:
 
-"""
+```
 def plot_correl(imsdata, imsnames, el_id=None, save=None):
 Display correlation plots.
 
@@ -652,7 +652,7 @@ Returns
 -------
 None.
 
-"""
+```
 
 The generated image will display the correlation scatter plots in the top right half, including a best linear fit (black dashed line) and 95% confidence interval as well as R² values for the linear fit correlation. The main diagonal contains the intensity distribution histogram plots of each variable. The lower left half contains kernel density distribution plots, as well as the Pearson correlation coefficients with a marking of the confidence interval (***: 0.1%CI, **:1%CI, *:5%CI, no stars: <5%CI).
 
