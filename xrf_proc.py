@@ -276,11 +276,11 @@ def PCA(rawdata, nclusters=5, el_id=None):
     Returns
     -------
     scores : float
-        PCA scores.
+        PCA scores (images).
     evals : float
-        PCA eigenvalues.
+        PCA eigenvalues (RVE, not yet normalised).
     evecs : float
-        PCA eigenvectors.
+        PCA eigenvectors (loading values).
 
     """
 
