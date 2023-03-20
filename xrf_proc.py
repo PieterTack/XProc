@@ -1558,14 +1558,15 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
         cncfile = cncfile.split("/")[-1]
         with h5py.File(h5file, 'r+') as file:
             # remove old keys as these are now redundant, we should use a single cncfile for either detector channel
-            for key in [k for k in file['detlim/'].keys()]:
-                if key != cncfile:
-                    del file['detlim/'+key]
-                    del file['elyield/'+key]
-            try:
-                del file['detlim/'+cncfile+'/unit']
-            except Exception:
-                pass
+            if 'detlim' in file.keys():
+                for key in [k for k in file['detlim/'].keys()]:
+                    if key != cncfile:
+                        del file['detlim/'+key]
+                        del file['elyield/'+key]
+                try:
+                    del file['detlim/'+cncfile+'/unit']
+                except Exception:
+                    pass
             file.create_dataset('detlim/'+cncfile+'/unit', data='ppm')
             try:
                 del file['detlim/'+cncfile+'/'+chnl+'/names']
