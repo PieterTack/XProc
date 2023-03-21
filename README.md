@@ -1,12 +1,12 @@
-# xrf_proc
+# XProc
 Program with data stream for XRF analysis, including fitting, normalisation, quantification, absorption corrections and imaging.
 The repository can be easily installed using the following command in a (unix) terminal:
 
-`git clone https://www.github.com/PieterTack/xrf_proc`
+`git clone https://www.github.com/PieterTack/XProc`
 
 ## Data processing using xrf_proc and plotims
-### Using xrf_proc
-Xrf_proc is a python based API that should be used for XRF spectral integration (making use of PyMca5 routines), and subsequent data processing.
+### Using XProc
+XProc is a python based API that should be used for XRF spectral integration (making use of PyMca5 routines), and subsequent data processing.
 Relies on the following packages:
 * PyMca5 v5.3 or higher
 * plotims (https://github.com/PieterTack/plotims)
@@ -31,7 +31,7 @@ conda install -c conda-forge xraylib
 ```
 
 #### Uniform h5 file structure
-For convenient data processing, it is advised to use a uniform data structure. Until such time as all synchrotrons and subsequent beamlines unanimously decide to follow the same data structure, it is up to the multiple-beamline-frequenting user to define their own structure. This is the structure that is expected for the data routines provided by xrf_proc.py and plotims.py:
+For convenient data processing, it is advised to use a uniform data structure. Until such time as all synchrotrons and subsequent beamlines unanimously decide to follow the same data structure, it is up to the multiple-beamline-frequenting user to define their own structure. This is the structure that is expected for the data routines provided by XProc.py and plotims.py:
 
 - `Filename.h5`
 	- `cmd`	the scan command line executed during the experiment
