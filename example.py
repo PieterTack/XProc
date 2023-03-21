@@ -7,8 +7,8 @@ Created on Tue Jul 13 11:55:01 2021
 
 import sys
 sys.path.insert(1, 'D:/School/PhD/python_pro/plotims')
-sys.path.insert(1, 'D:/School/PhD/python_pro/xrf_proc')
-import xrf_proc as Fit
+sys.path.insert(1, 'D:/School/PhD/python_pro/XProc')
+import XProc as Fit
 import plotims as Ims
 
 
