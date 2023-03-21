@@ -668,7 +668,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     snake : Boolean, optional
         If the scan was performed following a snake-like pattern, set to True to allow for appropriate image reconstruction. The default is False.
     div_by_rhot : float or None, optional
-        If keyword div_by_rhot is not None, the calculated aerial concentration is divided by a user-supplied div_by_rhot [cm²/g] value. The default is None.
+        If keyword div_by_rhot is not None, the calculated areal concentration is divided by a user-supplied div_by_rhot [cm²/g] value. The default is None.
     mask : String, list of strings, 2D binary integer array or None, optional
         A data mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
             or a string data path within the H5 file containing a 2D array of size equal to the H5 file image size, where 0 values represent pixels to omit
@@ -1521,14 +1521,14 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
         #   creates arrays of size names0 and names1, where 0 values in conc0 and conc1 represent elements not stated in cnc_files.
         conc0 = np.zeros(names0.size)
         conc0_err = np.zeros(names0.size)
-        conc0_air = np.zeros(names0.size)
-        conc0_air_err = np.zeros(names0.size)
+        conc0_areal = np.zeros(names0.size)
+        conc0_areal_err = np.zeros(names0.size)
         for j in range(0, names0.size):
             el_name = names0[j].split(" ")[0]
             for i in range(0, cnc.z.size):
                 if el_name == Elements.getsymbol(cnc.z[i]):
-                    conc0_air[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
-                    conc0_air_err[j] = (cnc.err[i]/cnc.conc[i])*conc0_air[j] # unit: [ug/cm²]
+                    conc0_areal[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                    conc0_areal_err[j] = (cnc.err[i]/cnc.conc[i])*conc0_areal[j] # unit: [ug/cm²]
                     conc0[j] = cnc.conc[i] # unit: [ppm]
                     conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ppm]    
         
@@ -1546,12 +1546,12 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
                 dl_1s_0.append( (3.*np.sqrt(sum_bkg0[i]/tm)/(sum_fit0[i]/tm)) * conc0[i])
                 j = len(dl_1s_0)-1
                 dl_1000s_0.append(dl_1s_0[j] / np.sqrt(1000.))
-                el_yield_0.append((sum_fit0[i]*normfactor/I0norm) / conc0_air[i]) # element yield expressed as cps/conc
+                el_yield_0.append((sum_fit0[i]*normfactor/I0norm) / conc0_areal[i]) # element yield expressed as cps/conc
                 # calculate DL errors (based on standard error propagation)
                 dl_1s_err_0.append(np.sqrt(sum_fit0_err[i]**2 + sum_bkg0_err[i]**2 +
                                          (conc0_err[i]/conc0[i])*(conc0_err[i]/conc0[i])) * dl_1s_0[j])
                 dl_1000s_err_0.append(dl_1s_err_0[j] / dl_1s_0[j] * dl_1000s_0[j])
-                el_yield_err_0.append(np.sqrt((conc0_air_err[i]/conc0_air[i])*(conc0_air_err[i]/conc0_air[i]) + sum_fit0_err[i]**2)*el_yield_0[j])
+                el_yield_err_0.append(np.sqrt((conc0_areal_err[i]/conc0_areal[i])*(conc0_areal_err[i]/conc0_areal[i]) + sum_fit0_err[i]**2)*el_yield_0[j])
                 names0_mod.append(names0[i])
 
         # save DL data to file
