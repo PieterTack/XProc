@@ -50,18 +50,24 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
     namespath = h5dir.split('/')
     if namespath[-2] == 'sum':
         namespath = '/'.join(namespath[:-2])+'/names' #if sum directory the names path is in the directory above
+        sumdata = True
     else:
         namespath = '/'.join(namespath[:-1])+'/names'
+        sumdata = False
         
     # read the h5 data
     with h5py.File(h5file, 'r') as h5:
         data = np.asarray(h5[h5dir]).astype(str)
         names = [n.decode("utf8") for n in h5[namespath]]
-        mot1_name = str(h5['mot1'].attrs["Name"])
-        if mot1_name == "hxrf":
-            rowID = [n.decode("utf8") for n in h5["mot1"]]
+        if sumdata is False:
+            mot1_name = str(h5['mot1'].attrs["Name"])
+            if mot1_name == "hxrf":
+                rowID = [n.decode("utf8") for n in h5["mot1"]]
+            else:
+                rowID = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
         else:
-            rowID = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
+            rowID = h5file
+    rowID = np.array(rowID)
 
     # 'flatten' the data
     if len(data.shape) == 3:
@@ -71,9 +77,12 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
     # write data as csv
     print("Writing "+csvfile+"...", end="")
     with open(csvfile, 'w') as csv:
-        csv.write('RowID'+';'.join(names))
-        for i in range(rowID.shape[0]):
-            csv.write(rowID[i]+';'.join(data[:,i]))
+        csv.write('RowID;'+';'.join(names)+'\n')
+        if rowID.size == 1:
+            csv.write(str(rowID)+';'+str(';'.join(data[:]))+'\n')
+        else:
+            for i in range(rowID.shape[0]):
+                csv.write(str(rowID[i])+';'+str(';'.join(data[:,i]))+'\n')
     print("Done.")
         
     
