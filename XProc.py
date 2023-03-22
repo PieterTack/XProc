@@ -845,7 +845,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                     h5_ims[i,:,:] *= mask
                     h5_ims_err[i,:,:] *= mask
                     if tmnorm is True:
-                        h5_sum[i] = np.sum(h5_ims[i,:,:])/(np.sum(I0)*np.sum(tm))*h5_normto
+                        h5_sum[i] = np.sum(h5_ims[i,:,:])/(np.sum(I0*tm))*h5_normto
                     else:
                         h5_sum[i] = np.sum(h5_ims[i,:,:])/(np.sum(I0))*h5_normto
                     h5_sum_err[i] = np.sqrt(np.sum(h5_ims_err[i,:,:]**2))
@@ -1050,10 +1050,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+yld_interpol_err*yld_interpol_err)
                 sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+yld_interpol_err*yld_interpol_err)
 
-    # check which relative errors are largest: sumint_err or np.average(ims_err) or np.std(ims)/np.average(ims)
-    #   then use this error as the sumint_err
-    for i in range(sumint_err.size):
-        sumint_err[i] = np.max(np.asarray([sumint_err[i], np.average(ims_err[i,:,:]), np.std(ims[i,:,:])/np.average(ims[i,:,:])]))
+    # # check which relative errors are largest: sumint_err or np.average(ims_err) or np.std(ims)/np.average(ims)
+    # #   then use this error as the sumint_err
+    # for i in range(sumint_err.size):
+    #     sumint_err[i] = np.max(np.asarray([sumint_err[i], np.average(ims_err[i,:,:]), np.std(ims[i,:,:])/np.average(ims[i,:,:])]))
 
     conc_unit = "ug/cm²"
     if div_by_rhot is not None:
@@ -1498,11 +1498,11 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
         
     # correct tm for appropriate normalisation factor
     #   tm is time for which DL would be calculated using values as reported, taking into account the previous normalisation factor
-    tm = np.sum(tm)
     if tmnorm is True:
-        normfactor = I0norm/(np.sum(I0)*tm)
+        normfactor = I0norm/(np.sum(I0*tm))
     else:
         normfactor = I0norm/np.sum(I0)
+    tm = np.sum(tm)
 
     for index, chnl in enumerate(keys):
         with h5py.File(h5file, 'r') as file:
@@ -1853,8 +1853,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             else:
                 ims0[i,:,:] = ims0[i,:,:]/(I0) * normto
         if tmnorm is True:
-            sum_fit0 = sum_fit0/(np.sum(I0)*np.sum(tm)) * normto
-            sum_bkg0 = sum_bkg0/(np.sum(I0)*np.sum(tm)) * normto
+            sum_fit0 = sum_fit0/(np.sum(I0*tm)) * normto
+            sum_bkg0 = sum_bkg0/(np.sum(I0*tm)) * normto
         else:
             sum_fit0 = (sum_fit0/np.sum(I0)) * normto
             sum_bkg0 = (sum_bkg0/np.sum(I0)) * normto
