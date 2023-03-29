@@ -1457,7 +1457,7 @@ def plot_detlim(dl, el_names, tm=None, ref=None, dl_err=None, bar=False, save=No
         plt.close()
 
 ##############################################################################
-def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
+def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=90):
     """
     Calculate detection limits following the equation DL = 3*sqrt(Ib)/Ip * Conc
       Calculates 1s and 1000s DL
@@ -1471,6 +1471,10 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
         File directory path to the CNC file containing the reference material composition information.
     ytitle : String, optional
         Label to be used for the y-axis title during detection limit plotting. The default is "Detection Limit (ppm)".
+    sampletilt: float, optional
+        Angle in degrees between sample surface and incidence beam. Currently this value is only used during calculation of 
+        areal concentrations, where the sample thickness registered in the cncfile is corrected by sin(sampletilt). 
+        The default is 90 degrees (incidence beam is perpendicular to sample surface).
 
     Yields
     ------
@@ -1527,7 +1531,7 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
             el_name = names0[j].split(" ")[0]
             for i in range(0, cnc.z.size):
                 if el_name == Elements.getsymbol(cnc.z[i]):
-                    conc0_areal[j] = cnc.conc[i]*cnc.density*cnc.thickness*1E-7 # unit: [ug/cm²]
+                    conc0_areal[j] = cnc.conc[i]*cnc.density*(cnc.thickness/np.sin(sampletilt/180.*np.pi))*1E-7 # unit: [ug/cm²]
                     conc0_areal_err[j] = (cnc.err[i]/cnc.conc[i])*conc0_areal[j] # unit: [ug/cm²]
                     conc0[j] = cnc.conc[i] # unit: [ppm]
                     conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ppm]    
@@ -3059,6 +3063,8 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 icr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 ocr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0 = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                i0 = i0/np.asarray(f[sc_id+'/instrument/machine/current'][:])
             if i0corid is not None:
                 try:
                     i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))

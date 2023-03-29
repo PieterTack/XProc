@@ -398,7 +398,7 @@ $〖DL〗_i=(3∙ \sqrt(I_(p,i) ))⁄I_(b,i) ∙c_i$
 Error estimation is performed by standard error propagation rules, taking into account the certified concentration error if available (if not available, the concentration is considered a constant with no error).
 
 ```
-def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)"):
+def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=90):
 Calculate detection limits following the equation DL = 3*sqrt(Ib)/Ip * Conc
   Calculates 1s and 1000s DL
   Also calculates elemental yields (Ip/conc [(ct/s)/(ug/cm²)]) 
@@ -411,6 +411,10 @@ cncfile : string
     File directory path to the CNC file containing the reference material composition information.
 ytitle : String, optional
     Label to be used for the y-axis title during detection limit plotting. The default is "Detection Limit (ppm)".
+sampletilt: float, optional
+    Angle in degrees between sample surface and incidence beam. Currently this value is only used during calculation of 
+    areal concentrations, where the sample thickness registered in the cncfile is corrected by sin(sampletilt). 
+    The default is 90 degrees (incidence beam is perpendicular to sample surface).
 
 Yields
 ------
