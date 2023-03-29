@@ -3046,9 +3046,9 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
         if j == 0:
             f = h5py.File(file, 'r')
             try:
-                scan_cmd = f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
+                scan_cmd = f[sc_id+'/title'][()].decode('utf8')
             except Exception:
-                scan_cmd = f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1])
+                scan_cmd = f[sc_id+'/title'][()]
             spectra0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id])
             spectra0 = np.zeros((sc_dim[0], sc_dim[1], spectra0_temp.shape[1]))
             for i in range(0, spectra0_temp.shape[1]):
@@ -3077,6 +3077,8 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 i0 = i0/np.average(i0) * i0cor
             if i1id is not None:
                 i1 = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                    i1 = i1/np.asarray(f[sc_id+'/instrument/machine/current'][:])
                 if i1corid is not None:
                     try:
                         i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
@@ -3116,9 +3118,9 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
         else:
             f = h5py.File(file, 'r')
             try:
-                scan_cmd += ' '+(f[sc_id+'/title'][()].decode('utf8')+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
+                scan_cmd += ' '+f[sc_id+'/title'][()].decode('utf8')
             except Exception:
-                scan_cmd += ' '+(f[sc_id+'/title'][()]+' '+mot1_name+' '+str(sc_dim[0])+' '+mot2_name+' '+str(sc_dim[1]))
+                scan_cmd += ' '+f[sc_id+'/title'][()]
                 
             #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
             spectra0_tmp = np.asarray(f[sc_id+'/measurement/'+ch0id])
@@ -3135,6 +3137,8 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 icr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 ocr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0_temp = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+            if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                i0_temp = i0_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
             if i0corid is not None:
                 try:
                     i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
@@ -3147,6 +3151,8 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 i0_temp = i0_temp/np.average(i0_temp) * i0cor
             if i1id is not None:
                 i1_temp = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                    i1_temp = i1_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
                 if i1corid is not None:
                     try:
                         i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
@@ -3448,7 +3454,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
     # write h5 file in our structure
     filename = h5id15[0].split(".")[0]+scan_suffix+'.h5' #scanid is of type 1.1,  2.1,  4.1
     f = h5py.File(filename, 'w')
-    f.create_dataset('cmd', data=' '.join(scan_cmd))
+    f.create_dataset('cmd', data=scan_cmd)
     f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
