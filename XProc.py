@@ -2657,7 +2657,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                         mot1_name = str(scan_cmd[1])
                     except Exception:
                         try:
-                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                                 print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
                                 mot1_arr = enc_vals[0]
                                 mot1_name = enc_names[0]
@@ -2666,6 +2666,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                 mot1_arr = np.asarray(f2["scan/data/"+str(scan_cmd[1])][:])
                                 mot1_name = str(scan_cmd[1])
                                 f2.close()
+                                counter_id = np.zeros(mot1_arr.shape)+1
                         except KeyError:
                             if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                                 print("Warning: timescan(c) command; using "+str(enc_names[0])+" encoder value...", end=" ")
@@ -2700,17 +2701,21 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                         mot2_name = str(scan_cmd[5])
                     except Exception:
                         try:
-                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                                 print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
                                 mot2_arr = enc_vals[1]
                                 mot2_name = enc_names[1]
                             else:
                                 f2 = h5py.File(sc_id+'.nxs','r')
-                                mot2_arr = np.asarray(f2["scan/data/"+str(scan_cmd[5])][:])
-                                mot2_name = str(scan_cmd[5])
+                                if scan_cmd[0] == 'ascan' or scan_cmd[0] == 'dscan':
+                                    mot2_arr = np.asarray(f2["scan/data/"+str(scan_cmd[1])][:])
+                                    mot2_name = str(scan_cmd[1])
+                                else:
+                                    mot2_arr = np.asarray(f2["scan/data/"+str(scan_cmd[5])][:])
+                                    mot2_name = str(scan_cmd[5])
                                 f2.close()
                         except KeyError:
-                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan' or scan_cmd[0] == 'dscan':
+                            if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                                 print("Warning: timescan(c) command; using "+str(enc_names[1])+" encoder value...", end=" ")
                                 mot2_arr = enc_vals[1]
                                 mot2_name = enc_names[1]
