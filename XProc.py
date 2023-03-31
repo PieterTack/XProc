@@ -2686,7 +2686,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                     print("Warning: "+str(scan_cmd[1])+" not found in encoder list dictionary; using "+str(enc_names[0])+" instead...", end=" ")
                                     mot1_arr = enc_vals[0]
                                     mot1_name = enc_names[0]
-                if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names:
+                if scan_cmd.shape[0] > 6 and scan_cmd[5] in enc_names and len(enc_vals[enc_names.index(scan_cmd[5])]) == len(mot1_arr):
                     mot2_arr = enc_vals[enc_names.index(scan_cmd[5])]
                     mot2_name = enc_names[enc_names.index(scan_cmd[5])]
                 else:
