@@ -18,8 +18,8 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
 
     Parameters
     ----------
-    h5file : string
-        File directory path to the H5 file containing the data.
+    h5file : string or list of strings
+        File directory path(s) to the H5 file(s) containing the data.
     h5dir : string
         Data directory within the H5 file containing the data to be converted, e.g. "/norm/channel00/ims". 
         A 'names' directory should be present in the same parent folder, or the grandeparent folder in case of sumspectra results. 
@@ -54,35 +54,85 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
     else:
         namespath = '/'.join(namespath[:-1])+'/names'
         sumdata = False
-        
-    # read the h5 data
-    with h5py.File(h5file, 'r') as h5:
-        data = np.asarray(h5[h5dir]).astype(str)
-        names = [n.decode("utf8") for n in h5[namespath]]
-        if sumdata is False:
-            mot1_name = str(h5['mot1'].attrs["Name"])
-            if mot1_name == "hxrf":
-                rowID = [n.decode("utf8") for n in h5["mot1"]]
-            else:
-                rowID = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
-        else:
-            rowID = h5file
-    rowID = np.array(rowID)
 
-    # 'flatten' the data
-    if len(data.shape) == 3:
-        data = data.reshape((data.shape[0],data.shape[1]*data.shape[2]))
-        rowID = rowID.reshape((rowID.shape[0]*rowID.shape[1]))
+    # Check if h5file is list of files or single string, and act accordingly
+    if type(h5file) is type(list()):
+        # go through all h5files and make array containing all unique element identifiers.
+        allnames = []
+        nrows = 0
+        for file in h5file:
+            with h5py.File(file, 'r') as h5:
+                for n in h5[namespath]: allnames.append(n.decode("utf8"))
+                if sumdata is False:
+                    nrows += np.asarray([n.decode("utf8") for n in h5["mot1"]]).size
+                else:
+                    nrows += 1
+        unique_names = np.unique(allnames)
+        # Now we know the data dimensions to expect
+        data = np.zeros((len(unique_names),nrows))
+        rowID = []
+        fileID = []
+        # go through all h5 files again, and sort the data in the appropriate data column
+        for file in h5file:
+            with h5py.File(file, 'r') as h5:
+                temp = np.asarray(h5[h5dir])
+                names = [n.decode("utf8") for n in h5[namespath]]
+                if sumdata is False:
+                    mot1_name = str(h5['mot1'].attrs["Name"])
+                    if mot1_name == "hxrf":
+                        rows = [n.decode("utf8") for n in h5["mot1"]]
+                    else:
+                        rows = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
+                    # 'flatten' the data
+                    if len(temp.shape) == 3:
+                        temp = temp.reshape((temp.shape[0],temp.shape[1]*temp.shape[2]))
+                        rows = rows.reshape((rows.shape[0]*rows.shape[1]))
+                    for j,n in enumerate(rows):
+                        rowID.append(n)
+                        fileID.append(file)
+                        for i,x in enumerate(names):
+                            dataid = unique_names.index(x)
+                            data[dataid,len(rowID)-1] = temp[i,j]
+                else:
+                    rowID.append(h5dir)
+                    fileID.append(file)
+                    for i,x in enumerate(names):
+                        dataid = unique_names.index(x)
+                        data[dataid,len(rowID)-1] = temp[i]
+        data = np.asarray(data).astype(str)
+    else: #h5file is a single string (or should be)   
+        # read the h5 data
+        with h5py.File(h5file, 'r') as h5:
+            data = np.asarray(h5[h5dir]).astype(str)
+            unique_names = [n.decode("utf8") for n in h5[namespath]]
+            if sumdata is False:
+                mot1_name = str(h5['mot1'].attrs["Name"])
+                if mot1_name == "hxrf":
+                    rowID = [n.decode("utf8") for n in h5["mot1"]]
+                else:
+                    rowID = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
+            else:
+                rowID = h5dir
+        rowID = np.array(rowID)
+        fileID = rowID.copy()
+        fileID[:] = h5file
+    
+        # 'flatten' the data
+        if len(data.shape) == 3:
+            data = data.reshape((data.shape[0],data.shape[1]*data.shape[2]))
+            rowID = rowID.reshape((rowID.shape[0]*rowID.shape[1]))
+            fileID = fileID.reshape((fileID.shape[0]*fileID.shape[1]))
+        
 
     # write data as csv
     print("Writing "+csvfile+"...", end="")
     with open(csvfile, 'w') as csv:
-        csv.write('RowID;'+';'.join(names)+'\n')
+        csv.write('FileID;RowID;'+';'.join(unique_names)+'\n')
         if rowID.size == 1:
-            csv.write(str(rowID)+';'+str(';'.join(data[:]))+'\n')
+            csv.write(str(fileID)+';'+str(rowID)+';'+str(';'.join(data[:]))+'\n')
         else:
             for i in range(rowID.shape[0]):
-                csv.write(str(rowID[i])+';'+str(';'.join(data[:,i]))+'\n')
+                csv.write(str(fileID[i])+';'+str(rowID[i])+';'+str(';'.join(data[:,i]))+'\n')
     print("Done.")
         
     
