@@ -1521,8 +1521,8 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
         names0 = np.asarray([n.decode('utf8') for n in names0[:]])
         sum_bkg0 = sum_bkg0/normfactor
         sum_fit0 = sum_fit0/normfactor
-        # prune cnc.conc array to appropriate elements according to names0 and names1
-        #   creates arrays of size names0 and names1, where 0 values in conc0 and conc1 represent elements not stated in cnc_files.
+        # prune cnc.conc array to appropriate elements according to names0
+        #   creates arrays of size names0 , where 0 values in conc0 represent elements not stated in cnc_files.
         conc0 = np.zeros(names0.size)
         conc0_err = np.zeros(names0.size)
         conc0_areal = np.zeros(names0.size)
