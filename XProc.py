@@ -680,7 +680,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         Returns False on error.
 
     """
-    import plotims
+    import Xims
 
 
     # first let's go over the reffiles and calculate element yields
@@ -1093,7 +1093,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     file.close()
 
     # plot images
-    data = plotims.ims()
+    data = Xims.ims()
     data.data = np.zeros((ims.shape[1],ims.shape[2], ims.shape[0]+1))
     for i in range(0, ims.shape[0]):
         data.data[:, :, i] = ims[i, :, :]
@@ -1101,10 +1101,10 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         data.data[:,:,-1] = rhot[:,:]
     names = np.concatenate((names,[r'$\rho T$']))
     data.names = names
-    cb_opts = plotims.Colorbar_opt(title=r'Conc.;[$\mu$g/cm²]')
+    cb_opts = Xims.Colorbar_opt(title=r'Conc.;[$\mu$g/cm²]')
     nrows = int(np.ceil(len(names)/4)) # define nrows based on ncols
-    colim_opts = plotims.Collated_image_opts(ncol=4, nrow=nrows, cb=True)
-    plotims.plot_colim(data, names, 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=os.path.splitext(h5file)[0]+'_ch'+channel[-1]+'_quant.png')
+    colim_opts = Xims.Collated_image_opts(ncol=4, nrow=nrows, cb=True)
+    Xims.plot_colim(data, names, 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=os.path.splitext(h5file)[0]+'_ch'+channel[-1]+'_quant.png')
 
     return True
 
@@ -1521,8 +1521,8 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
         names0 = np.asarray([n.decode('utf8') for n in names0[:]])
         sum_bkg0 = sum_bkg0/normfactor
         sum_fit0 = sum_fit0/normfactor
-        # prune cnc.conc array to appropriate elements according to names0 and names1
-        #   creates arrays of size names0 and names1, where 0 values in conc0 and conc1 represent elements not stated in cnc_files.
+        # prune cnc.conc array to appropriate elements according to names0
+        #   creates arrays of size names0 , where 0 values in conc0 represent elements not stated in cnc_files.
         conc0 = np.zeros(names0.size)
         conc0_err = np.zeros(names0.size)
         conc0_areal = np.zeros(names0.size)
@@ -1627,7 +1627,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
         Amount of degrees, rounded to nearest 90, over which images should be rotated. The default is 0.
     fliph : Boolean, optional
         If True, data is flipped over the horizontal image axes (after optional rotation). The default is False.
-    cb_opts : Plotims.Colorbar_opt class, optional
+    cb_opts : Xims.Colorbar_opt class, optional
         User supplied intensity scale colorbar options for imaging. The default is None.
     clim : list, optional
         List containing the lower and upper intensity limit to apply to the plots. The default is None, indicating no specific limits.
@@ -1637,15 +1637,15 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
     None.
 
     """
-    import plotims
+    import Xims
     filename = os.path.splitext(h5file)[0]
 
-    imsdata0 = plotims.read_h5(h5file, datadir+'/channel00/ims')
+    imsdata0 = Xims.read_h5(h5file, datadir+'/channel00/ims')
     imsdata0.data[imsdata0.data < 0] = 0.
     if log:
         filename += '_log'
     try:
-        imsdata1 = plotims.read_h5(h5file, datadir+'/channel01/ims')
+        imsdata1 = Xims.read_h5(h5file, datadir+'/channel01/ims')
         if imsdata1 is None:
             chan01_flag = False
         else:
@@ -1667,40 +1667,40 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
             
     # set plot options (color limits, clim) if appropriate
     if clim is not None:
-        plt_opts = plotims.Plot_opts(clim=clim)
+        plt_opts = Xims.Plot_opts(clim=clim)
     else:
         plt_opts = None
 
-    sb_opts = plotims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
+    sb_opts = Xims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
     if cb_opts is None:
         if log:
-            cb_opts = plotims.Colorbar_opt(title='log. Int.;[cts]')
+            cb_opts = Xims.Colorbar_opt(title='log. Int.;[cts]')
         else:
-            cb_opts = plotims.Colorbar_opt(title='Int.;[cts]')
+            cb_opts = Xims.Colorbar_opt(title='Int.;[cts]')
     nrows = int(np.ceil(len(imsdata0.names)/ncols)) # define nrows based on ncols
-    colim_opts = plotims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
+    colim_opts = Xims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
 
     if log:
         imsdata0.data = np.log10(imsdata0.data)
 
     
-    plotims.plot_colim(imsdata0, imsdata0.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png')
+    Xims.plot_colim(imsdata0, imsdata0.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png')
     
     if chan01_flag == True:
         # set plot options (color limits, clim) if appropriate
         if clim is not None:
-            plt_opts = plotims.Plot_opts(clim=clim)
+            plt_opts = Xims.Plot_opts(clim=clim)
         else:
             plt_opts = None
 
 
         nrows = int(np.ceil(len(imsdata1.names)/ncols)) # define nrows based on ncols
-        colim_opts = plotims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
+        colim_opts = Xims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
 
         if log:
             imsdata1.data = np.log10(imsdata1.data)
         
-        plotims.plot_colim(imsdata1, imsdata1.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png')
+        Xims.plot_colim(imsdata1, imsdata1.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png')
 
 
 ##############################################################################
