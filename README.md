@@ -673,8 +673,8 @@ Below is an example python processing file:
 import sys
 sys.path.insert(1, 'D:/School/PhD/python_pro/plotims')
 sys.path.insert(1, 'D:/School/PhD/python_pro/xrf_proc')
-import xrf_fit as Fit
-import plotims as Ims
+import Xproc as Fit
+import Xims as Ims
 
 
 def prepare_p06():
