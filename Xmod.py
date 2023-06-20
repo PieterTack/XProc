@@ -67,7 +67,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
                     nrows += np.asarray([n.decode("utf8") for n in h5["mot1"]]).size
                 else:
                     nrows += 1
-        unique_names = np.unique(allnames)
+        unique_names = [name for name in np.unique(allnames)]
         # Now we know the data dimensions to expect
         data = np.zeros((len(unique_names),nrows))
         rowID = []
@@ -123,8 +123,11 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
             rowID = rowID.reshape((rowID.shape[0]*rowID.shape[1]))
             fileID = fileID.reshape((fileID.shape[0]*fileID.shape[1]))
         
+    #TODO: at this point data is ordered alphabetically, will want to order this by atomic number Z.
 
     # write data as csv
+    fileID = np.asarray(fileID)
+    rowID = np.asarray(rowID)
     print("Writing "+csvfile+"...", end="")
     with open(csvfile, 'w') as csv:
         csv.write('FileID;RowID;'+';'.join(unique_names)+'\n')

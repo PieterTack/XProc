@@ -668,7 +668,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     snake : Boolean, optional
         If the scan was performed following a snake-like pattern, set to True to allow for appropriate image reconstruction. The default is False.
     div_by_rhot : float or None, optional
-        If keyword div_by_rhot is not None, the calculated areal concentration is divided by a user-supplied div_by_rhot [cm²/g] value. The default is None.
+        If keyword div_by_rhot is not None, the calculated areal concentration is divided by a user-supplied div_by_rhot [g/cm²] value. The default is None.
     mask : String, list of strings, 2D binary integer array or None, optional
         A data mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
             or a string data path within the H5 file containing a 2D array of size equal to the H5 file image size, where 0 values represent pixels to omit
@@ -2232,7 +2232,14 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
         if x >= scandim[0]:
             x = 0
             y += 1
- 
+
+    #TODO: reshape the arrays to appropriate scan dimensions
+    spectra = np.asarray(spectra).reshape((scandim[1], scandim[2], np.assaray(spectra).shape[0]))
+    ocr = np.asarray(ocr).reshape((scandim[1], scandim[2]))
+    i0 = np.asarray(i0).reshape((scandim[1], scandim[2]))
+    tm = np.asarray(tm).reshape((scandim[1], scandim[2]))
+    mot1 = np.asarray(mot1).reshape((scandim[1], scandim[2]))
+    mot2 = np.asarray(mot2).reshape((scandim[1], scandim[2]))
     sumspec = np.sum(spectra[:], axis=(0,1))
     maxspec = np.zeros(sumspec.shape[0])
     for i in range(sumspec.shape[0]):
@@ -2243,20 +2250,100 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
     print("Writing converted file: "+outfile+"...", end=" ")
     with h5py.File(outfile, 'w') as f:
         f.create_dataset('cmd', data='scan EDAX EagleIII')
-        f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel00/icr', data=np.squeeze(ocr), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/spectra', data=spectra, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/icr', data=ocr, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/ocr', data=ocr, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec), compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
         dset = f.create_dataset('mot1', data=[n.encode('utf8') for n in mot1])
         dset.attrs['Name'] = 'X'
         dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
         dset.attrs['Name'] = 'Y'
     print("Done")
 
+##############################################################################
+def ConvMalPanMPS(mpsfile):
+    """
+    Read the Malvern Panalytical EPSILON 3XL MPS files and restructure as H5 for further processing
+    
+
+    Parameters
+    ----------
+    mpsfile : String
+        File path to the MPS file to be converted. If a list is provided, all files are concatenated in a single H5 file.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    if type(mpsfile) != type(list()):
+        mpsfile = [mpsfile]
+        
+ 
+    spectra0 = []
+    tm0 = []
+    ocr0 = []
+    i0 = []
+    i1 = []
+    mot1 = []
+    mot2 = []
+    ydim = len(mpsfile)
+    xdim = 1
+ 
+    for mps in mpsfile:
+        with open(mps, 'r') as file:
+            data = file.readlines()    
+        
+        measurement_id = os.path.splitext(mps)[0]
+        nchannels = int(data[[i for i,n in enumerate(data) if 'NrOfChannels' in n][0]].split(':')[1])
+        
+        spectra0.append(np.asarray(data[-1*nchannels:], dtype=float))
+        tm0.append(float('.'.join(data[[i for i,n in enumerate(data) if 'LiveTime' in n][0]].split(':')[1].split(','))))
+        ocr0.append(np.sum(spectra0[-1])) #icr and ocr are the same for edax eagle data as we acquire for certain set livetime
+        i0.append(float('.'.join(data[[i for i,n in enumerate(data) if 'uA' in n][0]].split(':')[1].split(','))))
+        i1.append(float('.'.join(data[[i for i,n in enumerate(data) if 'NormCurCounts' in n][0]].split(':')[1].split(','))))
+        mot1.append(''.join(data[[i for i,n in enumerate(data) if 'SampleIdent' in n][0]].split(':')[1:]))
+        mot2.append(mps)
+
+    spectra0 = np.asarray(spectra0)
+    spectra0 = spectra0.reshape((ydim, xdim, spectra0.shape[1]))
+    ocr0 = np.asarray(ocr0).reshape((ydim, xdim))
+    i0 = np.asarray(i0).reshape((ydim, xdim))
+    i1 = np.asarray(i1).reshape((ydim, xdim))
+    tm0 = np.asarray(tm0).reshape((ydim, xdim))
+    mot1 = np.asarray([n.encode('utf8') for n in mot1]).reshape((ydim, xdim))
+    mot2 = np.asarray([n.encode('utf8') for n in mot2]).reshape((ydim, xdim))
+
+    sumspec0 = np.sum(spectra0[:], axis=(0,1))
+    maxspec0 = np.zeros(sumspec0.shape[0])
+    for i in range(sumspec0.shape[0]):
+        maxspec0[i] = spectra0[:,:,i].max()
+
+
+    # Hooray! We read all the information! Let's write it to a separate file
+    print("Writing merged file: "+measurement_id+"_merge.h5...", end=" ")
+    with h5py.File(measurement_id+"_merge.h5", 'w') as f:
+        f.create_dataset('cmd', data='Measurement PANalaytical Epsilon 3XL')
+        f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/icr', data=ocr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/sumspec', data=sumspec0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/maxspec', data=maxspec0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/acquisition_time', data=tm0, compression='gzip', compression_opts=4)
+        # dset = f.create_dataset('mot1', data=[n.encode('utf8') for n in mot1])
+        dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = 'hxrf'
+        dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = 'hxrf'
+    print("Done")
+        
 ##############################################################################
 def ConvDeltaCsv(csvfile):
     """
@@ -2313,11 +2400,13 @@ def ConvDeltaCsv(csvfile):
                 spectra1.append([file[key+1][rowheads.index('TimeStamp')+1:].astype(float)])
                 ocr1.append(np.sum(spectra1[-1]))
                 icr1.append(ocr1[-1] * float(file[key+1][rowheads.index('Realtime')])/float(file[key+1][rowheads.index('Livetime')]))
- 
-    mot1 = np.asarray(mot1)
-    mot2 = np.asarray(mot2)
-    spectra0 = np.asarray(spectra0)
-    spectra1 = np.asarray(spectra1)
+    nspe = len(mot1)
+    nchnls0 = np.asarray(spectra0[0].shape)
+    nchnls1 = np.asarray(spectra1[0].shape)
+    mot1 = np.asarray(mot1).reshape((nspe,1))
+    mot2 = np.asarray(mot2).reshape((nspe,1))
+    spectra0 = np.asarray(spectra0).reshape((nspe,1,nchnls0[0]))
+    spectra1 = np.asarray(spectra1).reshape((nspe,1,nchnls1[0]))
     sumspec0 = np.sum(spectra0[:], axis=(0,1))
     maxspec0 = np.zeros(sumspec0.shape[0])
     for i in range(sumspec0.shape[0]):
