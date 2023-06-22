@@ -29,10 +29,9 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import QApplication, QWidget, QDialog
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
-from PyQt5.QtWidgets import QCheckBox, QPushButton, QLabel, QScrollArea, \
+from PyQt5.QtWidgets import QCheckBox, QPushButton, QLabel, QScrollArea, QSplitter,\
     QLineEdit, QTabWidget, QFileDialog, QComboBox, QTreeWidget, QTreeWidgetItem
-    
-
+   
 class Poll_h5dir():
     def __init__(self, h5file, parent=None):
         self.paths=[]
@@ -99,7 +98,7 @@ class CalibrateWindow(QDialog):
         self.newcte = None
         self.newgain = None
         self.mainobj = mainobj
-        self.peakpos = find_peaks(self.mainobj.rawspe, height=np.percentile(self.mainobj.rawspe, 40.), distance=10)[0] #TODO: better methods may be available to find local maxima
+        self.peakpos = find_peaks(self.mainobj.rawspe, height=np.percentile(self.mainobj.rawspe, 40.), distance=10)[0] #better methods may be available to find local maxima
         self.cte = self.mainobj.ConfigDict['detector']['zero']
         self.gain = self.mainobj.ConfigDict['detector']['gain']
         self.chnls = []
@@ -119,7 +118,7 @@ class CalibrateWindow(QDialog):
         # QComboBox with all lines for a given element
         self.linedict = compile_pymca_dict('Fe')
         items = [line['line']+": "+"{:.3f}".format(line['energy'])+"keV ("+"{:.5f}".format(line['rate'])+")" for line in self.linedict]
-        rates = [float(line['rate']) for line in self.linedict if 'K' in line['linegroup']] #TODO: issues if no K lines would be in list, or if not amongst the first in list
+        rates = [float(line['rate']) for line in self.linedict if 'K' in line['linegroup']] #potential issues if no K lines would be in list, or if not amongst the first in list
         self.lines = QComboBox()
         self.lines.addItems(items)
         self.lines.setCurrentIndex(rates.index(np.max(rates)))
@@ -323,6 +322,8 @@ class Config_GUI(QWidget):
         layout_libopts = QVBoxLayout()
         layout_calibres = QHBoxLayout()
         layout_buts = QHBoxLayout()
+        splitter = QSplitter()
+        splitter.setOrientation(Qt.Horizontal)
 
         
         # browse buttons
@@ -410,7 +411,10 @@ class Config_GUI(QWidget):
         layout_buts.addWidget(self.refit)
         layout_buts.addWidget(self.calib)
         layout_canvas.addLayout(layout_buts)
-        layout_body.addLayout(layout_canvas)
+        canvas_widget = QWidget()
+        canvas_widget.setLayout(layout_canvas)
+        splitter.addWidget(canvas_widget)
+        # layout_body.addLayout(layout_canvas)
 
 
         
@@ -561,7 +565,11 @@ class Config_GUI(QWidget):
         self.lib_tabs.addTab(self.tab_plotopts, "Plot Options")
         layout_libopts.addWidget(self.lib_tabs)        
         layout_opts.addLayout(layout_libopts)
-        layout_body.addLayout(layout_opts)
+        opts_widget = QWidget()
+        opts_widget.setLayout(layout_opts)
+        splitter.addWidget(opts_widget)
+        # layout_body.addLayout(layout_opts)
+        layout_body.addWidget(splitter)
         layout_main.addLayout(layout_body)
         self.lib_tabs.setCurrentWidget(self.tab_peakid)
         
@@ -866,13 +874,14 @@ class Config_GUI(QWidget):
             self.update_plot(update=False)
             self.adjust_fittree(self.fittree)
 
-    def update_ctegain(self):
+    def update_ctegain(self, noplot=False):
         self.ConfigDict['detector']['gain'] = float(self.gain.text())
         self.ConfigDict['detector']['zero'] = float(self.cte.text())
         self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
         self.fitres = None
-        self.update_plot(update=False)
+        if noplot is False:
+            self.update_plot(update=False)
 
     def adjust_zselect(self):
         newZ = int(self.zselect.text())
@@ -1244,7 +1253,13 @@ class Config_GUI(QWidget):
             self.fitres = None
             self.adjust_fittree(self.fittree)
 
-    def do_refit(self):                    
+    def do_refit(self): 
+        # make sure all ConfigDict parameters are read in before (re)fitting in case a user missed a return somewhere
+        self.fitscatter_params()      
+        self.update_ctegain(noplot=True)    
+        self.set_fitminmax()  
+        self.set_bkgr_sum_esc()
+        self.set_fittype()
         mcafit = ClassMcaTheory.ClassMcaTheory()
         mcafit.configure(self.ConfigDict)
         mcafit.setData(range(0,len(self.rawspe)), self.rawspe)

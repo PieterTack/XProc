@@ -7,6 +7,18 @@ Created on Mon Jan 16 12:32:27 2023
 
 import numpy as np
 
+def getZ(element):
+    table = [  
+        'H',                                                                                                                                            'He',
+        'Li', 'Be',                                                                                                       'B',  'C',  'N',  'O',  'F',  'Ne',
+        'Na', 'Mg',                                                                                                       'Al', 'Si', 'P',  'S',  'Cl', 'Ar',
+        'K',  'Ca', 'Sc',                                           'Ti', 'V',  'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn', 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr',
+        'Rb', 'Sr', 'Y',                                            'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd', 'In', 'Sn', 'Sb', 'Te', 'I',  'Xe',
+        'Cs', 'Ba', 'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu', 'Hf', 'Ta', 'W',  'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn',
+        'Fr', 'Ra', 'Ac', 'Th', 'Pa', 'U',  'Np', 'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv', 'Ts', 'Og'
+    ]
+    return table.index(element)+1
+
 ##############################################################################
 #TODO: we may want to expand this function to allow for multiple h5files and h5dirs combined to a single csv file. At that point,
 #   we should include an additional column stating the respective h5file name, and, more importantly, make sure all elements are represented across all files
@@ -108,7 +120,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
             if sumdata is False:
                 mot1_name = str(h5['mot1'].attrs["Name"])
                 if mot1_name == "hxrf":
-                    rowID = [n.decode("utf8") for n in h5["mot1"]]
+                    rowID = [n.decode("utf8") for n in np.squeeze(h5["mot1"])]
                 else:
                     rowID = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
             else:
@@ -119,23 +131,59 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
     
         # 'flatten' the data
         if len(data.shape) == 3:
+            rowID = rowID.reshape((data.shape[1]*data.shape[2]))
+            fileID = fileID.reshape((data.shape[1]*data.shape[2]))
             data = data.reshape((data.shape[0],data.shape[1]*data.shape[2]))
-            rowID = rowID.reshape((rowID.shape[0]*rowID.shape[1]))
-            fileID = fileID.reshape((fileID.shape[0]*fileID.shape[1]))
         
-    #TODO: at this point data is ordered alphabetically, will want to order this by atomic number Z.
+    # at this point data is ordered alphabetically, will want to order this by atomic number Z.
+    unique_names = np.asarray(unique_names)
+    scatter = []
+    scattername=[]
+    if 'Compt' in unique_names:
+        scattername.append('Compt')
+        if rowID.size == 1:
+            scatter.append(data[list(unique_names).index('Compt')])
+            data = data[np.arange(len(unique_names))!=list(unique_names).index('Compt')]
+        else:
+            scatter.append(data[list(unique_names).index('Compt'),:])
+            data = data[np.arange(len(unique_names))!=list(unique_names).index('Compt'),:]
+        unique_names = unique_names[np.arange(len(unique_names))!=list(unique_names).index('Compt')]
+    if 'Rayl' in unique_names:
+        scattername.append('Rayl')
+        if rowID.size == 1:
+            scatter.append(data[list(unique_names).index('Rayl')])
+            data = data[np.arange(len(unique_names))!=list(unique_names).index('Rayl')]
+        else:
+            scatter.append(data[list(unique_names).index('Rayl'),:])
+            data = data[np.arange(len(unique_names))!=list(unique_names).index('Rayl'),:]
+        unique_names = unique_names[np.arange(len(unique_names))!=list(unique_names).index('Rayl')]
+    scatter = np.asarray(scatter)
+    Z_array = [getZ(name.split(' ')[0]) for name in unique_names]
+    unique_names = unique_names[np.argsort(Z_array)]
+    rowID = np.asarray(rowID)
+    if rowID.size == 1:
+        data = data[np.argsort(Z_array)]
+    else:
+        sortID = np.argsort(Z_array)
+        for i in range(rowID.shape[0]):
+            data[:,i] = data[:,i][sortID]
 
     # write data as csv
     fileID = np.asarray(fileID)
-    rowID = np.asarray(rowID)
     print("Writing "+csvfile+"...", end="")
     with open(csvfile, 'w') as csv:
-        csv.write('FileID;RowID;'+';'.join(unique_names)+'\n')
+        csv.write('FileID;RowID;'+';'.join(unique_names)+';'+str(';'.join(scattername))+'\n')
         if rowID.size == 1:
-            csv.write(str(fileID)+';'+str(rowID)+';'+str(';'.join(data[:]))+'\n')
+            if scattername != []:
+                csv.write(str(fileID)+';'+str(rowID)+';'+str(';'.join(data[:]))+';'+str(';'.join(scatter[:]))+'\n')
+            else:                
+                csv.write(str(fileID)+';'+str(rowID)+';'+str(';'.join(data[:]))+'\n')
         else:
             for i in range(rowID.shape[0]):
-                csv.write(str(fileID[i])+';'+str(rowID[i])+';'+str(';'.join(data[:,i]))+'\n')
+                if scattername != []:
+                    csv.write(str(fileID[i])+';'+str(rowID[i])+';'+str(';'.join(data[:,i]))+';'+str(';'.join(scatter[:,i]))+'\n')
+                else:
+                    csv.write(str(fileID[i])+';'+str(rowID[i])+';'+str(';'.join(data[:,i]))+'\n')
     print("Done.")
         
     
@@ -180,7 +228,7 @@ def XProcH5_combine(files, newfile, ax=0):
         f = h5py.File(file,'r')
         try:
             cmd += f['cmd'][()].decode('utf8')
-        except Exception as ex:
+        except AttributeError:
             cmd += f['cmd'][()]
 
         mot1.append(np.array(f['mot1']))
