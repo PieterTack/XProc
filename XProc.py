@@ -1104,7 +1104,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     cb_opts = Xims.Colorbar_opt(title=r'Conc.;[$\mu$g/cm²]')
     nrows = int(np.ceil(len(names)/4)) # define nrows based on ncols
     colim_opts = Xims.Collated_image_opts(ncol=4, nrow=nrows, cb=True)
-    Xims.plot_colim(data, names, 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=os.path.splitext(h5file)[0]+'_ch'+channel[-1]+'_quant.png')
+    Xims.plot_colim(data, np.arange(len(names)), 'viridis', cb_opts=cb_opts, colim_opts=colim_opts, save=os.path.splitext(h5file)[0]+'_ch'+channel[-1]+'_quant.png')
 
     return True
 
@@ -1684,7 +1684,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
         imsdata0.data = np.log10(imsdata0.data)
 
     
-    Xims.plot_colim(imsdata0, imsdata0.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png')
+    Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png')
     
     if chan01_flag == True:
         # set plot options (color limits, clim) if appropriate
@@ -1700,7 +1700,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
         if log:
             imsdata1.data = np.log10(imsdata1.data)
         
-        Xims.plot_colim(imsdata1, imsdata1.names, 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png')
+        Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png')
 
 
 ##############################################################################
