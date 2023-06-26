@@ -231,6 +231,23 @@ None.
 ```
 
 ```
+def ConvMalPanMPS(mpsfile):
+Read the Malvern Panalytical EPSILON 3XL MPS files and restructure as H5 for further processing
+    
+
+ Parameters
+----------
+mpsfile : String
+        File path to the MPS file to be converted. If a list is provided, all files are concatenated in a single H5 file.
+
+Returns
+----------
+None.
+
+```
+
+
+```
 def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
 Read the EDAX EagleIII SPC files and restructure as H5 for further processing
 Example: ConvEdaxSpc('/data/eagle/folder/a', 'a_merge.h5', (30,1), coords=[22.3, 17, 0.05, 0.])
@@ -493,7 +510,7 @@ absorb : tuple (['element'], 'cnc file'), optional
 snake : Boolean, optional
     If the scan was performed following a snake-like pattern, set to True to allow for appropriate image reconstruction. The default is False.
 div_by_rhot : float or None, optional
-    If keyword div_by_rhot is not None, the calculated aerial concentration is divided by a user-supplied div_by_rhot [cm²/g] value. The default is None.
+    If keyword div_by_rhot is not None, the calculated aerial concentration is divided by a user-supplied div_by_rhot [g/cm²] value. The default is None.
 mask : String, list of strings, 2D binary integer array or None, optional
     A data mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
         or a string data path within the H5 file containing a 2D array of size equal to the H5 file image size, where 0 values represent pixels to omit
