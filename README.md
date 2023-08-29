@@ -287,7 +287,7 @@ Xrf_proc makes use of the PyMca5 python library in order to process XRF spectra.
 This process assumes a PyMca fit configuration file was created before running fit_xrf_batch(). This can be done by loading in the uniformalised h5 file in the PyMca gui (version>=5.3) and making a configuration file based on the /raw/maxpsec and /raw/sumspec data directories. Alternatively, one can launch xrf_config_gui.py for a GUI combining the PyMca fitting algorithm and configuration structure, with some useful functionalities such as the KLM line library as found in for instance the AXIL software package.
 
 ```
-def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
+def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, verbose=None):
 Fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
 The cfg file should use the SNIP background subtraction method. Others will fail as considered 'too slow' by the PyMca fast linear fit routine itself.
 Additionally, using the standard option also integrates the individual spectra, not only the sum spectrum, without fast linear fit. This can take a long time!!
@@ -299,6 +299,8 @@ h5file : string
     File directory path to the H5 file containing the data.
 cfgfile : string
     File path to the PyMca-type CFG configuration file containing the fitting parameters.
+channel: NoneType, optional
+    Set channel to a list of channel names to which the fitting should be limited. e.g. channel=['channel01'] 
 standard : NoneType, optional
     If not a NoneType (e.g. string) then all spectra are integrated separately without using the fast linear fit procedure. The default is None.
 ncores : Integer, optional
@@ -354,35 +356,37 @@ Xrf_proc also has convenient, built-in functions to plot and save the (normalise
 Data is plotted in a collated image, with intensity and scale bars. The viridis colour scale is used.
 
 ```
-def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None, clim=None):
-Generate publishing quality overview images of all fitted elements in H% file (including scale bars, colorbar, ...)
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, sqrt=False, rotate=0, fliph=False, cb_opts=None, clim=None):
+ Generate publishing quality overview images of all fitted elements in H% file (including scale bars, colorbar, ...)
 
-Parameters
-----------
-h5file : string
-    File directory path to the H5 file containing the data.
-h5dir : string
-    Data directory within the H5 file containing the data to be analysed.
-ncols : integer
-    Amount of columns in which the overview image will be displayed.
-pix_size : float
-    Image pixel size in µm.
-scl_size : float
-    Image scale bar size to be displayed in µm.
-log : Boolean, optional
-    If True, the Briggs logarithm of the data is displayed. The default is False.
-rotate : integer, optional
-    Amount of degrees, rounded to nearest 90, over which images should be rotated. The default is 0.
-fliph : Boolean, optional
-    If True, data is flipped over the horizontal image axes (after optional rotation). The default is False.
-cb_opts : Plotims.Colorbar_opt class, optional
-    User supplied intensity scale colorbar options for imaging. The default is None.
-clim : list, optional
-    List containing the lower and upper intensity limit to apply to the plots. The default is None, indicating no specific limits.
+ Parameters
+ ----------
+ h5file : string
+     File directory path to the H5 file containing the data.
+ h5dir : string
+     Data directory within the H5 file containing the data to be analysed.
+ ncols : integer
+     Amount of columns in which the overview image will be displayed.
+ pix_size : float
+     Image pixel size in µm.
+ scl_size : float
+     Image scale bar size to be displayed in µm.
+ log : Boolean, optional
+     If True, the Briggs logarithm of the data is displayed. The default is False.
+ sqrt : Boolean, optional
+     If True, the square root of the data is displayed. The default is False.
+ rotate : integer, optional
+     Amount of degrees, rounded to nearest 90, over which images should be rotated. The default is 0.
+ fliph : Boolean, optional
+     If True, data is flipped over the horizontal image axes (after optional rotation). The default is False.
+ cb_opts : Xims.Colorbar_opt class, optional
+     User supplied intensity scale colorbar options for imaging. The default is None.
+ clim : list, optional
+     List containing the lower and upper intensity limit to apply to the plots. The default is None, indicating no specific limits.
 
-Returns
--------
-None.
+ Returns
+ -------
+ None.
 
 ```
 
@@ -479,7 +483,7 @@ On the scatter plots a best fit curve is added, to display the general trend of 
 Quantification based on comparison with reference materials can be a powerful and straightforward tool to obtain semi-quantitative information on the elemental composition of a sample. The xrf_proc package can provide this information. Do note that it is still up to the user’s discretion to judge the reliability of the obtained results.
 
 ```
-def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, div_by_rhot=None, mask=None):
+def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, mask=None, density=None, thickness=None, composition=None):
 Quantify XRF data, making use of elemental yields as determined from reference files
   h5file and reffiles should both contain a norm/ data directory as determined by norm_xrf_batch()
   The listed ref files should have had their detection limits calculated by calc_detlim() before
@@ -490,6 +494,9 @@ Quantify XRF data, making use of elemental yields as determined from reference f
   A mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
       or a string data path within the h5file containing a 2D array of size equal to the h5file image size, where 0 values represent pixels to omit
       from the quantification and 1 values are pixels to be included. Alternatively, a 2D array can be directly supplied as argument.
+ In order to calculate the concentration as parts per million rather than the default areal concentration, one can supply a density, thickness and composition (as a .cnc file).
+     The composition file is used to calculate the fluorescence escape depth for each element to quantify, which is then compared to the (grain) thickness for further quantification.
+     Note that if the density keyword is set, so too should thickness. If composition is None, the provided thickness is used for all elements, irrespective of escape depth.
 
 Parameters
 ----------
@@ -509,12 +516,19 @@ absorb : tuple (['element'], 'cnc file'), optional
     using concentration values from the provided cnc files. The default is None, performing no absorption correction.
 snake : Boolean, optional
     If the scan was performed following a snake-like pattern, set to True to allow for appropriate image reconstruction. The default is False.
-div_by_rhot : float or None, optional
-    If keyword div_by_rhot is not None, the calculated aerial concentration is divided by a user-supplied div_by_rhot [g/cm²] value. The default is None.
 mask : String, list of strings, 2D binary integer array or None, optional
     A data mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
         or a string data path within the H5 file containing a 2D array of size equal to the H5 file image size, where 0 values represent pixels to omit
         from the quantification and 1 values are pixels to be included. Alternatively, a 2D array can be directly supplied as argument. The default is None.
+density : float or None, optional
+    If keyword density and thickness are not None, the calculated areal concentration is divided by a density [g/cm³]*thickness [cm] value. The default is None.
+thickness : float or None, optional
+    If keyword density and thickness are not None, the calculated areal concentration is divided by a density [g/cm³]*thickness [cm] value. The default is None.
+composition: string or None, optional
+    File directory path to the CNC file containing the (approximate) material composition information.
+    If composition is not None, and density and thickness are set, the CNC file is used to calculate the escape depth from this material for each element to quantify. 
+    The lower value between escape depth (99% absorption) and user-supplied thickness is used for further processing. Note that for all linetypes, the alfa line is used 
+    (i.e. if it is a K-line, Ka fluorescence energy will be considered).
 
 Yields
 ------

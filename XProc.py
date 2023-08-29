@@ -636,7 +636,7 @@ def div_by_cnc(h5file, cncfile, channel=None):
     file.close()
 
 ##############################################################################
-def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, div_by_rhot=None, mask=None):
+def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None, snake=False, mask=None, density=None, thickness=None, composition=None):
     """
     Quantify XRF data, making use of elemental yields as determined from reference files
       h5file and reffiles should both contain a norm/ data directory as determined by norm_xrf_batch()
@@ -648,6 +648,9 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
       A mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
           or a string data path within the h5file containing a 2D array of size equal to the h5file image size, where 0 values represent pixels to omit
           from the quantification and 1 values are pixels to be included. Alternatively, a 2D array can be directly supplied as argument.
+     In order to calculate the concentration as parts per million rather than the default areal concentration, one can supply a density, thickness and composition (as a .cnc file).
+         The composition file is used to calculate the fluorescence escape depth for each element to quantify, which is then compared to the (grain) thickness for further quantification.
+         Note that if the density keyword is set, so too should thickness. If composition is None, the provided thickness is used for all elements, irrespective of escape depth.
 
     Parameters
     ----------
@@ -667,13 +670,20 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         using concentration values from the provided cnc files. The default is None, performing no absorption correction.
     snake : Boolean, optional
         If the scan was performed following a snake-like pattern, set to True to allow for appropriate image reconstruction. The default is False.
-    div_by_rhot : float or None, optional
-        If keyword div_by_rhot is not None, the calculated areal concentration is divided by a user-supplied div_by_rhot [g/cm²] value. The default is None.
     mask : String, list of strings, 2D binary integer array or None, optional
         A data mask can be provided. This can either be a reference to a kmeans cluster ID supplied as a string or list of strings, e.g. 'kmeans/CLR2' or ['CLR2','CLR4'],
             or a string data path within the H5 file containing a 2D array of size equal to the H5 file image size, where 0 values represent pixels to omit
             from the quantification and 1 values are pixels to be included. Alternatively, a 2D array can be directly supplied as argument. The default is None.
-
+    density : float or None, optional
+        If keyword density and thickness are not None, the calculated areal concentration is divided by a density [g/cm³]*thickness [cm] value. The default is None.
+    thickness : float or None, optional
+        If keyword density and thickness are not None, the calculated areal concentration is divided by a density [g/cm³]*thickness [cm] value. The default is None.
+    composition: string or None, optional
+        File directory path to the CNC file containing the (approximate) material composition information.
+        If composition is not None, and density and thickness are set, the CNC file is used to calculate the escape depth from this material for each element to quantify. 
+        The lower value between escape depth (99% absorption) and user-supplied thickness is used for further processing. Note that for all linetypes, the alfa line is used 
+        (i.e. if it is a K-line, Ka fluorescence energy will be considered).
+    
     Yields
     ------
     bool
@@ -682,6 +692,9 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     """
     import Xims
 
+    if (density is not None and thickness is None) or (density is None and thickness is not None):
+            print("ERROR: quant_with_ref: density and thickness should both be not-None values if set.")
+            return False
 
     # first let's go over the reffiles and calculate element yields
     #   distinguish between K and L lines while doing this
@@ -1049,17 +1062,43 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 sumint[i] = sumint[i] / yld_interpol
                 ims_err[i,:,:] = np.sqrt(ims_err[i,:,:]*ims_err[i,:,:]+yld_interpol_err*yld_interpol_err)
                 sumint_err[i] = np.sqrt(sumint_err[i]*sumint_err[i]+yld_interpol_err*yld_interpol_err)
+        # split rhot keyword into rho and t, and calculate the escape depth.
+        if density is not None and thickness is not None:
+            if composition is None:
+                thick = thickness
+            else:
+                # read in cnc file data
+                cnc = read_cnc(composition)
+                el_name = names[i].split(" ")[0]
+                # Check if the perceived sample thickness is bigger than the escape depth for said element.
+                #   If K line, consider KL3 information depth, if L line the L3M5 ...
+                if h5_lt[i] == 'K':
+                    line = 'KL3' #Ka1
+                elif h5_lt[i] == 'L':
+                    line = 'L3M5' #La1
+                elif h5_lt[i] == 'M':
+                    line = 'M5N7' #Ma1
+                mu = 0
+                for i in range(0, cnc.z.size):
+                    mu += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(el_name, line))['total'][0] * cnc.conc[i]/1E6
+                escape_depth = (np.log(100)/(density*mu)) #in cm
+                if escape_depth < thickness:
+                    thick = escape_depth
+                else:
+                    thick = thickness
+            div_by_rhot = float(density*thick)
+            ims[i,:,:] /= div_by_rhot
+            sumint[i] /= div_by_rhot
+
 
     # # check which relative errors are largest: sumint_err or np.average(ims_err) or np.std(ims)/np.average(ims)
     # #   then use this error as the sumint_err
     # for i in range(sumint_err.size):
     #     sumint_err[i] = np.max(np.asarray([sumint_err[i], np.average(ims_err[i,:,:]), np.std(ims[i,:,:])/np.average(ims[i,:,:])]))
 
+    # set appropriate concentration unit
     conc_unit = "ug/cm²"
-    if div_by_rhot is not None:
-        div_by_rhot = float(div_by_rhot)
-        ims /= div_by_rhot
-        sumint /= div_by_rhot
+    if density is not None and thickness is not None:
         conc_unit = "ug/g"
         
     # convert relative errors to absolute errors
@@ -1529,9 +1568,26 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
         conc0_areal_err = np.zeros(names0.size)
         for j in range(0, names0.size):
             el_name = names0[j].split(" ")[0]
+            # Check if the perceived sample thickness is bigger than the information depth for said element.
+            #   If K line, consider KL3 information depth, if L line the L3M5 ...
+            line = names0[j].split(' ')[1]
+            if line[0] == 'K':
+                line = 'KL3' #Ka1
+            elif line[0] == 'L':
+                line = 'L3M5' #La1
+            elif line[0] == 'M':
+                line = 'M5N7' #Ma1
+            mu = 0
+            for i in range(0, cnc.z.size):
+                mu += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(el_name, line))['total'][0] * cnc.conc[i]/1E6 #in cm²/g
+            escape_depth = (np.log(100)/(cnc.density*1E-3*mu)) #in cm
+            virtual_sample_thickness = (cnc.thickness/np.sin(sampletilt/180.*np.pi))*1E-4 #in cm
             for i in range(0, cnc.z.size):
                 if el_name == Elements.getsymbol(cnc.z[i]):
-                    conc0_areal[j] = cnc.conc[i]*cnc.density*(cnc.thickness/np.sin(sampletilt/180.*np.pi))*1E-7 # unit: [ug/cm²]
+                    if escape_depth > virtual_sample_thickness:
+                        conc0_areal[j] = cnc.conc[i]*cnc.density*virtual_sample_thickness*1E-3 # unit: [ug/cm²]
+                    else:
+                        conc0_areal[j] = cnc.conc[i]*cnc.density*escape_depth*1E-3 # unit: [ug/cm²]
                     conc0_areal_err[j] = (cnc.err[i]/cnc.conc[i])*conc0_areal[j] # unit: [ug/cm²]
                     conc0[j] = cnc.conc[i] # unit: [ppm]
                     conc0_err[j] = (cnc.err[i]/cnc.conc[i])*conc0[j] # unit: [ppm]    
@@ -1605,7 +1661,7 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
                     dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch'+str(index)+'_DL.png', ytitle=plotytitle)
 
 ##############################################################################
-def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, rotate=0, fliph=False, cb_opts=None, clim=None):
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, sqrt=False, rotate=0, fliph=False, cb_opts=None, clim=None):
     """
     Generate publishing quality overview images of all fitted elements in H% file (including scale bars, colorbar, ...)
 
@@ -1623,6 +1679,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
         Image scale bar size to be displayed in µm.
     log : Boolean, optional
         If True, the Briggs logarithm of the data is displayed. The default is False.
+    sqrt : Boolean, optional
+        If True, the square root of the data is displayed. The default is False.
     rotate : integer, optional
         Amount of degrees, rounded to nearest 90, over which images should be rotated. The default is 0.
     fliph : Boolean, optional
@@ -1644,6 +1702,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
     imsdata0.data[imsdata0.data < 0] = 0.
     if log:
         filename += '_log'
+    if sqrt:
+        filename += '_sqrt'
     try:
         imsdata1 = Xims.read_h5(h5file, datadir+'/channel01/ims')
         if imsdata1 is None:
@@ -1675,6 +1735,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
     if cb_opts is None:
         if log:
             cb_opts = Xims.Colorbar_opt(title='log. Int.;[cts]')
+        elif sqrt:
+            cb_opts = Xims.Colorbar_opt(title='sqrt. Int.;[cts]')
         else:
             cb_opts = Xims.Colorbar_opt(title='Int.;[cts]')
     nrows = int(np.ceil(len(imsdata0.names)/ncols)) # define nrows based on ncols
@@ -1682,6 +1744,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
 
     if log:
         imsdata0.data = np.log10(imsdata0.data)
+    if sqrt:
+        imsdata0.data = np.sqrt(imsdata0.data)
 
     
     Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png')
@@ -1699,6 +1763,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, r
 
         if log:
             imsdata1.data = np.log10(imsdata1.data)
+        if sqrt:
+            imsdata1.data = np.sqrt(imsdata1.data)
         
         Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png')
 
@@ -1950,7 +2016,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     print("Done")
     
 ##############################################################################
-def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
+def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, verbose=None):
     """
     Fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
     The cfg file should use the SNIP background subtraction method. Others will fail as considered 'too slow' by the PyMca fast linear fit routine itself.
@@ -1963,6 +2029,8 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         File directory path to the H5 file containing the data.
     cfgfile : string
         File path to the PyMca-type CFG configuration file containing the fitting parameters.
+    channel: NoneType, optional
+        Set channel to a list of channel names to which the fitting should be limited. e.g. channel=['channel01'] 
     standard : NoneType, optional
         If not a NoneType (e.g. string) then all spectra are integrated separately without using the fast linear fit procedure. The default is None.
     ncores : Integer, optional
@@ -1980,7 +2048,10 @@ def  fit_xrf_batch(h5file, cfgfile, standard=None, ncores=None, verbose=None):
         
     # let's read the h5file structure and launch our fit.
     file = h5py.File(h5file, 'r')
-    keys = [key for key in file['raw'].keys() if 'channel' in key]
+    if channel is None:
+        keys = [key for key in file['raw'].keys() if 'channel' in key]
+    else:
+        keys = channel
     for index, chnl in enumerate(keys):
         if cfgfile.size == 1:
             cfg = str(cfgfile)
