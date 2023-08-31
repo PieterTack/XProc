@@ -1125,6 +1125,11 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
     dset = file['quant']
     dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    if composition is not None:
+        dset.attrs["Composition"] = composition
+    if density is not None and thickness is not None:
+        dset.attrs["density"] = density
+        dset.attrs["thickness"] = thickness
     if absorb is not None:
         file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
         file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
