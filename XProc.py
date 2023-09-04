@@ -1125,6 +1125,11 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     file.create_dataset('quant/'+channel+'/refs', data=str(reffiles).encode('utf8'))
     dset = file['quant']
     dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    if composition is not None:
+        dset.attrs["Composition"] = composition
+    if density is not None and thickness is not None:
+        dset.attrs["density"] = density
+        dset.attrs["thickness"] = thickness
     if absorb is not None:
         file.create_dataset('quant/'+channel+'/ratio_exp', data=ratio_ka1_kb1, compression='gzip', compression_opts=4)
         file.create_dataset('quant/'+channel+'/ratio_th', data=rate_ka1/rate_kb1)
@@ -3131,6 +3136,219 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         del spectra1
     print("ok")
 
+##############################################################################
+def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True):
+    '''
+    Convert PUMA Nexus format to our H5 structure file
+
+    Parameters
+    ----------
+    pumanxs : String or list of strings
+        File path(s) of the PUMA Nexus file(s) to convert. When multiple are provided, the data is concatenated.
+    mot1_name : string, optional
+        Motor 1 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Tz1'.
+    mot2_name : String, optional
+        Motor 2 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Ts2'.
+    ch0id : string, optional
+        detector channel 0 identifier within the PUMA Nexus file. The default is ["channel00", "channel01"].
+    ch1id : string, optional
+        detector channel 1 identifier within the PUMA Nexus file. The default is None.
+    i0id : string, optional
+        I0 (incident beam flux) identifier within the PUMA Nexus file. The default is ''.
+    i1id : string, optional
+        I1 (transmitted beam flux) identifier within the PUMA Nexus file. The default is None.
+    icrid : string, optional
+        ICR identifier within the PUMA Nexus file. The same identifier label is used for multiple detectors. The default is 'icr'.
+    ocrid : string, optional
+        OCR identifier within the PUMA Nexus file. The same identifier label is used for multiple detectors. The default is 'ocr'.
+    tmid : string, optional
+        Measurement time identifier within the PUMA Nexus file. The default is "realtime00".
+    sort : Boolean, optional
+        If True the data is sorted following the motor encoder positions. The default is True.
+
+    Returns
+    -------
+    None.
+
+    '''
+    
+    if type(pumanxs) is not type([]):
+        pumanxs = [pumanxs]
+    if type(ch0id) is not type([]):
+        ch0id = [ch0id]
+    if ch1id is not None:
+        if type(ch1id) is not type([]):
+            ch1id = [ch1id]
+    basedir = "acq/scan_data/"
+        
+    # puma filetype does not appear to have command line, so we'll just refer to the scan name itself
+    scan_cmd = ' '.join([os.path.splitext(os.path.basename(nxs))[0] for nxs in pumanxs]) 
+    
+    for index, nxs in enumerate(pumanxs):
+        print('Processing PUMA file '+nxs+'...', end='')
+        if index == 0:
+            with h5py.File(nxs,'r') as f:
+                mot1 = np.asarray(f[basedir+mot1_name])
+                mot2 = np.asarray(f[basedir+mot2_name])
+                tm = np.asarray(f[basedir+tmid]) #realtime; there is one for each detector channel, but they should be (approx) the same value
+                for i, chnl in enumerate(ch0id):
+                    if i == 0:
+                        spectra0 = np.asarray(f[basedir+chnl])
+                        # icr and ocr id must be completed with last 2 digits from channel id
+                        icr0 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                        ocr0 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+                    else:
+                        spectra0 = np.asarray(f[basedir+chnl])
+                        # icr and ocr id must be completed with last 2 digits from channel id
+                        icr0 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                        ocr0 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+                 
+                # at this time not certain there will be i0 or i1 data available. If not, just use 1-filled matrix of same size as mot1.
+                if i0id != "":
+                    i0 = np.asarray(f[basedir+i0id])
+                else:
+                    i0 = mot1*0.+1
+                if i1id is not None:
+                    i1 = np.asarray(f[basedir+i1id])
+    
+                if ch1id is not None:
+                    for i, chnl in enumerate(ch1id):
+                        if i == 0:
+                            spectra1 = np.asarray(f[basedir+chnl])
+                            # icr and ocr id must be completed with last 2 digits from channel id
+                            icr1 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                            ocr1 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+                        else:
+                            spectra1 = np.asarray(f[basedir+chnl])
+                            # icr and ocr id must be completed with last 2 digits from channel id
+                            icr1 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                            ocr1 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+        else:
+           # figure out which motor axis dimension is identical to last scans, so that one can concatenate them.
+            with h5py.File(nxs,'r') as f:
+                olddim = mot1.shape
+                newdim = np.asarray(f[basedir+mot1_name]).shape
+                if olddim[0] == newdim[0] and olddim[1] != newdim[1]:
+                    axis=0
+                elif olddim[0] != newdim[0] and olddim[1] == newdim[1]:
+                    axis=1
+                elif olddim[0] == newdim[0] and olddim[1] == newdim[1]:
+                    # here have to monitor actual motorpositions to figure out which axis was moving...
+                    if np.allclose(np.asarray(f[basedir+mot1_name]), mot1, 1E-4):
+                        axis=0
+                    else:
+                        axis=1
+                else:
+                    axis=0
+                mot1 = np.concatenate((mot1, np.asarray(f[basedir+mot1_name])), axis=axis)
+                mot2 = np.concatenate((mot2, np.asarray(f[basedir+mot2_name])), axis=axis)
+                tm = np.concatenate((tm, np.asarray(f[basedir+tmid])), axis=axis) #realtime; there is one for each detector channel, but they should be (approx) the same value
+                for i, chnl in enumerate(ch0id):
+                    if i == 0:
+                        spectra0 = np.concatenate((spectra0, np.asarray(f[basedir+chnl])), axis=axis)
+                        # icr and ocr id must be completed with last 2 digits from channel id
+                        icr0 = np.concatenate((icr0, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
+                        ocr0 = np.concatenate((ocr0, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
+                    else:
+                        spectra0 = np.concatenate((spectra0, np.asarray(f[basedir+chnl])), axis=axis)
+                        # icr and ocr id must be completed with last 2 digits from channel id
+                        icr0 = np.concatenate((icr0, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
+                        ocr0 = np.concatenate((ocr0, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
+                 
+                # at this time not certain there will be i0 or i1 data available. If not, just use 1-filled matrix of same size as mot1.
+                if i0id != "":
+                    i0 = np.concatenate((i0, np.asarray(f[basedir+i0id])), axis=axis)
+                else:
+                    i0 = np.concatenate((i0, mot1*0.+1), axis=axis)
+                if i1id is not None:
+                    i1 = np.concatenate((i1, np.asarray(f[basedir+i1id])), axis=axis)
+                
+                if ch1id is not None:
+                    for i, chnl in enumerate(ch1id):
+                        if i == 0:
+                            spectra1 = np.concatenate((spectra1, np.asarray(f[basedir+chnl])), axis=axis)
+                            # icr and ocr id must be completed with last 2 digits from channel id
+                            icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
+                            ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
+                        else:
+                            spectra1 = np.concatenate((spectra1, np.asarray(f[basedir+chnl])), axis=axis)
+                            # icr and ocr id must be completed with last 2 digits from channel id
+                            icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
+                            ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
+                
+
+    # sort the positions line per line and adjust all other data accordingly
+    if sort is True:
+        for i in range(mot2[:,0].size):
+            sort_id = np.argsort(mot2[i,:])
+            spectra0[i,:,:] = spectra0[i,sort_id,:]
+            icr0[i,:] = icr0[i,sort_id]
+            ocr0[i,:] = ocr0[i,sort_id]
+            if ch1id is not None:
+                	spectra1[i,:,:] = spectra1[i,sort_id,:]
+                	icr1[i,:] = icr1[i,sort_id]
+                	ocr1[i,:] = ocr1[i,sort_id]
+            mot1[i,:] = mot1[i,sort_id]
+            mot2[i,:] = mot2[i,sort_id]
+            i0[i,:] = i0[i,sort_id]
+            if i1id is not None:
+                	i1[i,:] = i1[i,sort_id]
+            tm[i,:] = tm[i,sort_id]
+    
+        # To make sure (especially when merging scans) sort mot2 as well
+        for i in range(mot1[0,:].size):
+            sort_id = np.argsort(mot1[:,i])
+            spectra0[:,i,:] = spectra0[sort_id,i,:]
+            icr0[:,i] = icr0[sort_id,i]
+            ocr0[:,i] = ocr0[sort_id,i]
+            if ch1id is not None:
+                spectra1[:,i,:] = spectra1[sort_id,i,:]
+                icr1[:,i] = icr1[sort_id,i]
+                ocr1[:,i] = ocr1[sort_id,i]
+            mot1[:,i] = mot1[sort_id,i]
+            mot2[:,i] = mot2[sort_id,i]
+            i0[:,i] = i0[sort_id,i]
+            if i1id is not None:
+                i1[:,i] = i1[sort_id,i]
+            tm[:,i] = tm[sort_id,i]
+        
+    
+    # calculate maxspec and sumspec
+    sumspec0 = np.sum(spectra0[:], axis=(0,1))
+    maxspec0 = np.zeros(sumspec0.shape[0])
+    for i in range(sumspec0.shape[0]):
+        maxspec0[i] = spectra0[:,:,i].max()
+    if ch1id is not None:
+        sumspec1 = np.sum(spectra1[:], axis=(0,1))
+        maxspec1 = np.zeros(sumspec1.shape[0])
+        for i in range(sumspec1.shape[0]):
+            maxspec1[i] = spectra1[:,:,i].max()
+    
+    # write h5 file in our structure
+    filename = pumanxs[0].split(".")[0]+'_conv.h5'
+    with h5py.File(filename, 'w') as f:
+        f.create_dataset('cmd', data=scan_cmd)
+        f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/sumspec', data=sumspec0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/maxspec', data=maxspec0, compression='gzip', compression_opts=4)
+        if ch1id is not None:
+            f.create_dataset('raw/channel01/spectra', data=spectra1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/icr', data=icr1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/ocr', data=ocr1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/sumspec', data=sumspec1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/maxspec', data=maxspec1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+        if i1id is not None:
+            f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+        dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot1_name
+        dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot2_name
+        f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
+    print("Done")
+    
 ##############################################################################
 def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
     """

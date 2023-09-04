@@ -215,6 +215,41 @@ None.
 ```
 
 ```
+def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True):
+Convert PUMA Nexus format to our H5 structure file
+
+Parameters
+----------
+pumanxs : String or list of strings
+    File path(s) of the PUMA Nexus file(s) to convert. When multiple are provided, the data is concatenated.
+mot1_name : string, optional
+    Motor 1 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Tz1'.
+mot2_name : String, optional
+    Motor 2 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Ts2'.
+ch0id : string, optional
+    detector channel 0 identifier within the PUMA Nexus file. The default is ["channel00", "channel01"].
+ch1id : string, optional
+    detector channel 1 identifier within the PUMA Nexus file. The default is None.
+i0id : string, optional
+    I0 (incident beam flux) identifier within the PUMA Nexus file. The default is ''.
+i1id : string, optional
+    I1 (transmitted beam flux) identifier within the PUMA Nexus file. The default is None.
+icrid : string, optional
+    ICR identifier within the PUMA Nexus file. The same identifier label is used for multiple detectors. The default is 'icr'.
+ocrid : string, optional
+    OCR identifier within the PUMA Nexus file. The same identifier label is used for multiple detectors. The default is 'ocr'.
+tmid : string, optional
+    Measurement time identifier within the PUMA Nexus file. The default is "realtime00".
+sort : Boolean, optional
+    If True the data is sorted following the motor encoder positions. The default is True.
+
+Returns
+-------
+None.
+
+```
+
+```
 def ConvDeltaCsv(csvfile):
 Read the Delta Premium handheld CSV files and restructure as H5 for further processing
 
