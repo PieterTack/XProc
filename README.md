@@ -215,7 +215,7 @@ None.
 ```
 
 ```
-def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Ts2", mot2_name="COD_GONIO_Tz1", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True):
+def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True):
 Convert PUMA Nexus format to our H5 structure file
 
 Parameters
@@ -223,9 +223,9 @@ Parameters
 pumanxs : String or list of strings
     File path(s) of the PUMA Nexus file(s) to convert. When multiple are provided, the data is concatenated.
 mot1_name : string, optional
-    Motor 1 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Ts2'.
+    Motor 1 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Tz1'.
 mot2_name : String, optional
-    Motor 2 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Tz1'.
+    Motor 2 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Ts2'.
 ch0id : string, optional
     detector channel 0 identifier within the PUMA Nexus file. The default is ["channel00", "channel01"].
 ch1id : string, optional
