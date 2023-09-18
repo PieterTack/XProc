@@ -537,6 +537,76 @@ def add_h5s(h5files, newfilename):
         print("Done")
 
 ##############################################################################
+# Join Kmeans clustering clusters together, to allow for more straightforward imaging and sumspectrum representation.
+#   Note that it is up to the user's discretion which clusters are combined, with respect to the physical interpretation of the results.
+def join_clrs(h5file, channel='channel00', join=[[0,3],[1,2,4]], nosumspec=False):
+    """
+    Join Kmeans clustering clusters together, to allow for more straightforward imaging and sumspectrum representation.
+    Note that it is up to the user's discretion which clusters are combined, with respect to the physical interpretation of the results.
+    Joined data will be stored within the same h5file, in the 'joined_clr/'+channel data directory.
+
+    Parameters
+    ----------
+    h5file : string
+        File paths to the H5 files containing the data to be summed.
+    channel : string, optional
+        Detector channel for which clusters should be joined. The default is 'channel00', indicating that the software will sum data in the folder 'kmeans/channel00/'.
+    join : list of lists containing integers, optional
+        The integer values of the clusters that should be joined. Place the integers that should be joined in a single list. 
+        The default is [[0,3],[1,2,4]], indicating that clusters 0 will be joined with 3 (new index:0), and additionally clusters 1, 2 and 4 will be joined together (new index:1).
+    nosumspec : Bool, optional
+        Set to True in order to omit calculating sumspectra, for instance when no sumspectra are available. The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    import h5py
+    from datetime import datetime
+
+    
+    datadir = "kmeans/"+channel+"/"
+    # read the h5 file
+    with h5py.File(h5file,'r') as f:
+        ims  = np.array(f[datadir+"ims"])
+        if nosumspec is False:
+            sumspeckeys = [key for key in f[datadir].keys() if 'sumspec' in key] #these should be ordered alphabetically
+            sumspectra = []
+            for key in sumspeckeys:
+                sumspectra.append(np.array(f[datadir+"/"+key]))
+    
+    # join the clusters
+    joined_ims = np.zeros(ims.shape)
+    joined_sum = []
+    for i in len(join):
+        joined_ims[np.isin(ims, join[i])] = i
+        if nosumspec is False:
+            temp = sumspectra[0]*0.
+            for index in join[i]:
+                temp += sumspectra[index]
+            joined_sum.append(temp)
+        
+    # write the joined cluster data
+    with h5py.File(h5file,'r+') as file:
+        try:
+            del file['joined_clr/'+channel]
+        except Exception:
+            pass
+        file.create_dataset('joined_clr/'+channel+'/nclusters', data=len(join))
+        file.create_dataset('joined_clr/'+channel+'/data_dir_clustered', data=datadir.encode('utf8'))
+        file.create_dataset('joined_clr/'+channel+'/ims', data=joined_ims, compression='gzip', compression_opts=4)
+        dset = file['joined_clr']
+        dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        file.create_dataset('joined_clr/'+channel+'/join_id', data=join)
+        if nosumspec is False:
+            for i in len(join):
+                dset = file.create_dataset('joined_clr/'+channel+'/sumspec_'+str(i), data=np.asarray(joined_sum)[i], compression='gzip', compression_opts=4)    
+                dset.attrs["NPixels"] = np.asarray(np.where(joined_ims.ravel() == i)).size
+
+        
+        
+##############################################################################
 # bins the raw data of an h5 file by a given factor, using the bin_ndarray function from https://gist.github.com/derricw/95eab740e1b08b78c03f.
 def bin_h5(h5file, binfactor):
     """
