@@ -732,6 +732,151 @@ import sys
 sys.path.insert(1, ‘</data_directory/contaning/plotims>’)
 import plotims as Ims
 ```
+
+### Using Xmod
+In some cases, the default functions provided by XProc appear insufficient for straightforward data processing. In such cases, Xmod.py provides a series of tool that may be of use.
+
+#### Converting H5 data back to other file types
+When collaborators or other organisations are not familiar with the H5 file format, it may be best to simply convert it back to other data types. Xmod allows for the following functions:
+
+```
+def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
+Convert XProcH5 intensity data to csv format (column separation by ;)
+Column headers are the respective element names, whereas rows represent the different motor1 coordinates
+    (in handheld XRF data these are the separate file names)
+
+Parameters
+----------
+h5file : string or list of strings
+    File directory path(s) to the H5 file(s) containing the data.
+h5dir : string
+    Data directory within the H5 file containing the data to be converted, e.g. "/norm/channel00/ims". 
+    A 'names' directory should be present in the same parent folder, or the grandeparent folder in case of sumspectra results. 
+csvfile : string
+    Output file path name.
+overwrite : Boolean, optional
+    If True, allows to overwrite the csvfile. The default is False, preventing overwriting CSV files.
+
+Raises
+------
+ValueError
+    Returned when the supplied CSVfile already exists and overwrite is False.
+```
+
+Although this is a function within the Xims.py software package, it has a similar function and as such is mentioned here as well.
+Do not forget to import Xims and run as Xims.save_as_tif() in your python script.
+```
+def save_as_tif(h5file, h5channel, el2plot, savefile_prefix):
+Convert a H5 file data directory to separate *.TIF files, one for each provided element (el2plot keyword).
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data to be converted.
+h5channel : string
+    H5 data directory containing the (ims) data to be converted.
+el2plot : string (list)
+    To convert all elements within the h5channel, set to 'All'. Alternatively, provide a list of strings with the element name identifiers to be converted.
+savefile_prefix : string
+    A prefix for the file name the generated TIF files should contain.
+
+Returns
+-------
+bool
+    returs True if conversion succeeded, False if unsuccesful.
+
+```
+
+
+#### H5 file combination and alteration
+Some functions are prepared to easily combine (sum together) H5 files, or to remove a few lines from the data that can be intrusive to further data processing attempts.
+Note that under no circumstances the initial raw data of an experiment should be altered. However, the initially merged H5 files are sometimes altered (for instance the '/raw' directory within the H5 file), so be wary of the effects thereof on further data processing.
+
+```
+def rm_line(h5file, lineid, axis=1):
+Delete a line or group of lines from a fitted dataset (can be useful when data interpolation has to occur but there are empty pixels)
+Note that this also removes lines from I0, I1, acquisition_time, mot1 and mot2! 
+    If you want to recover this data one has to re-initiate processing from the raw data.
+
+Parameters
+----------
+h5file : string
+    File directory path to the H5 file containing the data to be removed.
+lineid : (list of) integer(s)
+    Line id integers to be removed.
+axis : integer, optional
+    axis along which the lines should be removed (i.e. row or column). The default is 1.
+```
+
+```
+def add_h5s(h5files, newfilename):
+Sum together multiple h5 files of the same dimensions.
+  Make sure it is also ordered similarly etc...
+  Motor positions are averaged.
+  Use at your own risk.
+
+Parameters
+----------
+h5file : string
+    File paths to the H5 files containing the data to be summed.
+newfilename : string
+    File path to the newly generated H5 file.
+```
+
+```
+def XProcH5_combine(files, newfile, ax=0):
+Join two files together, stitched one after the other. This only combines raw files, 
+and as such should be done before any fitting or further processing.
+
+Parameters
+----------
+files : list of strings, optional
+    The H5 file paths to be combined.
+newfile : string, optional
+    H5 file path of the new file.
+ax : integer, optional
+    Axis along which the data should be concatenated. The default is 0.
+```
+
+Additionally, Xmod allows for further refining Kmeans clustered data for straightforward imaging purposes: by combining separate clusters of similar chemical composition a more clear variance reduction overview can be provided.
+```
+def join_clrs(h5file, channel='channel00', join=[[0,3],[1,2,4]], nosumspec=False):
+Join Kmeans clustering clusters together, to allow for more straightforward imaging and sumspectrum representation.
+Note that it is up to the user's discretion which clusters are combined, with respect to the physical interpretation of the results.
+Joined data will be stored within the same h5file, in the 'joined_clr/'+channel data directory.
+
+Parameters
+----------
+h5file : string
+    File paths to the H5 files containing the data to be summed.
+channel : string, optional
+    Detector channel for which clusters should be joined. The default is 'channel00', indicating that the software will sum data in the folder 'kmeans/channel00/'.
+join : list of lists containing integers, optional
+    The integer values of the clusters that should be joined. Place the integers that should be joined in a single list. 
+    The default is [[0,3],[1,2,4]], indicating that clusters 0 will be joined with 3 (new index:0), and additionally clusters 1, 2 and 4 will be joined together (new index:1).
+nosumspec : Bool, optional
+    Set to True in order to omit calculating sumspectra, for instance when no sumspectra are available. The default is False.
+```
+
+In some cases an XRF scan was performed at very high spatial resolution, and it is preferable to improve the counting statistics of the scan at the cost of spatial resolution.
+Although such binning of the data can easily be performed during an (imaging) step at one of the later stages of the data processing, 
+it may be opportune to do this in the first step before any spectral integration is performed, to reduce the total processing time. 
+```
+def bin_h5(h5file, binfactor):
+Bin the raw data directory of a XProc H5 file by a given binning factor, thus reducing the amount of spectra to integrate at the cost of spatial resolution.
+    A binning factor of 2 will group 2x2 pixels.
+    Motor positions will be averaged during binning, whereas other counters are summed. Detector channels are not binned, i.e. the energy resolution is not compromised.
+    Be wary of binning raw data of (snake wise) continuous scans as motor positions may not match on a pixel-id level.
+    Binned data is overwritten, so be wary of raw data loss.
+
+Parameters
+----------
+h5file : String
+    File directory to the H5 file that should be binned. This file should contain a /raw directory, as generated by the XProc software.
+binfactor : int
+    Factor with which the spatial resolution should decrease. I.e. a binning factor of 2 effectively halves the resolution (2x2 pixels are reduced to 1).
+```
+
   
 ## Example file
 Below is an example python processing file:
