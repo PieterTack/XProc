@@ -31,21 +31,41 @@ from PyQt5.QtWidgets import QApplication, QWidget, QDialog
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
 from PyQt5.QtWidgets import QCheckBox, QPushButton, QLabel, QScrollArea, QSplitter,\
     QLineEdit, QTabWidget, QFileDialog, QComboBox, QTreeWidget, QTreeWidgetItem
-   
+
+class Poll_spe():
+    def __init__(self, spefile, parent=None):  
+        self.paths=[]
+        self.h5file = spefile
+        
+        self.paths = [self.h5file]
+
+        # extract the spectrum from the SPE file
+        with open(self.h5file, 'r') as f:
+            lines = f.readlines()
+        
+        data_id = lines.index("$DATA:\n")
+        
+        spectrum = [item for sublist in [np.fromstring(line, sep=' ') for line in lines[data_id+2:]] for item in sublist]
+        self.specs = [np.asarray(spectrum)]
+
+    def spe(self, path):
+        return self.specs[self.paths.index(path)]
+    def dirs(self):
+        return self.paths
+        
+
 class Poll_h5dir():
     def __init__(self, h5file, parent=None):
         self.paths=[]
         self.h5file = h5file
         # extract all Dataset paths from the H5 file
-        f = h5py.File(self.h5file, 'r')
-        self.paths = self.descend(f, paths=None)
-
-        # in this case, we only want spectra
-        self.paths = [path for path in self.paths if 'sumspec' in path or 'maxspec' in path]    
-        self.specs = [np.array(f[path]) for path in self.paths]
+        with h5py.File(self.h5file, 'r') as f:
+            self.paths = self.descend(f, paths=None)
+    
+            # in this case, we only want spectra
+            self.paths = [path for path in self.paths if 'sumspec' in path or 'maxspec' in path]    
+            self.specs = [np.array(f[path]) for path in self.paths]
         
-        f.close()
-
     def spe(self, path):
         return self.specs[self.paths.index(path)]
 
@@ -850,7 +870,12 @@ class Config_GUI(QWidget):
             # read in first ims file, to obtain data on elements and dimensions
             if(self.filename != "''"):
                 if self.filename.split('.')[-1] == 'spe':
-                    pass #TODO
+                    self.file = Poll_spe(self.filename)
+                    self.subdirs = self.file.dirs()
+                    self.rawspe = self.file.spe(self.subdirs[0])
+                    # change dropdown widget to display appropriate subdirs
+                    self.subdir.clear()
+                    self.subdir.addItems(self.subdirs)
                 elif self.filename.split('.')[-1] == 'csv':
                     pass #TODO
                 elif self.filename.split('.')[-1] == 'h5':
@@ -1202,8 +1227,11 @@ class Config_GUI(QWidget):
                     self.ConfigDict['attenuators']['Matrix'].append(self.ConfigDict['attenuators']['Matrix'][4]+self.ConfigDict['attenuators']['Matrix'][5])
             else:
                 self.fit_scatter.setChecked(False)
-                if self.ConfigDict['fit']['energy'][:] is not None:
-                    self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
+                if self.ConfigDict['fit']['energy'] is not None:
+                    if type(self.ConfigDict['fit']['energy']) is type([]):
+                        self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy'][0]))
+                    else:
+                        self.raylE.setText("{:.3f}".format(self.ConfigDict['fit']['energy']))
                 else:
                     self.raylE.setText("{:.3f}".format(20.))
                     self.ConfigDict['fit']['energy'] = [20.]
