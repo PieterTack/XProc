@@ -2436,8 +2436,11 @@ def ConvDeltaCsv(csvfile):
 
     """
     import pandas as pd
-    
-    file = pd.read_csv(csvfile, header=None, low_memory=False)
+
+    try:
+        file = pd.read_csv(csvfile, header=None, sep=None)
+    except UnicodeError:
+        file = pd.read_csv(csvfile, header=None, sep=None, encoding='utf_16')
     
     rowheads = [n for n in file[0] if n is not np.NaN]
     # loop through the different columns and assign them to spectra0, spectra2 etc.
