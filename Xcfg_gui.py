@@ -382,7 +382,7 @@ class Config_GUI(QWidget):
         self.cte.setMaximumWidth(50)
         self.cte.setValidator(QDoubleValidator(-1E6, 1E6,3))
         self.gain_lbl = QLabel('gain:')
-        self.gain = QLineEdit("{:.3f}".format(self.ConfigDict['detector']['gain']))
+        self.gain = QLineEdit("{:.4f}".format(self.ConfigDict['detector']['gain']))
         self.gain.setMaximumWidth(50)
         self.gain.setValidator(QDoubleValidator(-1E6, 1E6,3))
         self.fano_lbl = QLabel('fano:')
@@ -1262,7 +1262,7 @@ class Config_GUI(QWidget):
             elif self.ConfigDict['fit']['continuum'] == 5:
                 self.fittype.setCurrentText('Exp. polynomial')
                 self.fitpower.setText("{:d}".format(self.ConfigDict['fit']['exppolorder']))
-            self.gain.setText("{:.3f}".format(self.ConfigDict['detector']['gain']))
+            self.gain.setText("{:.4f}".format(self.ConfigDict['detector']['gain']))
             self.cte.setText("{:.3f}".format(self.ConfigDict['detector']['zero']))
             self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
             self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
@@ -1307,6 +1307,12 @@ class Config_GUI(QWidget):
             'linesarea':fitarea,
             'linesbkgr':bkgr
             }
+        # update cte and gain fields with fit-adjusted values
+        self.gain.setText("{:.4f}".format(result["fittedpar"][result["parameters"].index("Gain")]))
+        self.cte.setText("{:.3f}".format(result["fittedpar"][result["parameters"].index("Zero")]))
+        self.ConfigDict['detector']['gain'] = float(self.gain.text())
+        self.ConfigDict['detector']['zero'] = float(self.cte.text())
+
         self.update_plot(update=True) #redraw the original plot, with KLM lines
         self.adjust_fittree(self.fittree)
         
@@ -1317,7 +1323,7 @@ class Config_GUI(QWidget):
             if self.new_window.exec_() == QDialog.Accepted:
                 self.ConfigDict['detector']['gain'] = float(self.new_window.newgain)
                 self.ConfigDict['detector']['zero'] = float(self.new_window.newcte)
-                self.gain.setText("{:.3f}".format(self.ConfigDict['detector']['gain']))
+                self.gain.setText("{:.4f}".format(self.ConfigDict['detector']['gain']))
                 self.cte.setText("{:.3f}".format(self.ConfigDict['detector']['zero']))
                 self.fitmin.setText("{:.3f}".format(self.ConfigDict['fit']['xmin']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
                 self.fitmax.setText("{:.3f}".format(self.ConfigDict['fit']['xmax']*self.ConfigDict['detector']['gain']+self.ConfigDict['detector']['zero']))
