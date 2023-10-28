@@ -1079,8 +1079,8 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 elif h5_lt[i] == 'M':
                     line = 'M5N7' #Ma1
                 mu = 0
-                for i in range(0, cnc.z.size):
-                    mu += Elements.getmassattcoef(Elements.getsymbol(cnc.z[i]), Elements.getxrayenergy(el_name, line))['total'][0] * cnc.conc[i]/1E6
+                for j in range(0, cnc.z.size):
+                    mu += Elements.getmassattcoef(Elements.getsymbol(cnc.z[j]), Elements.getxrayenergy(el_name, line))['total'][0] * cnc.conc[j]/1E6
                 escape_depth = (np.log(100)/(density*mu)) #in cm
                 if escape_depth < thickness:
                     thick = escape_depth
@@ -1563,6 +1563,18 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
         # undo normalisation on intensities as performed during norm_xrf_batch
         #   in order to get intensities matching the current tm value (i.e. equal to raw fit values)
         names0 = np.asarray([n.decode('utf8') for n in names0[:]])
+        if 'Compt' in list(names0):
+            sum_fit0 = sum_fit0[np.arange(len(names0))!=list(names0).index('Compt')]
+            sum_bkg0 = sum_bkg0[np.arange(len(names0))!=list(names0).index('Compt')]
+            sum_fit0_err = sum_fit0_err[np.arange(len(names0))!=list(names0).index('Compt')]
+            sum_bkg0_err = sum_bkg0_err[np.arange(len(names0))!=list(names0).index('Compt')]
+            names0 = names0[np.arange(len(names0))!=list(names0).index('Compt')]
+        if 'Rayl' in list(names0):
+            sum_fit0 = sum_fit0[np.arange(len(names0))!=list(names0).index('Rayl')]
+            sum_bkg0 = sum_bkg0[np.arange(len(names0))!=list(names0).index('Rayl')]
+            sum_fit0_err = sum_fit0_err[np.arange(len(names0))!=list(names0).index('Rayl')]
+            sum_bkg0_err = sum_bkg0_err[np.arange(len(names0))!=list(names0).index('Rayl')]
+            names0 = names0[np.arange(len(names0))!=list(names0).index('Rayl')]
         sum_bkg0 = sum_bkg0/normfactor
         sum_fit0 = sum_fit0/normfactor
         # prune cnc.conc array to appropriate elements according to names0
@@ -3452,7 +3464,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 ocr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0 = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                i0 = i0/np.asarray(f[sc_id+'/instrument/machine/current'][:])
+                i0 = i0/np.asarray(f[sc_id+'/instrument/machine/current'])
             if i0corid is not None:
                 try:
                     i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))

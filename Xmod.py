@@ -450,7 +450,10 @@ def add_h5s(h5files, newfilename):
             if i == 0:
                 print("Reading "+h5files[i]+"...", end="")
                 f = h5py.File(h5files[i],'r')
-                cmd = f['cmd'][()].decode('utf8')
+                try:
+                    cmd = f['cmd'][()].decode('utf8')
+                except AttributeError:
+                    cmd = f['cmd'][()]
                 mot1 = np.array(f['mot1'])
                 mot1_name = str(f['mot1'].attrs["Name"])
                 mot2 = np.array(f['mot2'])
