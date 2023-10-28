@@ -3478,13 +3478,13 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             if i1id is not None:
                 i1 = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                    i1 = i1/np.asarray(f[sc_id+'/instrument/machine/current'][:])
+                    i1 = i1/np.asarray(f[sc_id+'/instrument/machine/current'])
                 if i1corid is not None:
                     try:
-                        i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
+                        i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid]))
                     except KeyError:
                         try:
-                            i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
+                            i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data']))
                         except KeyError:
                             print("***ERROR: no viable i1cor value obtained. Set to 1.")
                             i1cor = 1.
