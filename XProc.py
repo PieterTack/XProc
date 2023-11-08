@@ -3194,7 +3194,7 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
     if ch1id is not None:
         if type(ch1id) is not type([]):
             ch1id = [ch1id]
-    basedir = "acq/scan_data/"
+    
         
     # puma filetype does not appear to have command line, so we'll just refer to the scan name itself
     scan_cmd = ' '.join([os.path.splitext(os.path.basename(nxs))[0] for nxs in pumanxs]) 
@@ -3203,9 +3203,20 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
         print('Processing PUMA file '+nxs+'...', end='')
         if index == 0:
             with h5py.File(nxs,'r') as f:
+                if 'acq' in [key for key in f.keys()]:
+                    basedir = "acq/scan_data/"
+                    expflag = False
+                elif 'exp' in [key for key in f.keys()]:
+                    basedir = "exp/scan_data/"
+                    explag = True
                 mot1 = np.asarray(f[basedir+mot1_name])
                 mot2 = np.asarray(f[basedir+mot2_name])
+                if expflag:
+                    mot2 = np.array([mot2]*mot1.shape[1]).reshape(mot1.shape).T
                 tm = np.asarray(f[basedir+tmid]) #realtime; there is one for each detector channel, but they should be (approx) the same value
+                if expflag:
+                    mot2 = np.array([mot2]*mot1.shape[1]).reshape(mot1.shape).T
+                    tm = np.array([tm]*mot1.shape[1]).reshape(mot1.shape).T
                 for i, chnl in enumerate(ch0id):
                     if i == 0:
                         spectra0 = np.asarray(f[basedir+chnl])
