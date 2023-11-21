@@ -3208,26 +3208,36 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                     expflag = False
                 elif 'exp' in [key for key in f.keys()]:
                     basedir = "exp/scan_data/"
-                    explag = True
+                    expflag = True
                 mot1 = np.asarray(f[basedir+mot1_name])
-                mot2 = np.asarray(f[basedir+mot2_name])
-                if expflag:
-                    mot2 = np.array([mot2]*mot1.shape[1]).reshape(mot1.shape).T
+                if mot1.ndim > 1:
+                    mot2 = np.asarray(f[basedir+mot2_name])
                 tm = np.asarray(f[basedir+tmid]) #realtime; there is one for each detector channel, but they should be (approx) the same value
                 if expflag:
-                    mot2 = np.array([mot2]*mot1.shape[1]).reshape(mot1.shape).T
-                    tm = np.array([tm]*mot1.shape[1]).reshape(mot1.shape).T
+                    if mot1.ndim == 1:
+                        mot2 = mot1*0.
+                    else:
+                        mot2 = np.array([mot2]*mot1.shape[1]).T
+                        tm = np.array([tm]*mot1.shape[0])
                 for i, chnl in enumerate(ch0id):
                     if i == 0:
                         spectra0 = np.asarray(f[basedir+chnl])
                         # icr and ocr id must be completed with last 2 digits from channel id
-                        icr0 = np.asarray(f[basedir+icrid+chnl[-2:]])
-                        ocr0 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+                        if expflag:
+                            icr0 = np.asarray(f[basedir+icrid])
+                            ocr0 = np.asarray(f[basedir+ocrid])
+                        else:
+                            icr0 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                            ocr0 = np.asarray(f[basedir+ocrid+chnl[-2:]])
                     else:
                         spectra0 = np.asarray(f[basedir+chnl])
                         # icr and ocr id must be completed with last 2 digits from channel id
-                        icr0 = np.asarray(f[basedir+icrid+chnl[-2:]])
-                        ocr0 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+                        if expflag:
+                            icr0 = np.asarray(f[basedir+icrid])
+                            ocr0 = np.asarray(f[basedir+ocrid])
+                        else:
+                            icr0 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                            ocr0 = np.asarray(f[basedir+ocrid+chnl[-2:]])
                  
                 # at this time not certain there will be i0 or i1 data available. If not, just use 1-filled matrix of same size as mot1.
                 if i0id != "":
@@ -3242,13 +3252,21 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                         if i == 0:
                             spectra1 = np.asarray(f[basedir+chnl])
                             # icr and ocr id must be completed with last 2 digits from channel id
-                            icr1 = np.asarray(f[basedir+icrid+chnl[-2:]])
-                            ocr1 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+                            if expflag:
+                                icr1 = np.asarray(f[basedir+icrid])
+                                ocr1 = np.asarray(f[basedir+ocrid])
+                            else:
+                                icr1 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                                ocr1 = np.asarray(f[basedir+ocrid+chnl[-2:]])
                         else:
                             spectra1 = np.asarray(f[basedir+chnl])
                             # icr and ocr id must be completed with last 2 digits from channel id
-                            icr1 = np.asarray(f[basedir+icrid+chnl[-2:]])
-                            ocr1 = np.asarray(f[basedir+ocrid+chnl[-2:]])
+                            if expflag:
+                                icr1 = np.asarray(f[basedir+icrid])
+                                ocr1 = np.asarray(f[basedir+ocrid])
+                            else:
+                                icr1 = np.asarray(f[basedir+icrid+chnl[-2:]])
+                                ocr1 = np.asarray(f[basedir+ocrid+chnl[-2:]])
         else:
            # figure out which motor axis dimension is identical to last scans, so that one can concatenate them.
             with h5py.File(nxs,'r') as f:
@@ -3267,8 +3285,15 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                 else:
                     axis=0
                 mot1 = np.concatenate((mot1, np.asarray(f[basedir+mot1_name])), axis=axis)
-                mot2 = np.concatenate((mot2, np.asarray(f[basedir+mot2_name])), axis=axis)
+                if mot1.ndim > 1:
+                    mot2 = np.concatenate((mot2, np.asarray(f[basedir+mot2_name])), axis=axis)
                 tm = np.concatenate((tm, np.asarray(f[basedir+tmid])), axis=axis) #realtime; there is one for each detector channel, but they should be (approx) the same value
+                if expflag:
+                    if mot1.ndim == 1:
+                        mot2 = mot1*0.
+                    else:
+                        mot2 = np.array([mot2]*mot1.shape[1]).T
+                        tm = np.array([tm]*mot1.shape[0])
                 for i, chnl in enumerate(ch0id):
                     if i == 0:
                         spectra0 = np.concatenate((spectra0, np.asarray(f[basedir+chnl])), axis=axis)
@@ -3294,13 +3319,21 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                         if i == 0:
                             spectra1 = np.concatenate((spectra1, np.asarray(f[basedir+chnl])), axis=axis)
                             # icr and ocr id must be completed with last 2 digits from channel id
-                            icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
-                            ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
+                            if expflag:
+                                icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid])), axis=axis)
+                                ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid])), axis=axis)
+                            else:
+                                icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
+                                ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
                         else:
                             spectra1 = np.concatenate((spectra1, np.asarray(f[basedir+chnl])), axis=axis)
                             # icr and ocr id must be completed with last 2 digits from channel id
-                            icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
-                            ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
+                            if expflag:
+                                icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid])), axis=axis)
+                                ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid])), axis=axis)
+                            else:
+                                icr1 = np.concatenate((icr1, np.asarray(f[basedir+icrid+chnl[-2:]])), axis=axis)
+                                ocr1 = np.concatenate((ocr1, np.asarray(f[basedir+ocrid+chnl[-2:]])), axis=axis)
                 
 
     # sort the positions line per line and adjust all other data accordingly
@@ -3340,15 +3373,27 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
         
     
     # calculate maxspec and sumspec
-    sumspec0 = np.sum(spectra0[:], axis=(0,1))
-    maxspec0 = np.zeros(sumspec0.shape[0])
-    for i in range(sumspec0.shape[0]):
-        maxspec0[i] = spectra0[:,:,i].max()
-    if ch1id is not None:
-        sumspec1 = np.sum(spectra1[:], axis=(0,1))
-        maxspec1 = np.zeros(sumspec1.shape[0])
-        for i in range(sumspec1.shape[0]):
-            maxspec1[i] = spectra1[:,:,i].max()
+    if spectra0.ndim == 3:
+        sumspec0 = np.sum(spectra0[:], axis=(0,1))
+        maxspec0 = np.zeros(sumspec0.shape[0])
+        for i in range(sumspec0.shape[0]):
+            maxspec0[i] = spectra0[:,:,i].max()
+        if ch1id is not None:
+            sumspec1 = np.sum(spectra1[:], axis=(0,1))
+            maxspec1 = np.zeros(sumspec1.shape[0])
+            for i in range(sumspec1.shape[0]):
+                maxspec1[i] = spectra1[:,:,i].max()
+    elif spectra0.ndim == 2:
+        scan_cmd = 'dscan '+scan_cmd
+        sumspec0 = np.sum(spectra0[:], axis=(0))
+        maxspec0 = np.zeros(sumspec0.shape[0])
+        for i in range(sumspec0.shape[0]):
+            maxspec0[i] = spectra0[:,i].max()
+        if ch1id is not None:
+            sumspec1 = np.sum(spectra1[:], axis=(0))
+            maxspec1 = np.zeros(sumspec1.shape[0])
+            for i in range(sumspec1.shape[0]):
+                maxspec1[i] = spectra1[:,i].max()    
     
     # write h5 file in our structure
     filename = pumanxs[0].split(".")[0]+'_conv.h5'
