@@ -1678,7 +1678,7 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
                     dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch'+str(index)+'_DL.png', ytitle=plotytitle)
 
 ##############################################################################
-def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, sqrt=False, rotate=0, fliph=False, cb_opts=None, clim=None):
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, sqrt=False, rotate=0, fliph=False, cb_opts=None, clim=None, dpi=420):
     """
     Generate publishing quality overview images of all fitted elements in H% file (including scale bars, colorbar, ...)
 
@@ -1765,7 +1765,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, s
         imsdata0.data = np.sqrt(imsdata0.data)
 
     
-    Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png')
+    Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png', dpi=dpi)
     
     if chan01_flag == True:
         # set plot options (color limits, clim) if appropriate
@@ -1783,7 +1783,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, s
         if sqrt:
             imsdata1.data = np.sqrt(imsdata1.data)
         
-        Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png')
+        Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png', dpi=dpi)
 
 
 ##############################################################################
