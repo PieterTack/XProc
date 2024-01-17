@@ -1,0 +1,26 @@
+Standard_Name		
+MBH 32X LB10G		
+Density(mg/cm^3)	Mass(mg)	Sample_thickness(micron)
+9211	173615	15000
+Number of elements		
+15		
+Z	Cert conc(ppm)	Standard_error(ppm)
+13	5.008549594	0
+15	34.05813724	4.006839675
+16	100.1709919	5.008549594
+26	11.01880911	2.003419838
+27	841.4363318	20.03419838
+28	6911.79844	80.13679351
+29	772318.3474	1602.73587
+30	1101.880911	50.08549594
+33	1692.889763	40.06839675
+47	687.1730043	16.0273587
+50	83041.75227	500.8549594
+51	6000.242414	80.13679351
+52	107.1829613	8.013679351
+82	126215.4498	1302.222894
+83	931.5902245	20.03419838
+		
+Notes		
+Reference values obtained from MBH certififcate of analysis		
+"Sum of certified values was more than 100%, so all elements are rescaled by their relative amount in the sample."		
