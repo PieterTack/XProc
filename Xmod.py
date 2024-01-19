@@ -58,7 +58,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         if os.path.isfile(csvfile) is True:
             raise ValueError("Warning: CSV file "+csvfile+" already exists.\n Set keyword overwrite=True if you wish to overwrite this file.")
 
-    # determine the patush containing the element names
+    # determine the path containing the element names
     namespath = h5dir.split('/')
     if namespath[-2] == 'sum':
         namespath = '/'.join(namespath[:-2])+'/names' #if sum directory the names path is in the directory above
