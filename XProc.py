@@ -1982,24 +1982,9 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             x = mot1.ravel()
             y = mot2.ravel()
     
-            # import matplotlib.pyplot as plt
-            # plt.imshow(mot1_tmp)
-            # plt.colorbar()
-            # plt.savefig('test_mot1.png', bbox_inches='tight', pad_inches=0)
-            # plt.close()
-            # plt.imshow(mot2_tmp)
-            # plt.colorbar()
-            # plt.savefig('test_mot2.png', bbox_inches='tight', pad_inches=0)
-            # plt.close()
-            # plt.imshow(ims0[8,0:255530].reshape((505,506)))
-            # plt.colorbar()
-            # plt.savefig('test_ims.png', bbox_inches='tight', pad_inches=0)
-            # plt.close()
     
             for i in range(names0.size):
                 values = ims0[i,:,:].ravel()
-                # ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
-                # ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='cubic', rescale=True).T
                 ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='nearest').T
                 ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
             ims0 = np.nan_to_num(ims0_tmp)
@@ -2852,11 +2837,11 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                     spectra1.append(spe1_arr[i,:])
                     icr1.append(icr1_arr[i])
                     ocr1.append(ocr1_arr[i])
-        if os.path.isfile(sc_id+"/adc01/"+files[-1]) is True:
+        if os.path.isfile(sc_id+"/adc_01/"+files[-1]) is True:
             for file in files:
                 # Reading I0 and measurement time data
-                print("Reading " +sc_id+"/adc01/"+file +"...", end=" ")
-                f = h5py.File(sc_id+"/adc01/"+file, 'r')
+                print("Reading " +sc_id+"/adc_01/"+file +"...", end=" ")
+                f = h5py.File(sc_id+"/adc_01/"+file, 'r')
                 i0_arr = f['entry/data/value1'][:]
                 i1_arr = f['entry/data/value2'][:]
                 tm_arr = f['entry/data/exposuretime'][:]
@@ -2866,10 +2851,10 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                     tm.append(tm_arr[i])
                 f.close()
                 print("read")
-        else: #the adc01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
-            file = os.listdir(sc_id+"/adc01")
-            print("Reading " +sc_id+"/adc01/"+file[0] +"...", end=" ") #os.listdir returns a list, so we pick first element as only 1 should be there right now
-            f = h5py.File(sc_id+"/adc01/"+file[0], 'r')
+        else: #the adc_01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
+            file = os.listdir(sc_id+"/adc_01")
+            print("Reading " +sc_id+"/adc_01/"+file[0] +"...", end=" ") #os.listdir returns a list, so we pick first element as only 1 should be there right now
+            f = h5py.File(sc_id+"/adc_01/"+file[0], 'r')
             i0_arr = f['entry/data/Value1'][:]
             i1_arr = f['entry/data/Value2'][:]
             tm_arr = f['entry/data/ExposureTime'][:]
