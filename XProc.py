@@ -348,7 +348,7 @@ def h5_pca(h5file, h5dir, nclusters=5, el_id=None, kmeans=False):
 
     """
     # read in h5file data, with appropriate h5dir
-    file = h5py.File(h5file, 'r+')
+    file = h5py.File(h5file, 'r+', locking=True)
     data = np.asarray(file[h5dir])
     if el_id is not None:
         names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
@@ -498,7 +498,7 @@ def h5_kmeans(h5file, h5dir, nclusters=5, el_id=None, nosumspec=False):
 
     """
     # read in h5file data, with appropriate h5dir
-    file = h5py.File(h5file, 'r+')
+    file = h5py.File(h5file, 'r+', locking=True)
     data = np.asarray(file[h5dir])
     if el_id is not None:
         names = [n.decode('utf8') for n in file['/'.join(h5dir.split("/")[0:-1])+'/names']]
@@ -568,7 +568,7 @@ def div_by_cnc(h5file, cncfile, channel=None):
 
     """
     # read in h5file quant data
-    file = h5py.File(h5file, 'r+')
+    file = h5py.File(h5file, 'r+', locking=True)
     if channel is None:
         channel = list(file['quant'].keys())[0]
     h5_ims = np.asarray(file['quant/'+channel+'/ims'])
@@ -700,7 +700,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     #   distinguish between K and L lines while doing this
     reffiles = np.asarray(reffiles)
     if reffiles.size == 1:
-        reff = h5py.File(str(reffiles), 'r')
+        reff = h5py.File(str(reffiles), 'r', locking=True)
         ref_yld = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
         ref_yld_err = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/stddev']] # elemental yield errors in (ug/cm²)/(ct/s)
         ref_names = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
@@ -727,7 +727,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
         ref_names = []
         ref_z = []
         for i in range(0, reffiles.size):
-            reff = h5py.File(str(reffiles[i]), 'r')
+            reff = h5py.File(str(reffiles[i]), 'r', locking=True)
             ref_yld_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/yield']] # elemental yields in (ug/cm²)/(ct/s)
             ref_yld_err_tmp = [yld for yld in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/stddev']] # elemental yield errors in (ug/cm²)/(ct/s)
             ref_names_tmp = [n.decode('utf8') for n in reff['elyield/'+[keys for keys in reff['elyield'].keys()][0]+'/'+channel+'/names']]
@@ -775,7 +775,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     
     # read in h5file norm data
     #   normalise intensities to 1s acquisition time as this is the time for which we have el yields
-    file = h5py.File(h5file, 'r')
+    file = h5py.File(h5file, 'r', locking=True)
     h5_ims = np.asarray(file['norm/'+channel+'/ims'])
     h5_ims_err = np.asarray(file['norm/'+channel+'/ims_stddev'])/h5_ims[:]
     h5_names = np.asarray([n.decode('utf8') for n in file['norm/'+channel+'/names']])
@@ -809,7 +809,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
             if 'clr' in mask.lower():
                 # a cluster ID is provided as mask, so change mask to the appropriate path
                 clrid = mask.split('/')[-1][3:]
-                with h5py.File(h5file, 'r') as file:
+                with h5py.File(h5file, 'r', locking=True) as file:
                     if ('kmeans/'+channel+'/ims' in file) is True:
                         mask = np.asarray(file['kmeans/'+channel+'/ims'])
                         mask = np.where(mask==float(clrid), 1, 0)
@@ -819,7 +819,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                         mask = False
             else:
                 # 'clr' or 'CLR' was not in the string, so likely another h5file path was provided
-                with h5py.File(h5file, 'r') as file:
+                with h5py.File(h5file, 'r', locking=True) as file:
                     if (mask in file) is True:
                         mask = np.asarray(file[mask])
                     else:
@@ -828,7 +828,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                         mask = False
         elif type(mask) == type(list()) and type(mask[0]) == type(str()):
             # in this case kmeans cluster paths should have been supplied.
-            with h5py.File(h5file, 'r') as file:
+            with h5py.File(h5file, 'r', locking=True) as file:
                 if ('kmeans/'+channel+'/ims' in file) is True:
                     k_ims = np.asarray(file['kmeans/'+channel+'/ims'])
                     temp = np.zeros(k_ims.shape)
@@ -851,7 +851,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
                 print("    No mask was applied to further processing")
             else:
                 # Mask should be appropriate for further processing
-                with h5py.File(h5file, 'r') as file:
+                with h5py.File(h5file, 'r', locking=True) as file:
                     I0 = np.asarray(file["raw/I0"])*mask
                     tm = np.asarray(file["raw/acquisition_time"])*mask
                 for i in range(0, h5_ims.shape[0]):
@@ -1106,7 +1106,7 @@ def quant_with_ref(h5file, reffiles, channel='channel00', norm=None, absorb=None
     sumint_err = sumint_err*sumint
             
     # save quant data
-    file = h5py.File(h5file, 'r+')
+    file = h5py.File(h5file, 'r+', locking=True)
     try:
         del file['quant/'+channel]
     except Exception:
@@ -1529,7 +1529,7 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
     cnc = read_cnc(cncfile)
     
     # read h5 file
-    with h5py.File(h5file, 'r') as file:
+    with h5py.File(h5file, 'r', locking=True) as file:
         if 'norm' not in file.keys():
             print("ERROR: calc_detlim: cannot open normalised data in "+h5file)
             return
@@ -1553,7 +1553,7 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
     tm = np.sum(tm)
 
     for index, chnl in enumerate(keys):
-        with h5py.File(h5file, 'r') as file:
+        with h5py.File(h5file, 'r', locking=True) as file:
             sum_fit0 = np.asarray(file['norm/'+chnl+'/sum/int'])
             sum_bkg0 = np.asarray(file['norm/'+chnl+'/sum/bkg'])
             sum_fit0_err = np.asarray(file['norm/'+chnl+'/sum/int_stddev'])/sum_fit0
@@ -1633,7 +1633,7 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
 
         # save DL data to file
         cncfile = cncfile.split("/")[-1]
-        with h5py.File(h5file, 'r+') as file:
+        with h5py.File(h5file, 'r+', locking=True) as file:
             # remove old keys as these are now redundant, we should use a single cncfile for either detector channel
             if 'detlim' in file.keys():
                 for key in [k for k in file['detlim/'].keys()]:
@@ -1819,7 +1819,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     """
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
-    with h5py.File(h5file, 'r') as file:
+    with h5py.File(h5file, 'r', locking=True) as file:
         keys = [key for key in file['fit'].keys() if 'channel' in key]
         I0 =  np.asarray(file['raw/I0'])
         tm = np.asarray(file['raw/acquisition_time'])
@@ -1834,7 +1834,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     for index, chnl in enumerate(keys):
         mot1 = mot1_raw.copy()
         mot2 = mot2_raw.copy()
-        with h5py.File(h5file, 'r') as file:
+        with h5py.File(h5file, 'r', locking=True) as file:
             ims0 = np.squeeze(np.asarray(file['fit/'+chnl+'/ims']))
             names0 = np.asarray([n for n in file['fit/'+chnl+'/names']])
             sum_fit0 = np.asarray(file['fit/'+chnl+'/sum/int'])
@@ -1905,7 +1905,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     mot2[:,i] = mot2[sort_id,i]
                     I0[:,i] = I0[sort_id,i]
                     tm[:,i] = tm[sort_id,i]
-            with h5py.File(h5file, 'r+') as file:
+            with h5py.File(h5file, 'r+', locking=True) as file:
                 if index == 0:
                     try:
                         del file['raw/I0']
@@ -1994,7 +1994,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
       
         # save normalised data
         print("     Writing...", end=" ")
-        with h5py.File(h5file, 'r+') as file:
+        with h5py.File(h5file, 'r+', locking=True) as file:
             try:
                 del file['norm/I0']
                 del file['norm/'+chnl]
@@ -2049,7 +2049,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
     cfgfile = np.asarray(cfgfile)
         
     # let's read the h5file structure and launch our fit.
-    file = h5py.File(h5file, 'r')
+    file = h5py.File(h5file, 'r', locking=True)
     if channel is None:
         keys = [key for key in file['raw'].keys() if 'channel' in key]
     else:
@@ -2059,7 +2059,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
             cfg = str(cfgfile)
         else:
             cfg = str(cfgfile[index])
-        with h5py.File(h5file, 'r') as file:
+        with h5py.File(h5file, 'r', locking=True) as file:
             spectra0 = np.asarray(file['raw/'+chnl+'/spectra'])
             sumspec0 = np.asarray(file['raw/'+chnl+'/sumspec'])
             icr0 = np.asarray(file['raw/'+chnl+'/icr'])
@@ -2190,7 +2190,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
     
         # save the fitted data
         print("Writing fit data to "+h5file+"...", end=" ")
-        with h5py.File(h5file, 'r+') as file:
+        with h5py.File(h5file, 'r+', locking=True) as file:
             try:
                 del file['fit/'+chnl+'/ims']
                 del file['fit/'+chnl+'/names']
@@ -2337,7 +2337,7 @@ def ConvMxrfSpe(speprefix, outfile, mot1_name='X', mot2_name='Y'):
 
     outfile = '/'.join(speprefix.split('/')[:-1])+'/'+outfile
     print("Writing converted file: "+outfile+"...", end=" ")
-    with h5py.File(outfile, 'w') as f:
+    with h5py.File(outfile, 'w', locking=True) as f:
         f.create_dataset('cmd', data='scan XMI MicroXRF')
         f.create_dataset('raw/channel00/spectra', data=spectra, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=ocr, compression='gzip', compression_opts=4)
@@ -2430,7 +2430,7 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
 
     outfile = '/'.join(spcprefix.split('/')[:-1])+'/'+outfile
     print("Writing converted file: "+outfile+"...", end=" ")
-    with h5py.File(outfile, 'w') as f:
+    with h5py.File(outfile, 'w', locking=True) as f:
         f.create_dataset('cmd', data='scan EDAX EagleIII')
         f.create_dataset('raw/channel00/spectra', data=spectra, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=ocr, compression='gzip', compression_opts=4)
@@ -2509,7 +2509,7 @@ def ConvMalPanMPS(mpsfile):
 
     # Hooray! We read all the information! Let's write it to a separate file
     print("Writing merged file: "+measurement_id+"_merge.h5...", end=" ")
-    with h5py.File(measurement_id+"_merge.h5", 'w') as f:
+    with h5py.File(measurement_id+"_merge.h5", 'w', locking=True) as f:
         f.create_dataset('cmd', data='Measurement PANalaytical Epsilon 3XL')
         f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=ocr0, compression='gzip', compression_opts=4)
@@ -2608,7 +2608,7 @@ def ConvDeltaCsv(csvfile):
     # Hooray! We read all the information! Let's write it to a separate file
     measurement_id = os.path.splitext(csvfile)[0]
     print("Writing merged file: "+measurement_id+"_merge_40keV.h5...", end=" ")
-    f = h5py.File(measurement_id+"_merge_40keV.h5", 'w')
+    f = h5py.File(measurement_id+"_merge_40keV.h5", 'w', locking=True)
     f.create_dataset('cmd', data='dscan Handheld Delta Premium 40keV mode')
     f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/icr', data=ocr0, compression='gzip', compression_opts=4) #as time is expressed as livetime no icr/ocr correction should be applied
@@ -2626,7 +2626,7 @@ def ConvDeltaCsv(csvfile):
     print("Done")
     
     print("Writing merged file: "+measurement_id+"_merge_10keV.h5...", end=" ")
-    f = h5py.File(measurement_id+"_merge_10keV.h5", 'w')
+    f = h5py.File(measurement_id+"_merge_10keV.h5", 'w', locking=True)
     f.create_dataset('cmd', data='dscan Handheld Delta Premium 10keV mode')
     f.create_dataset('raw/channel00/spectra', data=spectra1, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/icr', data=ocr1, compression='gzip', compression_opts=4) #as time is expressed as livetime no icr/ocr correction should be applied
@@ -2672,7 +2672,7 @@ def read_P06_spectra(file, sc_id, ch):
     if type(ch[0]) is str:
         # Reading the spectra files, icr and ocr
         print("Reading " +sc_id+"/"+ch[0]+"/"+file +"...", end=" ")
-        f = h5py.File(sc_id+"/"+ch[0]+"/"+file, 'r')
+        f = h5py.File(sc_id+"/"+ch[0]+"/"+file, 'r', locking=True)
         if type(ch[1]) is str:
             spe0_arr = f['entry/instrument/xspress3/'+ch[1]+'/histogram'][:]
             try:
@@ -2703,7 +2703,7 @@ def read_P06_spectra(file, sc_id, ch):
         # Reading the spectra files, icr and ocr
         dev = ch[0][0]
         print("Reading " +sc_id+"/"+dev+"/"+file +"...", end=" ")
-        f = h5py.File(sc_id+"/"+dev+"/"+file, 'r')
+        f = h5py.File(sc_id+"/"+dev+"/"+file, 'r', locking=True)
         # read spectra and icr/ocr from first device (ch[0][0]) so we can later add the rest
         #   as ch[0] is a list, ch[1] is also expected to be a list!
         if type(ch[1][0]) is str:
@@ -2737,7 +2737,7 @@ def read_P06_spectra(file, sc_id, ch):
             dev = ch[0][i+1]
             # Reading the spectra files, icr and ocr
             print("Reading " +sc_id+"/"+dev+"/"+file +"...", end=" ")
-            f = h5py.File(sc_id+"/"+dev+"/"+file, 'r')
+            f = h5py.File(sc_id+"/"+dev+"/"+file, 'r', locking=True)
             if type(ch[1][i+1]) is str:
                 spe0_arr += np.asarray(f['entry/instrument/xspress3/'+ch[1][i+1]+'/histogram'][:])
                 try:
@@ -2798,7 +2798,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         else:
             sc_id = str(scanid[k])
         # file with name scanid contains info on scan command
-        f = h5py.File(sc_id+'.nxs', 'r')
+        f = h5py.File(sc_id+'.nxs', 'r', locking=True)
         scan_cmd = str(f['scan/program_name'].attrs["scan_command"][:])
         scan_cmd = np.asarray(scan_cmd.strip("[]'").split(" "))
         print(' '.join(scan_cmd))
@@ -2841,7 +2841,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             for file in files:
                 # Reading I0 and measurement time data
                 print("Reading " +sc_id+"/adc_01/"+file +"...", end=" ")
-                f = h5py.File(sc_id+"/adc_01/"+file, 'r')
+                f = h5py.File(sc_id+"/adc_01/"+file, 'r', locking=True)
                 i0_arr = f['entry/data/value1'][:]
                 i1_arr = f['entry/data/value2'][:]
                 tm_arr = f['entry/data/exposuretime'][:]
@@ -2854,7 +2854,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         else: #the adc_01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
             file = os.listdir(sc_id+"/adc_01")
             print("Reading " +sc_id+"/adc_01/"+file[0] +"...", end=" ") #os.listdir returns a list, so we pick first element as only 1 should be there right now
-            f = h5py.File(sc_id+"/adc_01/"+file[0], 'r')
+            f = h5py.File(sc_id+"/adc_01/"+file[0], 'r', locking=True)
             i0_arr = f['entry/data/Value1'][:]
             i1_arr = f['entry/data/Value2'][:]
             tm_arr = f['entry/data/ExposureTime'][:]
@@ -2886,7 +2886,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         if files == []:
             # Reading motor positions from main nxs file. Assumes only 2D scans are performed (stores encoder1 and 2 values)
             print("Reading " +sc_id +".nxs...", end=" ")
-            f = h5py.File(sc_id+'.nxs', 'r')
+            f = h5py.File(sc_id+'.nxs', 'r', locking=True)
             if scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
                 mot1_arr = np.asarray(f["scan/data/timestamp"][:])
                 mot1_name = "timestamp"
@@ -2911,7 +2911,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             for file in files:
                 # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
                 print("Reading " +sc_id+pilcid+file +"...", end=" ")
-                f = h5py.File(sc_id+pilcid+file, 'r')
+                f = h5py.File(sc_id+pilcid+file, 'r', locking=True)
                 counter_id = f['entry/data/counter']
                 enc_vals = []
                 for i in range(10):
@@ -2938,7 +2938,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                 mot1_arr = enc_vals[0]
                                 mot1_name = enc_names[0]
                             else:
-                                f2 = h5py.File(sc_id+'.nxs','r')
+                                f2 = h5py.File(sc_id+'.nxs','r', locking=True)
                                 mot1_arr = np.asarray(f2["scan/data/"+str(scan_cmd[1])][:])
                                 mot1_name = str(scan_cmd[1])
                                 f2.close()
@@ -2982,7 +2982,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                 mot2_arr = enc_vals[1]
                                 mot2_name = enc_names[1]
                             else:
-                                f2 = h5py.File(sc_id+'.nxs','r')
+                                f2 = h5py.File(sc_id+'.nxs','r', locking=True)
                                 if scan_cmd[0] == 'ascan' or scan_cmd[0] == 'dscan':
                                     mot2_arr = np.asarray(f2["scan/data/"+str(scan_cmd[1])][:])
                                     mot2_name = str(scan_cmd[1])
@@ -3173,7 +3173,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
 
     # Hooray! We read all the information! Let's write it to a separate file
     print("Writing merged file: "+scan_suffix+"_merge.h5...", end=" ")
-    f = h5py.File(scan_suffix+"_merge.h5", 'w')
+    f = h5py.File(scan_suffix+"_merge.h5", 'w', locking=True)
     f.create_dataset('cmd', data=' '.join(scan_cmd))
     f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4)
@@ -3229,7 +3229,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 maxspec1[i] = spectra1[:,i].max()
 
     # Hooray! We read all the information! Let's write it to a separate file
-    f = h5py.File(scan_suffix+"_merge.h5", 'r+')
+    f = h5py.File(scan_suffix+"_merge.h5", 'r+', locking=True)
     if ch1 is not None:
         f.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel01/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4)
@@ -3296,7 +3296,7 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
     for index, nxs in enumerate(pumanxs):
         print('Processing PUMA file '+nxs+'...', end='')
         if index == 0:
-            with h5py.File(nxs,'r') as f:
+            with h5py.File(nxs,'r', locking=True) as f:
                 if 'acq' in [key for key in f.keys()]:
                     basedir = "acq/scan_data/"
                     expflag = False
@@ -3363,7 +3363,7 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                                 ocr1 = np.asarray(f[basedir+ocrid+chnl[-2:]])
         else:
            # figure out which motor axis dimension is identical to last scans, so that one can concatenate them.
-            with h5py.File(nxs,'r') as f:
+            with h5py.File(nxs,'r', locking=True) as f:
                 olddim = mot1.shape
                 newdim = np.asarray(f[basedir+mot1_name]).shape
                 if olddim[0] == newdim[0] and olddim[1] != newdim[1]:
@@ -3491,7 +3491,7 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
     
     # write h5 file in our structure
     filename = pumanxs[0].split(".")[0]+'_conv.h5'
-    with h5py.File(filename, 'w') as f:
+    with h5py.File(filename, 'w', locking=True) as f:
         f.create_dataset('cmd', data=scan_cmd)
         f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
@@ -3594,7 +3594,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             else:
                 sc_dim = scan_dim
         if j == 0:
-            f = h5py.File(file, 'r')
+            f = h5py.File(file, 'r', locking=True)
             try:
                 scan_cmd = f[sc_id+'/title'][()].decode('utf8')
             except Exception:
@@ -3666,7 +3666,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
 
         # when reading second file, we should stitch it to the first file's image
         else:
-            f = h5py.File(file, 'r')
+            f = h5py.File(file, 'r', locking=True)
             try:
                 scan_cmd += ' '+f[sc_id+'/title'][()].decode('utf8')
             except Exception:
@@ -4003,7 +4003,7 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
     
     # write h5 file in our structure
     filename = h5id15[0].split(".")[0]+scan_suffix+'.h5' #scanid is of type 1.1,  2.1,  4.1
-    f = h5py.File(filename, 'w')
+    f = h5py.File(filename, 'w', locking=True)
     f.create_dataset('cmd', data=scan_cmd)
     f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)

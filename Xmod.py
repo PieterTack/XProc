@@ -73,7 +73,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         allnames = []
         nrows = 0
         for file in h5file:
-            with h5py.File(file, 'r') as h5:
+            with h5py.File(file, 'r', locking=True) as h5:
                 for n in h5[namespath]: allnames.append(n.decode("utf8"))
                 if sumdata is False:
                     nrows += np.asarray([n.decode("utf8") for n in h5["mot1"]]).size
@@ -86,7 +86,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         fileID = []
         # go through all h5 files again, and sort the data in the appropriate data column
         for file in h5file:
-            with h5py.File(file, 'r') as h5:
+            with h5py.File(file, 'r', locking=True) as h5:
                 temp = np.asarray(h5[h5dir])
                 names = [n.decode("utf8") for n in h5[namespath]]
                 if sumdata is False:
@@ -114,7 +114,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         data = np.asarray(data).astype(str)
     else: #h5file is a single string (or should be)   
         # read the h5 data
-        with h5py.File(h5file, 'r') as h5:
+        with h5py.File(h5file, 'r', locking=True) as h5:
             data = np.asarray(h5[h5dir]).astype(str)
             unique_names = [n.decode("utf8") for n in h5[namespath]]
             if sumdata is False:
@@ -214,7 +214,7 @@ def XProcH5_combine(files, newfile, ax=0):
     
     for index, file in enumerate(files):
         print("Reading "+file+"...", end="")
-        f = h5py.File(file,'r')
+        f = h5py.File(file,'r', locking=True)
         if index == 0:
             cmd = ''
             mot1 = []
@@ -388,7 +388,7 @@ def XProcH5_combine(files, newfile, ax=0):
         
     # write the new file
     print("writing "+newfile+"...", end="")
-    f = h5py.File(newfile, 'w')
+    f = h5py.File(newfile, 'w', locking=True)
     f.create_dataset('cmd', data=cmd)
     f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
@@ -472,7 +472,7 @@ def rm_line(h5file, lineid, axis=1):
     """
     import h5py
     
-    f = h5py.File(h5file, 'r+')
+    f = h5py.File(h5file, 'r+', locking=True)
 
     # read the data and determine which data flags apply
     i0 = np.array(f['raw/I0'])
@@ -510,7 +510,8 @@ def rm_line(h5file, lineid, axis=1):
     icr0 = np.delete(icr0, lineid, axis)
     ocr0 = np.delete(ocr0, lineid, axis)
     i0 = np.delete(i0, lineid, axis)
-    i1 = np.delete(i1, lineid, axis)
+    if i1_flag:
+        i1 = np.delete(i1, lineid, axis)
     mot1 = np.delete(mot1, lineid, axis)
     mot2 = np.delete(mot2, lineid, axis)
     tm = np.delete(tm, lineid, axis)
@@ -592,7 +593,7 @@ def add_h5s(h5files, newfilename):
         for i in range(len(h5files)):
             if i == 0:
                 print("Reading "+h5files[i]+"...", end="")
-                f = h5py.File(h5files[i],'r')
+                f = h5py.File(h5files[i],'r', locking=True)
                 try:
                     cmd = f['cmd'][()].decode('utf8')
                 except AttributeError:
@@ -626,7 +627,7 @@ def add_h5s(h5files, newfilename):
                 print("Done")
             else:
                 print("Reading "+h5files[i]+"...", end="")
-                f = h5py.File(h5files[i],'r')
+                f = h5py.File(h5files[i],'r', locking=True)
                 mot1 += np.array(f['mot1'])
                 mot2 += np.array(f['mot2'])
                 i0 += np.array(f['raw/I0'])
@@ -658,7 +659,7 @@ def add_h5s(h5files, newfilename):
         mot2 /= len(h5files)
         # write the new file
         print("writing "+newfilename+"...", end="")
-        f = h5py.File(newfilename, 'w')
+        f = h5py.File(newfilename, 'w', locking=True)
         f.create_dataset('cmd', data=cmd)
         f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
@@ -714,7 +715,7 @@ def join_clrs(h5file, channel='channel00', join=[[0,3],[1,2,4]], nosumspec=False
     
     datadir = "kmeans/"+channel+"/"
     # read the h5 file
-    with h5py.File(h5file,'r') as f:
+    with h5py.File(h5file,'r', locking=True) as f:
         ims  = np.array(f[datadir+"ims"])
         if nosumspec is False:
             sumspeckeys = [key for key in f[datadir].keys() if 'sumspec' in key] #these should be ordered alphabetically
@@ -734,7 +735,7 @@ def join_clrs(h5file, channel='channel00', join=[[0,3],[1,2,4]], nosumspec=False
             joined_sum.append(temp)
         
     # write the joined cluster data
-    with h5py.File(h5file,'r+') as file:
+    with h5py.File(h5file,'r+', locking=True) as file:
         try:
             del file['joined_clr/'+channel]
         except Exception:
@@ -777,7 +778,7 @@ def bin_h5(h5file, binfactor):
     import h5py
     
     print("Processing "+h5file+"...", end="")
-    with h5py.File(h5file,'r+') as f:
+    with h5py.File(h5file,'r+', locking=True) as f:
         keys = [key for key in f['raw'].keys() if 'channel' in key]
         mot1 = np.array(f['mot1'])
         newshape = (int(mot1.shape[0]/binfactor), int(mot1.shape[1]/binfactor))
