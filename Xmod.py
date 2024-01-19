@@ -73,7 +73,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         allnames = []
         nrows = 0
         for file in h5file:
-            with h5py.File(file, 'r') as h5:
+            with h5py.File(file, 'r', locking=True) as h5:
                 for n in h5[namespath]: allnames.append(n.decode("utf8"))
                 if sumdata is False:
                     nrows += np.asarray([n.decode("utf8") for n in h5["mot1"]]).size
@@ -86,7 +86,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         fileID = []
         # go through all h5 files again, and sort the data in the appropriate data column
         for file in h5file:
-            with h5py.File(file, 'r') as h5:
+            with h5py.File(file, 'r', locking=True) as h5:
                 temp = np.asarray(h5[h5dir])
                 names = [n.decode("utf8") for n in h5[namespath]]
                 if sumdata is False:
@@ -114,7 +114,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
         data = np.asarray(data).astype(str)
     else: #h5file is a single string (or should be)   
         # read the h5 data
-        with h5py.File(h5file, 'r') as h5:
+        with h5py.File(h5file, 'r', locking=True) as h5:
             data = np.asarray(h5[h5dir]).astype(str)
             unique_names = [n.decode("utf8") for n in h5[namespath]]
             if sumdata is False:
@@ -209,23 +209,63 @@ def XProcH5_combine(files, newfile, ax=0):
     """
     import h5py
     import numpy as np
+    from datetime import datetime
+
     
-    cmd = ''
-    mot1 = []
-    mot2 = []
-    i0 = []
-    i1 = []
-    tm = []
-    icr0 = []
-    ocr0 = []
-    spectra0 = []
-    icr1 = []
-    ocr1 = []
-    spectra1 = []
-    
-    for file in files:
+    for index, file in enumerate(files):
         print("Reading "+file+"...", end="")
-        f = h5py.File(file,'r')
+        f = h5py.File(file,'r', locking=True)
+        if index == 0:
+            cmd = ''
+            mot1 = []
+            mot2 = []
+            i0 = []
+            tm = []
+            icr0 = []
+            ocr0 = []
+            spectra0 = []
+            if 'raw/I1' in f:
+                i1flag = True
+                i1 = []
+            if 'raw/channel01' in f:
+                ch1flag = True
+                icr1 = []
+                ocr1 = []
+                spectra1 = []
+            if 'fit' in f.keys():
+                fitflag = True
+                fit0 = []
+                fitsum0 = []
+                fitbkg0 = []
+                if ch1flag:
+                    fit1 = []
+                    fitnms1 = []
+                    fitsum1 = []
+                    fitbkg1 = []
+            if 'norm' in f.keys():
+                normflag = True
+                tmnorm = str(f['norm'].attrs["TmNorm"])
+                if tmnorm == "True":
+                    tmnorm = True
+                else:
+                    tmnorm = False
+                normto = np.asarray(f['norm/I0'])
+                norm0 = []
+                norm0_err = []
+                normnms0 = []
+                normsum0 = []
+                normbkg0 = []
+                normsum0_err = []
+                normbkg0_err = []
+                if ch1flag:
+                    norm1 = []
+                    norm1_err = []
+                    normnms1 = []
+                    normsum1 = []
+                    normbkg1 = []
+                    normsum1_err = []
+                    normbkg1_err = []
+
         try:
             cmd += f['cmd'][()].decode('utf8')
         except AttributeError:
@@ -236,26 +276,54 @@ def XProcH5_combine(files, newfile, ax=0):
         mot2.append(np.array(f['mot2']))
         mot2_name = str(f['mot2'].attrs["Name"])
         i0.append(np.array(f['raw/I0']))
-        try:
+        if i1flag:
             i1.append(np.array(f['raw/I1']))
-            i1flag = True
-        except KeyError:
-            i1flag = False
         tm.append(np.array(f['raw/acquisition_time']))
         icr0.append(np.array(f['raw/channel00/icr']))
         ocr0.append(np.array(f['raw/channel00/ocr']))
         spectra0.append(np.array(f['raw/channel00/spectra']))
-        try:
+        if ch1flag:
             icr1.append(np.array(f['raw/channel01/icr']))
             ocr1.append(np.array(f['raw/channel01/ocr']))
             spectra1.append(np.array(f['raw/channel01/spectra']))
-            ch1flag = True
-        except KeyError:
-            ch1flag = False
+        if fitflag:
+            try:
+                cfg0 = str(f['fit/channel00/cfg'][()].decode('utf8'))
+            except AttributeError:
+                cfg0 = str(f['fit/channel00/cfg'][()])
+            fit0.append(np.array(f['fit/channel00/ims']))
+            fitnms0 = [n.decode('utf8') for n in f['fit/channel00/names']]
+            fitsum0.append(np.array(f['fit/channel00/sum/int']))
+            fitbkg0.append(np.array(f['fit/channel00/sum/bkg']))
+            if ch1flag:
+                try:
+                    cfg1 = str(f['fit/channel01/cfg'][()].decode('utf8'))
+                except AttributeError:
+                    cfg1 = str(f['fit/channel01/cfg'][()])
+                fit1.append(np.array(f['fit/channel01/ims']))
+                fitnms1 = [n.decode('utf8') for n in f['fit/channel01/names']]
+                fitsum1.append(np.array(f['fit/channel01/sum/int']))
+                fitbkg1.append(np.array(f['fit/channel01/sum/bkg']))
+        if normflag:
+            norm0.append(np.array(f['norm/channel00/ims']))
+            norm0_err.append(np.array(f['norm/channel00/ims_stddev']))
+            normnms0 = [n.decode('utf8') for n in f['norm/channel00/names']]
+            normsum0.append(np.array(f['norm/channel00/sum/int']))
+            normbkg0.append(np.array(f['norm/channel00/sum/bkg']))
+            normsum0_err.append(np.array(f['norm/channel00/sum/int_stddev']))
+            normbkg0_err.append(np.array(f['norm/channel00/sum/bkg_stddev']))
+            if ch1flag:
+                norm1.append(np.array(f['norm/channel01/ims']))
+                norm1_err.append(np.array(f['norm/channel01/ims_stddev']))
+                normnms1 = [n.decode('utf8') for n in f['norm/channel01/names']]
+                normsum1.append(np.array(f['norm/channel01/sum/int']))
+                normbkg1.append(np.array(f['norm/channel01/sum/bkg']))
+                normsum1_err.append(np.array(f['norm/channel01/sum/int_stddev']))
+                normbkg1_err.append(np.array(f['norm/channel01/sum/bkg_stddev']))
+
         f.close()
 
     # add in one array
-    
     spectra0 = np.concatenate(spectra0, axis=ax)
     icr0 = np.concatenate(icr0, axis=ax)
     ocr0 = np.concatenate(ocr0, axis=ax)
@@ -270,19 +338,57 @@ def XProcH5_combine(files, newfile, ax=0):
     mot2 = np.concatenate(mot2, axis=ax)
     tm = np.concatenate(tm, axis=ax)
 
-    sumspec0 = np.sum(spectra0[:], axis=(0,1))
-    maxspec0 = np.zeros(sumspec0.shape[0])
-    for i in range(sumspec0.shape[0]):
-        maxspec0[i] = spectra0[:,:,i].max()
+    if len(spectra0.shape) == 3:
+        sumspec0 = np.sum(spectra0, axis=(0,1))
+        maxspec0 = np.zeros(sumspec0.shape[0])
+        for i in range(sumspec0.shape[0]):
+            maxspec0[i] = spectra0[:,:,i].max()
+    else:
+        sumspec0 = np.sum(spectra0, axis=0)
+        maxspec0 = np.zeros(sumspec0.shape[0])
+        for i in range(sumspec0.shape[0]):
+            maxspec0[i] = spectra0[:,i].max()
     if ch1flag is True:
-        sumspec1 = np.sum(spectra1[:], axis=(0,1))
-        maxspec1 = np.zeros(sumspec1.shape[0])
-        for i in range(sumspec1.shape[0]):
-            maxspec1[i] = spectra1[:,:,i].max()
+        if len(spectra0.shape) == 3:
+            sumspec1 = np.sum(spectra1, axis=(0,1))
+            maxspec1 = np.zeros(sumspec1.shape[0])
+            for i in range(sumspec1.shape[0]):
+                maxspec1[i] = spectra1[:,:,i].max()
+        else:
+            sumspec1 = np.sum(spectra1, axis=0)
+            maxspec1 = np.zeros(sumspec1.shape[0])
+            for i in range(sumspec1.shape[0]):
+                maxspec1[i] = spectra1[:,i].max()
+            
+    if fitflag:
+        fit0 = np.concatenate(fit0, axis=ax+1)
+        fitsum0 = np.sum(fitsum0, axis=(0))
+        fitbkg0 = np.sum(fitbkg0, axis=(0))
+        if ch1flag:
+            fit1 = np.concatenate(fit1, axis=ax+1)
+            fitsum1 = np.sum(fitsum1, axis=(0))
+            fitbkg1 = np.sum(fitbkg1, axis=(0))
+            
+    if normflag:    
+        norm0 = np.concatenate(norm0, axis=ax+1)
+        norm0_err = np.concatenate(norm0_err, axis=ax+1)
+        normsum0 = np.sum(normsum0, axis=(0))
+        normbkg0 = np.sum(normbkg0, axis=(0))
+        normsum0_err = np.sqrt(np.sum(normsum0_err, axis=(0)))
+        normbkg0_err = np.sqrt(np.sum(normbkg0_err, axis=(0)))
+        if ch1flag:
+             norm1 = np.concatenate(norm1, axis=ax+1)
+             norm1_err = np.concatenate(norm1_err, axis=ax+1)
+             normsum1 = np.sum(normsum1, axis=(0))
+             normbkg1 = np.sum(normbkg1, axis=(0))
+             normsum1_err = np.sqrt(np.sum(normsum1_err, axis=(0)))
+             normbkg1_err = np.sqrt(np.sum(normbkg1_err, axis=(0)))
+          
+        
         
     # write the new file
     print("writing "+newfile+"...", end="")
-    f = h5py.File(newfile, 'w')
+    f = h5py.File(newfile, 'w', locking=True)
     f.create_dataset('cmd', data=cmd)
     f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
     f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
@@ -303,6 +409,43 @@ def XProcH5_combine(files, newfile, ax=0):
     dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
     dset.attrs['Name'] = mot2_name
     f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
+    if fitflag:
+        f.create_dataset('fit/channel00/ims', data=fit0, compression='gzip', compression_opts=4)
+        f.create_dataset('fit/channel00/names', data=[n.encode('utf8') for n in fitnms0])
+        f.create_dataset('fit/channel00/cfg', data=cfg0)
+        f.create_dataset('fit/channel00/sum/int', data=fitsum0, compression='gzip', compression_opts=4)
+        f.create_dataset('fit/channel00/sum/bkg', data=fitbkg0, compression='gzip', compression_opts=4)
+        if ch1flag:
+            f.create_dataset('fit/channel01/ims', data=fit1, compression='gzip', compression_opts=4)
+            f.create_dataset('fit/channel01/names', data=[n.encode('utf8') for n in fitnms1])
+            f.create_dataset('fit/channel01/cfg', data=cfg1)
+            f.create_dataset('fit/channel01/sum/int', data=fitsum1, compression='gzip', compression_opts=4)
+            f.create_dataset('fit/channel01/sum/bkg', data=fitbkg1, compression='gzip', compression_opts=4)
+        dset = f['fit']
+        dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    if normflag:
+        f.create_dataset('norm/I0', data=normto)
+        f.create_dataset('norm/channel00/ims', data=norm0, compression='gzip', compression_opts=4)
+        f.create_dataset('norm/channel00/ims_stddev', data=norm0_err, compression='gzip', compression_opts=4)
+        f.create_dataset('norm/channel00/names', data=normnms0)
+        f.create_dataset('norm/channel00/sum/int', data=normsum0, compression='gzip', compression_opts=4)
+        f.create_dataset('norm/channel00/sum/bkg', data=normbkg0, compression='gzip', compression_opts=4)
+        f.create_dataset('norm/channel00/sum/int_stddev', data=normsum0_err, compression='gzip', compression_opts=4)
+        f.create_dataset('norm/channel00/sum/bkg_stddev', data=normbkg0_err, compression='gzip', compression_opts=4)
+        if ch1flag:
+            f.create_dataset('norm/channel01/ims', data=norm1, compression='gzip', compression_opts=4)
+            f.create_dataset('norm/channel01/ims_stddev', data=norm1_err, compression='gzip', compression_opts=4)
+            f.create_dataset('norm/channel01/names', data=normnms1)
+            f.create_dataset('norm/channel01/sum/int', data=normsum1, compression='gzip', compression_opts=4)
+            f.create_dataset('norm/channel01/sum/bkg', data=normbkg1, compression='gzip', compression_opts=4)
+            f.create_dataset('norm/channel01/sum/int_stddev', data=normsum1_err, compression='gzip', compression_opts=4)
+            f.create_dataset('norm/channel01/sum/bkg_stddev', data=normbkg1_err, compression='gzip', compression_opts=4)
+        dset = f['norm']
+        dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        if tmnorm is True:
+            dset.attrs["TmNorm"] = "True"
+        else:
+            dset.attrs["TmNorm"] = "False"
     f.close()                   
     print("Done")
 
@@ -329,7 +472,7 @@ def rm_line(h5file, lineid, axis=1):
     """
     import h5py
     
-    f = h5py.File(h5file, 'r+')
+    f = h5py.File(h5file, 'r+', locking=True)
 
     # read the data and determine which data flags apply
     i0 = np.array(f['raw/I0'])
@@ -367,7 +510,8 @@ def rm_line(h5file, lineid, axis=1):
     icr0 = np.delete(icr0, lineid, axis)
     ocr0 = np.delete(ocr0, lineid, axis)
     i0 = np.delete(i0, lineid, axis)
-    i1 = np.delete(i1, lineid, axis)
+    if i1_flag:
+        i1 = np.delete(i1, lineid, axis)
     mot1 = np.delete(mot1, lineid, axis)
     mot2 = np.delete(mot2, lineid, axis)
     tm = np.delete(tm, lineid, axis)
@@ -449,7 +593,7 @@ def add_h5s(h5files, newfilename):
         for i in range(len(h5files)):
             if i == 0:
                 print("Reading "+h5files[i]+"...", end="")
-                f = h5py.File(h5files[i],'r')
+                f = h5py.File(h5files[i],'r', locking=True)
                 try:
                     cmd = f['cmd'][()].decode('utf8')
                 except AttributeError:
@@ -483,7 +627,7 @@ def add_h5s(h5files, newfilename):
                 print("Done")
             else:
                 print("Reading "+h5files[i]+"...", end="")
-                f = h5py.File(h5files[i],'r')
+                f = h5py.File(h5files[i],'r', locking=True)
                 mot1 += np.array(f['mot1'])
                 mot2 += np.array(f['mot2'])
                 i0 += np.array(f['raw/I0'])
@@ -515,7 +659,7 @@ def add_h5s(h5files, newfilename):
         mot2 /= len(h5files)
         # write the new file
         print("writing "+newfilename+"...", end="")
-        f = h5py.File(newfilename, 'w')
+        f = h5py.File(newfilename, 'w', locking=True)
         f.create_dataset('cmd', data=cmd)
         f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
@@ -571,7 +715,7 @@ def join_clrs(h5file, channel='channel00', join=[[0,3],[1,2,4]], nosumspec=False
     
     datadir = "kmeans/"+channel+"/"
     # read the h5 file
-    with h5py.File(h5file,'r') as f:
+    with h5py.File(h5file,'r', locking=True) as f:
         ims  = np.array(f[datadir+"ims"])
         if nosumspec is False:
             sumspeckeys = [key for key in f[datadir].keys() if 'sumspec' in key] #these should be ordered alphabetically
@@ -591,7 +735,7 @@ def join_clrs(h5file, channel='channel00', join=[[0,3],[1,2,4]], nosumspec=False
             joined_sum.append(temp)
         
     # write the joined cluster data
-    with h5py.File(h5file,'r+') as file:
+    with h5py.File(h5file,'r+', locking=True) as file:
         try:
             del file['joined_clr/'+channel]
         except Exception:
@@ -634,7 +778,7 @@ def bin_h5(h5file, binfactor):
     import h5py
     
     print("Processing "+h5file+"...", end="")
-    with h5py.File(h5file,'r+') as f:
+    with h5py.File(h5file,'r+', locking=True) as f:
         keys = [key for key in f['raw'].keys() if 'channel' in key]
         mot1 = np.array(f['mot1'])
         newshape = (int(mot1.shape[0]/binfactor), int(mot1.shape[1]/binfactor))
