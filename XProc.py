@@ -2838,10 +2838,16 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                     icr1.append(icr1_arr[i])
                     ocr1.append(ocr1_arr[i])
         if os.path.isfile(sc_id+"/adc_01/"+files[-1]) is True:
+            adc = '/adc_01/'
+        elif os.path.isfile(sc_id+"/adc01/"+files[-1]) is True:
+            adc = '/adc01/'
+        else:
+            adc = None
+        if adc != None:
             for file in files:
                 # Reading I0 and measurement time data
-                print("Reading " +sc_id+"/adc_01/"+file +"...", end=" ")
-                f = h5py.File(sc_id+"/adc_01/"+file, 'r', locking=True)
+                print("Reading " +sc_id+adc+file +"...", end=" ")
+                f = h5py.File(sc_id+adc+file, 'r', locking=True)
                 i0_arr = f['entry/data/value1'][:]
                 i1_arr = f['entry/data/value2'][:]
                 tm_arr = f['entry/data/exposuretime'][:]
@@ -2852,9 +2858,13 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 f.close()
                 print("read")
         else: #the adc_01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
-            file = os.listdir(sc_id+"/adc_01")
-            print("Reading " +sc_id+"/adc_01/"+file[0] +"...", end=" ") #os.listdir returns a list, so we pick first element as only 1 should be there right now
-            f = h5py.File(sc_id+"/adc_01/"+file[0], 'r', locking=True)
+            if os.path.isdir(sc_id+"/adc_01") is True:
+                adc = '/adc_01/'
+            elif os.path.isdir(sc_id+"/adc01") is True:
+                adc = '/adc01/'
+            file = os.listdir(sc_id+adc[:-1])
+            print("Reading " +sc_id+adc+file[0] +"...", end=" ") #os.listdir returns a list, so we pick first element as only 1 should be there right now
+            f = h5py.File(sc_id+adc+file[0], 'r', locking=True)
             i0_arr = f['entry/data/Value1'][:]
             i1_arr = f['entry/data/Value2'][:]
             tm_arr = f['entry/data/ExposureTime'][:]
