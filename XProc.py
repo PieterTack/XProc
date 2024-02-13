@@ -22,10 +22,6 @@ import itertools
 import multiprocessing
 from functools import partial
 
-#TODO:k 
-    
-    # XPROC: TODO: add Compton ROI integration instead of fitted.
-
 
 class Cnc():
     def __init__(self):
@@ -2103,7 +2099,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         print("Done")
     
 ##############################################################################
-def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, verbose=None):
+def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, verbose=None, scatroi=False):
     """
     Fit a batch of xrf spectra using the PyMca fitting routines. A PyMca config file should be supplied.
     The cfg file should use the SNIP background subtraction method. Others will fail as considered 'too slow' by the PyMca fast linear fit routine itself.
@@ -2124,6 +2120,9 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
         The amount of cores over which the multiprocessing package should split the task. Values of -1, 0 and None allow the system to use all available cores, minus 1. The default is None.
     verbose : Boolean, optional
         If not None, the PyMca fit returns errors encountered during the procedure. The default is None.
+    scatroi: Boolean, optional
+        If True, the Compton and Rayleigh intensity will be determined as integrated region of interest values instead of the fitted result as obtained through the PyMca fit.
+        The peak width is determined from 
 
     Returns
     -------
@@ -2255,9 +2254,37 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
                     cutid0 = i+1
             sum_fit0 = [result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
             sum_bkg0 = [result0_sum[peak]["statistics"]-result0_sum[peak]["fitarea"] for peak in result0_sum["groups"]]
+
+        ims0 = peak_int0[cutid0:,:,:]
+    
+        if scatroi is True:
+            # new cte and gain obtained from previous fit
+            cte = result0_sum["fittedpar"][result0_sum["parameters"].index("Zero")]
+            gain = result0_sum["fittedpar"][result0_sum["parameters"].index("Gain")]
+            # determine Rayleigh and Compton min and max channel nrs
+            #   in principle this integrated roi is also in result0_sum['statistics'] for each peak, but calculating it ourselves feels more clean
+            #       and is more convenient as we don't have to change Pymca_fit() then
+            if type(config['fit']['energy']) is type(float):
+                raylE = config['fit']['energy']
+            else:
+                raylE = config['fit']['energy'][0] #if list of energies is provided, only take first element
+            comptE = raylE / (1.+(raylE/511.)*(1.-np.cos(config['attenuators']['Matrix'][-1]/180.*np.pi)))
+            rayl_min = np.round(((raylE - result0_sum['Scatter Peak000']['Scatter 000']['fwhm']/2)-cte)/gain).astype(int)
+            rayl_max = np.round(((raylE + result0_sum['Scatter Peak000']['Scatter 000']['fwhm']/2)-cte)/gain).astype(int)
+            compt_min = np.round(((comptE - result0_sum['Scatter Compton000']['Scatter 000']['fwhm']/2)-cte)/gain).astype(int)
+            compt_max = np.round(((comptE + result0_sum['Scatter Compton000']['Scatter 000']['fwhm']/2)-cte)/gain).astype(int)
+            # now integrate the results
+            raylid = names0.index('Rayl')
+            comptid = names0.index('Compt')
+            sum_bkg0[raylid] = 0. #background intensities are now0 as the full roi intensity is contained within the fitted peak...
+            sum_bkg0[comptid] = 0.
+            sum_fit0[raylid] = np.sum(sumspec0[rayl_min:rayl_max])
+            sum_fit0[comptid] = np.sum(sumspec0[compt_min:compt_max])
+            ims0[raylid,:,:] = np.sum(spectra0[:,:,rayl_min:rayl_max], axis=2)
+            ims0[comptid,:,:] = np.sum(spectra0[:,:,compt_min:compt_max], axis=2)
+            
     
         print("Fit finished after "+str(time.time()-t0)+" seconds for "+str(n_spectra)+" spectra.")
-        ims0 = peak_int0[cutid0:,:,:]
     
         # correct for deadtime  
         # check if icr/ocr values are appropriate!
@@ -2291,6 +2318,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
             file.create_dataset('fit/'+chnl+'/sum/bkg', data=sum_bkg0, compression='gzip', compression_opts=4)
             dset = file['fit']
             dset.attrs["LastUpdated"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            dset.attrs["ScatROI"] = scatroi
     print('Done')
 
 ##############################################################################
