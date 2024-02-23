@@ -3736,8 +3736,9 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 icr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 ocr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0 = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                i0 = i0/np.asarray(f[sc_id+'/instrument/machine/current'])
+            if sc_id+'/instrument/machine/' in f.keys():
+                if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                    i0 = i0/np.asarray(f[sc_id+'/instrument/machine/current'])
             if i0corid is not None:
                 try:
                     i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
@@ -3750,8 +3751,9 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 i0 = i0/np.average(i0) * i0cor
             if i1id is not None:
                 i1 = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                    i1 = i1/np.asarray(f[sc_id+'/instrument/machine/current'])
+                if sc_id+'/instrument/machine/' in f.keys():
+                    if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                        i1 = i1/np.asarray(f[sc_id+'/instrument/machine/current'])
                 if i1corid is not None:
                     try:
                         i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid]))
@@ -3810,8 +3812,9 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 icr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 ocr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
             i0_temp = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                i0_temp = i0_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
+            if sc_id+'/instrument/machine/' in f.keys():
+                if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                    i0_temp = i0_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
             if i0corid is not None:
                 try:
                     i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
@@ -3824,8 +3827,9 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
                 i0_temp = i0_temp/np.average(i0_temp) * i0cor
             if i1id is not None:
                 i1_temp = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                    i1_temp = i1_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
+                if sc_id+'/instrument/machine/' in f.keys():
+                    if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                        i1_temp = i1_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
                 if i1corid is not None:
                     try:
                         i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
