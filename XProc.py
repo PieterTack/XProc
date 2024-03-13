@@ -3717,59 +3717,52 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             else:
                 sc_dim = scan_dim
         if j == 0:
-            f = h5py.File(file, 'r', locking=True)
-            try:
-                scan_cmd = f[sc_id+'/title'][()].decode('utf8')
-            except Exception:
-                scan_cmd = f[sc_id+'/title'][()]
-            spectra0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id])
-            spectra0 = np.zeros((sc_dim[0], sc_dim[1], spectra0_temp.shape[1]))
-            for i in range(0, spectra0_temp.shape[1]):
-                spectra0[:,:,i] = spectra0_temp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-            icr0 = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            ocr0 = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            if ch1id is not None:
-                spectra1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id])
-                spectra1 = np.zeros((sc_dim[0], sc_dim[1], spectra1_temp.shape[1]))
-                for i in range(0, spectra1_temp.shape[1]):
-                    spectra1[:,:,i] = spectra1_temp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-                icr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                ocr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            i0 = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                i0 = i0/np.asarray(f[sc_id+'/instrument/machine/current'])
-            if i0corid is not None:
+            with h5py.File(file, 'r', locking=True) as f:
                 try:
-                    i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
-                except KeyError:
-                    try:
-                        i0cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
-                    except KeyError:
-                        print("***ERROR: no viable i0cor value obtained. Set to 1.")
-                        i0cor = 1.
-                i0 = i0/np.average(i0) * i0cor
-            if i1id is not None:
-                i1 = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    scan_cmd = f[sc_id+'/title'][()].decode('utf8')
+                except Exception:
+                    scan_cmd = f[sc_id+'/title'][()]
+                spectra0 = np.asarray(f[sc_id+'/measurement/'+ch0id][:sc_dim[0]*sc_dim[1],:]).reshape((sc_dim[0], sc_dim[1], -1))
+                icr0 = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                ocr0 = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                if ch1id is not None:
+                    spectra1 = np.asarray(f[sc_id+'/measurement/'+ch1id][:sc_dim[0]*sc_dim[1],:]).reshape((sc_dim[0], sc_dim[1], -1))
+                    icr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    ocr1 = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                i0 = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                    i1 = i1/np.asarray(f[sc_id+'/instrument/machine/current'])
-                if i1corid is not None:
+                    i0 = i0/np.asarray(f[sc_id+'/instrument/machine/current'])
+                if i0corid is not None:
                     try:
-                        i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid]))
+                        i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
                     except KeyError:
                         try:
-                            i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data']))
+                            i0cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
                         except KeyError:
-                            print("***ERROR: no viable i1cor value obtained. Set to 1.")
-                            i1cor = 1.
-                    i1 = i1/np.average(i1) * i1cor
-            try:
-                mot1 = np.asarray(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                mot2 = np.asarray(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            except KeyError:
-                mot1 = np.asarray(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
-                mot2 = np.asarray(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
-            tm = np.asarray(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            f.close()
+                            print("***ERROR: no viable i0cor value obtained. Set to 1.")
+                            i0cor = 1.
+                    i0 = i0/np.average(i0) * i0cor
+                if i1id is not None:
+                    i1 = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                        i1 = i1/np.asarray(f[sc_id+'/instrument/machine/current'])
+                    if i1corid is not None:
+                        try:
+                            i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid]))
+                        except KeyError:
+                            try:
+                                i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data']))
+                            except KeyError:
+                                print("***ERROR: no viable i1cor value obtained. Set to 1.")
+                                i1cor = 1.
+                        i1 = i1/np.average(i1) * i1cor
+                try:
+                    mot1 = np.asarray(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    mot2 = np.asarray(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                except KeyError:
+                    mot1 = np.asarray(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
+                    mot2 = np.asarray(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
+                tm = np.asarray(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
 
             # find direction in which mot1 and mot2 increase
             if mot1.size > 1:
@@ -3789,61 +3782,54 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
 
         # when reading second file, we should stitch it to the first file's image
         else:
-            f = h5py.File(file, 'r', locking=True)
-            try:
-                scan_cmd += ' '+f[sc_id+'/title'][()].decode('utf8')
-            except Exception:
-                scan_cmd += ' '+f[sc_id+'/title'][()]
-                
-            #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
-            spectra0_tmp = np.asarray(f[sc_id+'/measurement/'+ch0id])
-            spectra0_temp = np.zeros((sc_dim[0], sc_dim[1], spectra0_tmp.shape[1]))
-            for i in range(0, spectra0_tmp.shape[1]):
-                spectra0_temp[:,:,i] = spectra0_tmp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-            icr0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            ocr0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            if ch1id is not None:
-                spectra1_tmp = np.asarray(f[sc_id+'/measurement/'+ch1id])
-                spectra1_temp = np.zeros((sc_dim[0], sc_dim[1], spectra1_temp.shape[1]))
-                for i in range(0, spectra1_tmp.shape[1]):
-                    spectra1_temp[:,:,i] = spectra1_tmp[:sc_dim[0]*sc_dim[1],i].reshape(sc_dim)
-                icr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                ocr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            i0_temp = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                i0_temp = i0_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
-            if i0corid is not None:
+            with h5py.File(file, 'r', locking=True) as f:
                 try:
-                    i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
-                except KeyError:
-                    try:
-                        i0cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
-                    except KeyError:
-                        print("***ERROR: no viable i0cor value obtained. Set to 1.")
-                        i0cor = 1.
-                i0_temp = i0_temp/np.average(i0_temp) * i0cor
-            if i1id is not None:
-                i1_temp = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    scan_cmd += ' '+f[sc_id+'/title'][()].decode('utf8')
+                except Exception:
+                    scan_cmd += ' '+f[sc_id+'/title'][()]
+                    
+                #the other arrays we can't simply append: have to figure out which side to stitch them to, and if there is overlap between motor positions
+                spectra0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id][:sc_dim[0]*sc_dim[1],:]).reshape((sc_dim[0], sc_dim[1], -1))
+                icr0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                ocr0_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                if ch1id is not None:
+                    spectra1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id][:sc_dim[0]*sc_dim[1],:]).reshape((sc_dim[0], sc_dim[1], -1))
+                    icr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+icrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    ocr1_temp = np.asarray(f[sc_id+'/measurement/'+ch1id+'_'+ocrid][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                i0_temp = np.asarray(f[sc_id+'/measurement/'+i0id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
                 if 'current' in f[sc_id+'/instrument/machine/'].keys():
-                    i1_temp = i1_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
-                if i1corid is not None:
+                    i0_temp = i0_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
+                if i0corid is not None:
                     try:
-                        i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
+                        i0cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i0corid][:]))
                     except KeyError:
                         try:
-                            i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
+                            i0cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i0corid+'/data'][:]))
                         except KeyError:
-                            print("***ERROR: no viable i1cor value obtained. Set to 1.")
-                            i1cor = 1.
-                    i1_temp = i1_temp/np.average(i1_temp) * i1cor
-            try:
-                mot1_temp = np.asarray(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-                mot2_temp = np.asarray(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            except KeyError:
-                mot1_temp = np.asarray(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
-                mot2_temp = np.asarray(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
-            tm_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
-            f.close()
+                            print("***ERROR: no viable i0cor value obtained. Set to 1.")
+                            i0cor = 1.
+                    i0_temp = i0_temp/np.average(i0_temp) * i0cor
+                if i1id is not None:
+                    i1_temp = np.asarray(f[sc_id+'/measurement/'+i1id][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    if 'current' in f[sc_id+'/instrument/machine/'].keys():
+                        i1_temp = i1_temp/np.asarray(f[sc_id+'/instrument/machine/current'][:])
+                    if i1corid is not None:
+                        try:
+                            i1cor = np.average(np.asarray(f[str(scanid).split('.')[0]+'.2/measurement/'+i1corid][:]))
+                        except KeyError:
+                            try:
+                                i1cor = np.average(np.asarray(f[str(scanid)+'/instrument/'+i1corid+'/data'][:]))
+                            except KeyError:
+                                print("***ERROR: no viable i1cor value obtained. Set to 1.")
+                                i1cor = 1.
+                        i1_temp = i1_temp/np.average(i1_temp) * i1cor
+                try:
+                    mot1_temp = np.asarray(f[sc_id+'/measurement/'+mot1_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                    mot2_temp = np.asarray(f[sc_id+'/measurement/'+mot2_name][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
+                except KeyError:
+                    mot1_temp = np.asarray(f[sc_id+'/instrument/positioners/'+mot1_name][()]).reshape(sc_dim)
+                    mot2_temp = np.asarray(f[sc_id+'/instrument/positioners/'+mot2_name][()]).reshape(sc_dim)
+                tm_temp = np.asarray(f[sc_id+'/measurement/'+ch0id+'_elapsed_time'][:sc_dim[0]*sc_dim[1]]).reshape(sc_dim)
 
             mot_flag = 0 #TODO: if mot1_temp.shape is larger than mot1 it crashes...
             if mot1_id == 0:
@@ -4126,26 +4112,25 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
     
     # write h5 file in our structure
     filename = h5id15[0].split(".")[0]+scan_suffix+'.h5' #scanid is of type 1.1,  2.1,  4.1
-    f = h5py.File(filename, 'w', locking=True)
-    f.create_dataset('cmd', data=scan_cmd)
-    f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/sumspec', data=sumspec0, compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/maxspec', data=maxspec0, compression='gzip', compression_opts=4)
-    if ch1id is not None:
-        f.create_dataset('raw/channel01/spectra', data=spectra1, compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/icr', data=icr1, compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/ocr', data=ocr1, compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/sumspec', data=sumspec1, compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/maxspec', data=maxspec1, compression='gzip', compression_opts=4)
-    f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
-    if i1id is not None:
-        f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
-    dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
-    dset.attrs['Name'] = mot1_name
-    dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
-    dset.attrs['Name'] = mot2_name
-    f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
-    f.close()
+    with h5py.File(filename, 'w', locking=True) as f:
+        f.create_dataset('cmd', data=scan_cmd)
+        f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/icr', data=icr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/sumspec', data=sumspec0, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/channel00/maxspec', data=maxspec0, compression='gzip', compression_opts=4)
+        if ch1id is not None:
+            f.create_dataset('raw/channel01/spectra', data=spectra1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/icr', data=icr1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/ocr', data=ocr1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/sumspec', data=sumspec1, compression='gzip', compression_opts=4)
+            f.create_dataset('raw/channel01/maxspec', data=maxspec1, compression='gzip', compression_opts=4)
+        f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
+        if i1id is not None:
+            f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+        dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot1_name
+        dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot2_name
+        f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
     print("Done")
