@@ -205,7 +205,7 @@ class Spc():
             self.rv['LiveTime'] = np.fromfile(h, dtype = [ ('liveTime', '<f4')], count=1)['liveTime'][0]
             h.seek(3840)
             self.rv['Data'] = np.fromfile(h, dtype = [ ('spectrum', '<4096i4')], count=1)['spectrum'][0]
-            self.rv['ICR'] = np.total(self.rv['Data'])
+            self.rv['ICR'] = np.sum(self.rv['Data'])
             self.rv['OCR'] = self.rv['ICR'] # ICR and OCR are identical in this case as data is already deadtime corrected (i.e. acquired for given livetime)
             
             # Notes: no info on motor positions is found in this file
@@ -2516,10 +2516,10 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
     x,y = 0, 0
     for file in sorted(spcfiles):
         s = Spc(file)      
-        i0.append(float(s["Current"]))
-        tm.append(float(s["LiveTime"]))
-        spectra.append([s["Data"].astype(float)])
-        ocr.append(float(s["OCR"]))
+        i0.append(float(s.rv["Current"]))
+        tm.append(float(s.rv["LiveTime"]))
+        spectra.append(s.rv["Data"].astype(float))
+        ocr.append(float(s.rv["OCR"]))
 
         mot1.append(coords[0]+x*coords[2])
         mot2.append(coords[1]+y*coords[3])
@@ -2529,12 +2529,12 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
             y += 1
 
     # reshape the arrays to appropriate scan dimensions
-    spectra = np.asarray(spectra).reshape((scandim[1], scandim[2], np.assaray(spectra).shape[0]))
-    ocr = np.asarray(ocr).reshape((scandim[1], scandim[2]))
-    i0 = np.asarray(i0).reshape((scandim[1], scandim[2]))
-    tm = np.asarray(tm).reshape((scandim[1], scandim[2]))
-    mot1 = np.asarray(mot1).reshape((scandim[1], scandim[2]))
-    mot2 = np.asarray(mot2).reshape((scandim[1], scandim[2]))
+    spectra = np.asarray(spectra).reshape((scandim[0], scandim[1], len(spectra[0])))
+    ocr = np.asarray(ocr).reshape((scandim[0], scandim[1]))
+    i0 = np.asarray(i0).reshape((scandim[0], scandim[1]))
+    tm = np.asarray(tm).reshape((scandim[0], scandim[1]))
+    mot1 = np.asarray(mot1).reshape((scandim[0], scandim[1]))
+    mot2 = np.asarray(mot2).reshape((scandim[0], scandim[1]))
     sumspec = np.sum(spectra[:], axis=(0,1))
     maxspec = np.zeros(sumspec.shape[0])
     for i in range(sumspec.shape[0]):
@@ -2542,6 +2542,8 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
     i1 = np.zeros(i0.shape)
 
     outfile = '/'.join(spcprefix.split('/')[:-1])+'/'+outfile
+    if not outfile.endswith('.h5'):
+        outfile += '.h5'
     print("Writing converted file: "+outfile+"...", end=" ")
     with h5py.File(outfile, 'w', locking=True) as f:
         f.create_dataset('cmd', data='scan EDAX EagleIII')
@@ -2553,7 +2555,7 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
         f.create_dataset('raw/I0', data=i0, compression='gzip', compression_opts=4)
         f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
         f.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
-        dset = f.create_dataset('mot1', data=[n.encode('utf8') for n in mot1])
+        dset = f.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
         dset.attrs['Name'] = 'X'
         dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
         dset.attrs['Name'] = 'Y'
