@@ -2546,7 +2546,7 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
         outfile += '.h5'
     print("Writing converted file: "+outfile+"...", end=" ")
     with h5py.File(outfile, 'w', locking=True) as f:
-        f.create_dataset('cmd', data='scan EDAX EagleIII')
+        f.create_dataset('cmd', data='ascan EDAX EagleIII')
         f.create_dataset('raw/channel00/spectra', data=spectra, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=ocr, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/ocr', data=ocr, compression='gzip', compression_opts=4)
