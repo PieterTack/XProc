@@ -122,7 +122,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
                 if mot1_name == "hxrf":
                     rowID = [n.decode("utf8") for n in np.squeeze(h5["mot1"])]
                 else:
-                    rowID = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
+                    rowID = ["-".join(map(str, a)) for a in np.column_stack([np.asarray(h5["mot1"]),np.asarray(h5["mot2"])])]
             else:
                 rowID = h5dir
         rowID = np.array(rowID)

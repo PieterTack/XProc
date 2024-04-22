@@ -1679,7 +1679,7 @@ def calc_detlim(h5file, cncfile, plotytitle="Detection Limit (ppm)", sampletilt=
                     dl_err=[dl_1s_err_0, dl_1000s_err_0], bar=False, save=str(os.path.splitext(h5file)[0])+'_ch'+str(index)+'_DL.png', ytitle=plotytitle)
 
 ##############################################################################
-def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, sqrt=False, rotate=0, fliph=False, cb_opts=None, clim=None, dpi=420):
+def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, clrmap='viridis', log=False, sqrt=False, rotate=0, fliph=False, cb_opts=None, clim=None, dpi=420):
     """
     Generate publishing quality overview images of all fitted elements in H% file (including scale bars, colorbar, ...)
 
@@ -1695,6 +1695,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, s
         Image pixel size in µm.
     scl_size : float
         Image scale bar size to be displayed in µm.
+    clrmap: string, optional
+        Image color map. The default is 'viridis'.
     log : Boolean, optional
         If True, the Briggs logarithm of the data is displayed. The default is False.
     sqrt : Boolean, optional
@@ -1766,7 +1768,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, s
         imsdata0.data = np.sqrt(imsdata0.data)
 
     
-    Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png', dpi=dpi)
+    Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), clrmap, sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png', dpi=dpi)
     
     if chan01_flag == True:
         # set plot options (color limits, clim) if appropriate
@@ -1784,7 +1786,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, log=False, s
         if sqrt:
             imsdata1.data = np.sqrt(imsdata1.data)
         
-        Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), 'viridis', sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png', dpi=dpi)
+        Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), clrmap, sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png', dpi=dpi)
 
 
 ##############################################################################
@@ -2274,8 +2276,8 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
             compt_min = np.round(((comptE - result0_sum['Scatter Compton000']['Scatter 000']['fwhm']/2)-cte)/gain).astype(int)
             compt_max = np.round(((comptE + result0_sum['Scatter Compton000']['Scatter 000']['fwhm']/2)-cte)/gain).astype(int)
             # now integrate the results
-            raylid = names0.index('Rayl')
-            comptid = names0.index('Compt')
+            raylid = np.where(names0 =='Rayl')[0][0]
+            comptid = np.where(names0 =='Compt')[0][0]
             sum_bkg0[raylid] = 0. #background intensities are now0 as the full roi intensity is contained within the fitted peak...
             sum_bkg0[comptid] = 0.
             sum_fit0[raylid] = np.sum(sumspec0[rayl_min:rayl_max])
@@ -3371,13 +3373,13 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
     print("ok")
 
 ##############################################################################
-def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True):
+def ConvSoleilNxs(solnxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True):
     '''
-    Convert PUMA Nexus format to our H5 structure file
+    Convert PUMA or NANOSCOPIUM Nexus format to our H5 structure file
 
     Parameters
     ----------
-    pumanxs : String or list of strings
+    solnxs : String or list of strings
         File path(s) of the PUMA Nexus file(s) to convert. When multiple are provided, the data is concatenated.
     mot1_name : string, optional
         Motor 1 identifier within the PUMA Nexus file. The default is 'COD_GONIO_Tz1'.
@@ -3406,8 +3408,8 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
 
     '''
     
-    if type(pumanxs) is not type([]):
-        pumanxs = [pumanxs]
+    if type(solnxs) is not type([]):
+        solnxs = [solnxs]
     if type(ch0id) is not type([]):
         ch0id = [ch0id]
     if ch1id is not None:
@@ -3416,9 +3418,9 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
     
         
     # puma filetype does not appear to have command line, so we'll just refer to the scan name itself
-    scan_cmd = ' '.join([os.path.splitext(os.path.basename(nxs))[0] for nxs in pumanxs]) 
+    scan_cmd = ' '.join([os.path.splitext(os.path.basename(nxs))[0] for nxs in solnxs]) 
     
-    for index, nxs in enumerate(pumanxs):
+    for index, nxs in enumerate(solnxs):
         print('Processing PUMA file '+nxs+'...', end='')
         if index == 0:
             with h5py.File(nxs,'r', locking=True) as f:
@@ -3428,6 +3430,9 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                 elif 'exp' in [key for key in f.keys()]:
                     basedir = "exp/scan_data/"
                     expflag = True
+                elif os.path.splitext(os.path.basename(nxs))[0].split('-')[0] in [key for key in f.keys()]:
+                    basedir = os.path.splitext(os.path.basename(nxs))[0].split('-')[0]+"/scan_data/"
+                    expflag = False
                 mot1 = np.asarray(f[basedir+mot1_name])
                 if mot1.ndim > 1:
                     mot2 = np.asarray(f[basedir+mot2_name])
@@ -3438,7 +3443,7 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                     else:
                         mot2 = np.array([mot2]*mot1.shape[1]).T
                         tm = np.array([tm]*mot1.shape[0])
-                for i, chnl in enumerate(ch0id):
+                for i, chnl in enumerate(ch0id): #TODO: doesn't appear to make sense to check if i=0 or not, as same thing is done... later in code as well.
                     if i == 0:
                         spectra0 = np.asarray(f[basedir+chnl])
                         # icr and ocr id must be completed with last 2 digits from channel id
@@ -3615,7 +3620,7 @@ def ConvPumaNxs(pumanxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", c
                 maxspec1[i] = spectra1[:,i].max()    
     
     # write h5 file in our structure
-    filename = pumanxs[0].split(".")[0]+'_conv.h5'
+    filename = solnxs[0].split(".")[0]+'_conv.h5'
     with h5py.File(filename, 'w', locking=True) as f:
         f.create_dataset('cmd', data=scan_cmd)
         f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
