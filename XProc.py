@@ -1824,15 +1824,15 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     # read h5file
     with h5py.File(h5file, 'r', locking=True) as file:
         keys = [key for key in file['fit'].keys() if 'channel' in key]
-        I0 =  np.asarray(file['raw/I0'])
-        tm = np.asarray(file['raw/acquisition_time'])
+        I0_raw =  np.asarray(file['raw/I0'])
+        tm_raw = np.asarray(file['raw/acquisition_time'])
         mot1_raw = np.asarray(file['mot1'])
         mot1_name = str(file['mot1'].attrs["Name"])
         mot2_raw = np.asarray(file['mot2'])
         mot2_name = str(file['mot2'].attrs["Name"])
         cmd = str(np.asarray(file['cmd'])).split(' ')
         if 'raw/I1' in file.keys():
-            I1 = np.asarray(file['raw/I1'])
+            I1_raw = np.asarray(file['raw/I1'])
             i1flag = True
 
     # need to make a copy of mot1 and mot2 in case of sorting, which will also be used in snake etc.
@@ -1840,6 +1840,10 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     for index, chnl in enumerate(keys):
         mot1 = mot1_raw.copy()
         mot2 = mot2_raw.copy()
+        I0 = I0_raw.copy()
+        tm = tm_raw.copy()
+        if i1flag:
+            I1 = I1_raw.copy()
         with h5py.File(h5file, 'r', locking=True) as file:
             spectra0 = np.squeeze(np.asarray(file['raw/'+chnl+'/spectra']))
             icr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/icr']))
