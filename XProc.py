@@ -2520,7 +2520,7 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
     mot2 = []
     
     x,y = 0, 0
-    for file in sorted(spcfiles):
+    for file in sorted(spcfiles, key=len): #key=len is needed to assure appropriate sorting due to difference in numerical and alphabetical sorting
         s = Spc(file)      
         i0.append(float(s.rv["Current"]))
         tm.append(float(s.rv["LiveTime"]))
