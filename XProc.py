@@ -2520,7 +2520,7 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
     mot2 = []
     
     x,y = 0, 0
-    for file in sorted(spcfiles):
+    for file in sorted(spcfiles, key=len): #key=len is needed to assure appropriate sorting due to difference in numerical and alphabetical sorting
         s = Spc(file)      
         i0.append(float(s.rv["Current"]))
         tm.append(float(s.rv["LiveTime"]))
@@ -2535,12 +2535,12 @@ def ConvEdaxSpc(spcprefix, outfile, scandim, coords=[0,0,1,1]):
             y += 1
 
     # reshape the arrays to appropriate scan dimensions
-    spectra = np.asarray(spectra).reshape((scandim[0], scandim[1], len(spectra[0])))
-    ocr = np.asarray(ocr).reshape((scandim[0], scandim[1]))
-    i0 = np.asarray(i0).reshape((scandim[0], scandim[1]))
-    tm = np.asarray(tm).reshape((scandim[0], scandim[1]))
-    mot1 = np.asarray(mot1).reshape((scandim[0], scandim[1]))
-    mot2 = np.asarray(mot2).reshape((scandim[0], scandim[1]))
+    spectra = np.asarray(spectra).reshape((scandim[1], scandim[0], len(spectra[0])))
+    ocr = np.asarray(ocr).reshape((scandim[1], scandim[0]))
+    i0 = np.asarray(i0).reshape((scandim[1], scandim[0]))
+    tm = np.asarray(tm).reshape((scandim[1], scandim[0]))
+    mot1 = np.asarray(mot1).reshape((scandim[1], scandim[0]))
+    mot2 = np.asarray(mot2).reshape((scandim[1], scandim[0]))
     sumspec = np.sum(spectra[:], axis=(0,1))
     maxspec = np.zeros(sumspec.shape[0])
     for i in range(sumspec.shape[0]):
