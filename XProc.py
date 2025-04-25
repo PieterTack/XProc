@@ -2944,20 +2944,20 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
     files = list("")
     print("Writing merged file: "+scan_suffix+"_merge.h5...", end=" ")
     with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as f:
-        f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,None))
+        f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         f.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         f.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         f.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         f.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         f.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         if ch1 is not None:
-            f.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,None))
+            f.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
             f.create_dataset('raw/channel01/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
             f.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         f.create_dataset('mot1', data=np.squeeze(mot1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
         f.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
 
-
+    firstgo = True
     for k in range(scanid.size):
         if scanid.size == 1:
             sc_id = str(scanid)
@@ -2984,19 +2984,28 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             if ch1 is not None:
                 spe1_arr, icr1_arr, ocr1_arr = read_P06_spectra(file, sc_id, ch1)
             with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
-                hf['raw/channel00/spectra'].resize((f['raw/channel00/spectra'].shape[0]+spe0_arr.shape[0], f['raw/channel00/spectra'].shape[1]), axis=0)
-                hf['raw/channel00/spectra'][-spe0_arr.shape[0]:,:] = spe0_arr
-                hf['raw/channel00/icr'].resize((f['raw/channel00/icr'].shape[0]+icr0_arr.shape[0]), axis=0)
-                hf['raw/channel00/icr'][-icr0_arr.shape[0]:] = icr0_arr
-                hf['raw/channel00/ocr'].resize((f['raw/channel00/ocr'].shape[0]+ocr0_arr.shape[0]), axis=0)
-                hf['raw/channel00/ocr'][-ocr0_arr.shape[0]:] = ocr0_arr
-                if ch1 is not None:
-                    hf['raw/channel01/spectra'].resize((f['raw/channel01/spectra'].shape[0]+spe1_arr.shape[0], f['raw/channel01/spectra'].shape[1]), axis=0)
-                    hf['raw/channel01/spectra'][-spe1_arr.shape[0]:,:] = spe1_arr
-                    hf['raw/channel01/icr'].resize((f['raw/channel01/icr'].shape[0]+icr1_arr.shape[0]), axis=0)
-                    hf['raw/channel01/icr'][-icr1_arr.shape[0]:] = icr1_arr
-                    hf['raw/channel01/ocr'].resize((f['raw/channel01/ocr'].shape[0]+ocr1_arr.shape[0]), axis=0)
-                    hf['raw/channel01/ocr'][-ocr1_arr.shape[0]:] = ocr1_arr
+                if firstgo:
+                    hf.create_dataset('raw/channel00/spectra', data=np.squeeze(spe0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    hf.create_dataset('raw/channel00/icr', data=np.squeeze(icr0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    hf.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    if ch1 is not None:
+                        hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spe1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('raw/channel01/icr', data=np.squeeze(icr1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                else:
+                    hf['raw/channel00/spectra'].resize((hf['raw/channel00/spectra'].shape[0]+spe0_arr.shape[0], hf['raw/channel00/spectra'].shape[1]), axis=0)
+                    hf['raw/channel00/spectra'][-spe0_arr.shape[0]:,:] = spe0_arr
+                    hf['raw/channel00/icr'].resize((hf['raw/channel00/icr'].shape[0]+icr0_arr.shape[0]), axis=0)
+                    hf['raw/channel00/icr'][-icr0_arr.shape[0]:] = icr0_arr
+                    hf['raw/channel00/ocr'].resize((hf['raw/channel00/ocr'].shape[0]+ocr0_arr.shape[0]), axis=0)
+                    hf['raw/channel00/ocr'][-ocr0_arr.shape[0]:] = ocr0_arr
+                    if ch1 is not None:
+                        hf['raw/channel01/spectra'].resize((hf['raw/channel01/spectra'].shape[0]+spe1_arr.shape[0], hf['raw/channel01/spectra'].shape[1]), axis=0)
+                        hf['raw/channel01/spectra'][-spe1_arr.shape[0]:,:] = spe1_arr
+                        hf['raw/channel01/icr'].resize((hf['raw/channel01/icr'].shape[0]+icr1_arr.shape[0]), axis=0)
+                        hf['raw/channel01/icr'][-icr1_arr.shape[0]:] = icr1_arr
+                        hf['raw/channel01/ocr'].resize((hf['raw/channel01/ocr'].shape[0]+ocr1_arr.shape[0]), axis=0)
+                        hf['raw/channel01/ocr'][-ocr1_arr.shape[0]:] = ocr1_arr
         if os.path.isfile(sc_id+"/adc_01/"+files[-1]) is True:
             adc = '/adc_01/'
         elif os.path.isfile(sc_id+"/adc01/"+files[-1]) is True:
@@ -3027,12 +3036,17 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             f.close()
             print("read")  
         with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
-            hf['raw/I0'].resize((f['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
-            hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
-            hf['raw/I1'].resize((f['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
-            hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
-            hf['raw/acquisition_time'].resize((f['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
-            hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
+            if firstgo:
+                hf.create_dataset('raw/I0', data=np.squeeze(i0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                hf.create_dataset('raw/I1', data=np.squeeze(i1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+            else:
+                hf['raw/I0'].resize((hf['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
+                hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
+                hf['raw/I1'].resize((hf['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
+                hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
+                hf['raw/acquisition_time'].resize((hf['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
+                hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
 
         # actual pilcgenerator files can be different structure depending on type of scan
         files = list("")
@@ -3180,11 +3194,16 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 mot1_arr = np.delete(mot1_arr, np.where(counter_id != 1))
                 mot2_arr = np.delete(mot2_arr, np.where(counter_id != 1))
                 print("read")
-        with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
-            hf['mot1'].resize((f['mot1'].shape[0]+mot1_arr.shape[0]), axis=0)
-            hf['mot1'][-mot1_arr.shape[0]:] = mot1_arr
-            hf['mot2'].resize((f['mot2'].shape[0]+mot2_arr.shape[0]), axis=0)
-            hf['mot2'][-mot2_arr.shape[0]:] = mot2_arr
+                with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+                    if firstgo:
+                        hf.create_dataset('mot1', data=np.squeeze(mot1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('mot2', data=np.squeeze(mot2_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        firstgo = False
+                    else:
+                        hf['mot1'].resize((hf['mot1'].shape[0]+mot1_arr.shape[0]), axis=0)
+                        hf['mot1'][-mot1_arr.shape[0]:] = mot1_arr
+                        hf['mot2'].resize((hf['mot2'].shape[0]+mot2_arr.shape[0]), axis=0)
+                        hf['mot2'][-mot2_arr.shape[0]:] = mot2_arr
             
     # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.asarray
     # let's translate scan command to figure out array dimensions we want to fill
