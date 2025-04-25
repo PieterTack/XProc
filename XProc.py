@@ -2931,7 +2931,6 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
 
     # Make the (empty) dataset arrays in the merged H5 file
     files = list("")
-    firstgo = True
     for k in range(scanid.size):
         if scanid.size == 1:
             sc_id = str(scanid)
@@ -2953,6 +2952,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             for file in sorted(os.listdir(sc_id+"/"+ch0[0][0])):
                 if file.endswith(".nxs"):
                     files.append(file)
+        firstgo = True #set firstgo parameter to creat datasets at start
         for file in files:
             spe0_arr, icr0_arr, ocr0_arr = read_P06_spectra(file, sc_id, ch0)
             if ch1 is not None:
@@ -2966,16 +2966,17 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                         hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spe1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,spe1_arr.shape[1]))
                         hf.create_dataset('raw/channel01/icr', data=np.squeeze(icr1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
                         hf.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    firstgo = False
             else:
                 with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
-                    hf['raw/channel00/spectra'].resize((hf['raw/channel00/spectra'].shape[0]+spe0_arr.shape[0], hf['raw/channel00/spectra'].shape[1]), axis=0)
+                    hf['raw/channel00/spectra'].resize((hf['raw/channel00/spectra'].shape[0]+spe0_arr.shape[0], hf['raw/channel00/spectra'].shape[1]))
                     hf['raw/channel00/spectra'][-spe0_arr.shape[0]:,:] = spe0_arr
                     hf['raw/channel00/icr'].resize((hf['raw/channel00/icr'].shape[0]+icr0_arr.shape[0]), axis=0)
                     hf['raw/channel00/icr'][-icr0_arr.shape[0]:] = icr0_arr
                     hf['raw/channel00/ocr'].resize((hf['raw/channel00/ocr'].shape[0]+ocr0_arr.shape[0]), axis=0)
                     hf['raw/channel00/ocr'][-ocr0_arr.shape[0]:] = ocr0_arr
                     if ch1 is not None:
-                        hf['raw/channel01/spectra'].resize((hf['raw/channel01/spectra'].shape[0]+spe1_arr.shape[0], hf['raw/channel01/spectra'].shape[1]), axis=0)
+                        hf['raw/channel01/spectra'].resize((hf['raw/channel01/spectra'].shape[0]+spe1_arr.shape[0], hf['raw/channel01/spectra'].shape[1]))
                         hf['raw/channel01/spectra'][-spe1_arr.shape[0]:,:] = spe1_arr
                         hf['raw/channel01/icr'].resize((hf['raw/channel01/icr'].shape[0]+icr1_arr.shape[0]), axis=0)
                         hf['raw/channel01/icr'][-icr1_arr.shape[0]:] = icr1_arr
@@ -2988,6 +2989,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         else:
             adc = None
         if adc != None:
+            firstgo = True #set firstgo parameter to creat datasets at start
             for file in files:
                 # Reading I0 and measurement time data
                 print("Reading " +sc_id+adc+file +"...", end=" ")
@@ -2997,6 +2999,19 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 tm_arr = f['entry/data/exposuretime'][:]
                 f.close()
                 print("read")
+            with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+                if firstgo:
+                    hf.create_dataset('raw/I0', data=np.squeeze(i0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    hf.create_dataset('raw/I1', data=np.squeeze(i1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    firstgo = False
+                else:
+                    hf['raw/I0'].resize((hf['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
+                    hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
+                    hf['raw/I1'].resize((hf['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
+                    hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
+                    hf['raw/acquisition_time'].resize((hf['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
+                    hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
         else: #the adc_01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
             if os.path.isdir(sc_id+"/adc_01") is True:
                 adc = '/adc_01/'
@@ -3010,18 +3025,10 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             tm_arr = f['entry/data/ExposureTime'][:]
             f.close()
             print("read")  
-        with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
-            if firstgo:
+            with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
                 hf.create_dataset('raw/I0', data=np.squeeze(i0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
                 hf.create_dataset('raw/I1', data=np.squeeze(i1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
                 hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-            else:
-                hf['raw/I0'].resize((hf['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
-                hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
-                hf['raw/I1'].resize((hf['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
-                hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
-                hf['raw/acquisition_time'].resize((hf['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
-                hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
 
         # actual pilcgenerator files can be different structure depending on type of scan
         files = list("")
@@ -3061,9 +3068,13 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 mot1_name = str(scan_cmd[1])
                 mot2_arr = np.asarray(f["scan/data/"+str(scan_cmd[5])][:])
                 mot2_name = str(scan_cmd[5])            
+            with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+                hf.create_dataset('mot1', data=np.squeeze(mot1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                hf.create_dataset('mot2', data=np.squeeze(mot2_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
             f.close()
             print("read")
         else:
+            firstgo = True #set firstgo parameter to creat datasets at start
             for file in files:
                 # Reading motor positions. Assumes only 2D scans are performed (stores encoder1 and 2 values)
                 print("Reading " +sc_id+pilcid+file +"...", end=" ")
@@ -3451,7 +3462,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         del hf['mot2']
         dset = hf.create_dataset('mot1', data=np.squeeze(mot1), compression='gzip', compression_opts=4)
         dset.attrs['Name'] = mot1_name
-        dset = f.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4)
+        dset = hf.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4)
         dset.attrs['Name'] = mot2_name
     print("ok")
 
