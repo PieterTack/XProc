@@ -2959,11 +2959,11 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 spe1_arr, icr1_arr, ocr1_arr = read_P06_spectra(file, sc_id, ch1)
             if firstgo:
                 with h5py.File(scan_suffix+"_merge.h5", 'w', locking=True) as hf:
-                    hf.create_dataset('raw/channel00/spectra', data=np.squeeze(spe0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                    hf.create_dataset('raw/channel00/spectra', data=np.squeeze(spe0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,spe0_arr.shape[1]))
                     hf.create_dataset('raw/channel00/icr', data=np.squeeze(icr0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
                     hf.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
                     if ch1 is not None:
-                        hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spe1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spe1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,spe1_arr.shape[1]))
                         hf.create_dataset('raw/channel01/icr', data=np.squeeze(icr1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
                         hf.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
             else:
