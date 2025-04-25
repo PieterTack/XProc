@@ -2020,9 +2020,15 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     # correct positions for half pixel shift
                     mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
                 # based on cmd determine regular grid positions
-                mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(cmd[4]))
-                mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(cmd[8])) 
-                if cmd[0] == "b'cdmesh":
+                if cmd[0]=="b'cdmeshs":
+                    xdim = np.floor(np.abs(float(cmd[2])-float(cmd[3]))/float(cmd[4]))
+                    ydim = np.floor(np.abs(float(cmd[6])-float(cmd[7]))/float(cmd[8]))+1
+                    mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(xdim))
+                    mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(ydim)) 
+                else:
+                    mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(cmd[4]))
+                    mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(cmd[8])) 
+                if cmd[0] == "b'cdmesh" or cmd[0] == "b'cdmeshs":
                     mot1_pos = mot1_pos - (mot1_pos[0] - mot1[0,0])
                     mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
                 ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
@@ -2669,7 +2675,7 @@ def ConvDeltaCsv(csvfile):
     except UnicodeError:
         file = pd.read_csv(csvfile, header=None, sep=None, encoding='utf_16')
     
-    rowheads = [n for n in file[0] if n is not np.NaN]
+    rowheads = [n for n in file[0] if n is not np.nan]
     # loop through the different columns and assign them to spectra0, spectra2 etc.
     spectra0 = []
     ocr0 = []
@@ -2881,7 +2887,7 @@ def read_P06_spectra(file, sc_id, ch):
     return spe0_arr, icr0_arr, ocr0_arr
     
 ##############################################################################
-def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, readas1d=False):
+def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, readas1d=False, outdir=None):
     """
     Merges separate P06 nxs files to 1 handy H5 file containing 2D array of spectra, relevant motor positions, 
     I0 counter, ICR, OCR and mesaurement time.
@@ -2901,6 +2907,8 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         Similar as ch0, but then for a second detector. The default is None.
     readas1d : Boolean, optional
         If True, data is read as a single 1 dimensional array and no reshaping of the scan to a 2D image is attempted. The default is False.
+    outdir : string, optional
+        If None (default) the converted data is stored in the same directory as the raw data. If not None the data is stored in the directory provided by the user.
 
     Returns
     -------
@@ -2908,10 +2916,47 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
 
     """
     scanid = np.asarray(scanid)
-    if scanid.size == 1:
-        scan_suffix = '/'.join(str(scanid).split('/')[0:-2])+'/scan'+str(scanid).split("_")[-1]
+    if outdir is None:
+        if scanid.size == 1:
+            scan_suffix = '/'.join(str(scanid).split('/')[0:-2])+'/scan'+str(scanid).split("_")[-1]
+        else:
+            scan_suffix = '/'.join(scanid[0].split('/')[0:-2])+'/scan'+str(scanid[0]).split("_")[-1]+'-'+str(scanid[-1]).split("_")[-1]
     else:
-        scan_suffix = '/'.join(scanid[0].split('/')[0:-2])+'/scan'+str(scanid[0]).split("_")[-1]+'-'+str(scanid[-1]).split("_")[-1]
+        if not outdir.endswith('/'):
+            outdir += '/'
+        if scanid.size == 1:
+            scan_suffix = outdir+'scan'+str(scanid).split("_")[-1]
+        else:
+            scan_suffix = outdir+'scan'+str(scanid[0]).split("_")[-1]+'-'+str(scanid[-1]).split("_")[-1]
+
+    # Make the (empty) dataset arrays in the merged H5 file
+    spectra0 = []
+    icr0 = []
+    ocr0 = []
+    spectra1 = []
+    icr1 = []
+    ocr1 = []
+    i0 = []
+    i1 = []
+    tm = []
+    mot1 = []
+    mot2 = []
+    files = list("")
+    print("Writing merged file: "+scan_suffix+"_merge.h5...", end=" ")
+    with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as f:
+        f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,None))
+        f.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+        f.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+        f.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+        f.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+        f.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+        if ch1 is not None:
+            f.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,None))
+            f.create_dataset('raw/channel01/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+            f.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+        f.create_dataset('mot1', data=np.squeeze(mot1), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+        f.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+
 
     for k in range(scanid.size):
         if scanid.size == 1:
@@ -2925,18 +2970,6 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
         print(' '.join(scan_cmd))
         f.close()
 
-        spectra0 = []
-        icr0 = []
-        ocr0 = []
-        spectra1 = []
-        icr1 = []
-        ocr1 = []
-        i0 = []
-        i1 = []
-        tm = []
-        mot1 = []
-        mot2 = []
-        files = list("")
         # actual spectrum scan files are in dir scanid/scan_0XXX/xspress3_01
         if type(ch0[0]) == type(str()):
             for file in sorted(os.listdir(sc_id+"/"+ch0[0])):
@@ -2950,14 +2983,20 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             spe0_arr, icr0_arr, ocr0_arr = read_P06_spectra(file, sc_id, ch0)
             if ch1 is not None:
                 spe1_arr, icr1_arr, ocr1_arr = read_P06_spectra(file, sc_id, ch1)
-            for i in range(spe0_arr.shape[0]):
-                spectra0.append(spe0_arr[i,:])
-                icr0.append(icr0_arr[i])
-                ocr0.append(ocr0_arr[i])
+            with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+                hf['raw/channel00/spectra'].resize((f['raw/channel00/spectra'].shape[0]+spe0_arr.shape[0], f['raw/channel00/spectra'].shape[1]), axis=0)
+                hf['raw/channel00/spectra'][-spe0_arr.shape[0]:,:] = spe0_arr
+                hf['raw/channel00/icr'].resize((f['raw/channel00/icr'].shape[0]+icr0_arr.shape[0]), axis=0)
+                hf['raw/channel00/icr'][-icr0_arr.shape[0]:] = icr0_arr
+                hf['raw/channel00/ocr'].resize((f['raw/channel00/ocr'].shape[0]+ocr0_arr.shape[0]), axis=0)
+                hf['raw/channel00/ocr'][-ocr0_arr.shape[0]:] = ocr0_arr
                 if ch1 is not None:
-                    spectra1.append(spe1_arr[i,:])
-                    icr1.append(icr1_arr[i])
-                    ocr1.append(ocr1_arr[i])
+                    hf['raw/channel01/spectra'].resize((f['raw/channel01/spectra'].shape[0]+spe1_arr.shape[0], f['raw/channel01/spectra'].shape[1]), axis=0)
+                    hf['raw/channel01/spectra'][-spe1_arr.shape[0]:,:] = spe1_arr
+                    hf['raw/channel01/icr'].resize((f['raw/channel01/icr'].shape[0]+icr1_arr.shape[0]), axis=0)
+                    hf['raw/channel01/icr'][-icr1_arr.shape[0]:] = icr1_arr
+                    hf['raw/channel01/ocr'].resize((f['raw/channel01/ocr'].shape[0]+ocr1_arr.shape[0]), axis=0)
+                    hf['raw/channel01/ocr'][-ocr1_arr.shape[0]:] = ocr1_arr
         if os.path.isfile(sc_id+"/adc_01/"+files[-1]) is True:
             adc = '/adc_01/'
         elif os.path.isfile(sc_id+"/adc01/"+files[-1]) is True:
@@ -2972,10 +3011,6 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 i0_arr = f['entry/data/value1'][:]
                 i1_arr = f['entry/data/value2'][:]
                 tm_arr = f['entry/data/exposuretime'][:]
-                for i in range(i0_arr.shape[0]):
-                    i0.append(i0_arr[i])
-                    i1.append(i1_arr[i])
-                    tm.append(tm_arr[i])
                 f.close()
                 print("read")
         else: #the adc_01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
@@ -2989,12 +3024,16 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
             i0_arr = f['entry/data/Value1'][:]
             i1_arr = f['entry/data/Value2'][:]
             tm_arr = f['entry/data/ExposureTime'][:]
-            for i in range(i0_arr.shape[0]):
-                i0.append(i0_arr[i])
-                i1.append(i1_arr[i])
-                tm.append(tm_arr[i])
             f.close()
-            print("read")            
+            print("read")  
+        with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+            hf['raw/I0'].resize((f['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
+            hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
+            hf['raw/I1'].resize((f['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
+            hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
+            hf['raw/acquisition_time'].resize((f['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
+            hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
+
         # actual pilcgenerator files can be different structure depending on type of scan
         files = list("")
         for i in range(5,0,-1):
@@ -3034,9 +3073,6 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 mot2_arr = np.asarray(f["scan/data/"+str(scan_cmd[5])][:])
                 mot2_name = str(scan_cmd[5])            
             f.close()
-            for i in range(mot1_arr.shape[0]):
-                mot1.append(mot1_arr[i])
-                mot2.append(mot2_arr[i])
             print("read")
         else:
             for file in files:
@@ -3140,35 +3176,80 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                     print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
                                     mot2_arr = enc_vals[1]
                                     mot2_name = enc_names[1]
-                for i in range(mot1_arr.shape[0]):
-                    if counter_id[i] == 1:
-                        mot1.append(mot1_arr[i])
-                        mot2.append(mot2_arr[i])
                 f.close()
+                mot1_arr = np.delete(mot1_arr, np.where(counter_id != 1))
+                mot2_arr = np.delete(mot2_arr, np.where(counter_id != 1))
                 print("read")
-        # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.asarray
-        # let's translate scan command to figure out array dimensions we want to fill
-        #   1D scan (ascan, dscan, timescan, ...) contain 7 parts, i.e. dscan samx 0 1 10 1 False
-        #       sometimes False at end appears to be missing
-        if scan_cmd[0][0] == 'c' and  scan_cmd[0] != 'cnt':
-            xdim = int(scan_cmd[4])
-        elif scan_cmd[0] == 'cnt':
-            xdim = 1
-        elif scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
-            xdim = int(scan_cmd[1])+1
+        with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+            hf['mot1'].resize((f['mot1'].shape[0]+mot1_arr.shape[0]), axis=0)
+            hf['mot1'][-mot1_arr.shape[0]:] = mot1_arr
+            hf['mot2'].resize((f['mot2'].shape[0]+mot2_arr.shape[0]), axis=0)
+            hf['mot2'][-mot2_arr.shape[0]:] = mot2_arr
+            
+    # try to reshape if possible (for given scan_cmd and extracted data points), else just convert to np.asarray
+    # let's translate scan command to figure out array dimensions we want to fill
+    #   1D scan (ascan, dscan, timescan, ...) contain 7 parts, i.e. dscan samx 0 1 10 1 False
+    #       sometimes False at end appears to be missing
+    if scan_cmd[0][0] == 'c' and  scan_cmd[0] != 'cnt':
+        if scan_cmd[0] == 'cdmeshs':
+            xdim = np.floor(np.abs(float(scan_cmd[2])-float(scan_cmd[3]))/float(scan_cmd[4]))
         else:
-            xdim = int(scan_cmd[4])+1
-        ydim = 1
-        if scan_cmd.shape[0] > 7:
+            xdim = int(scan_cmd[4])
+    elif scan_cmd[0] == 'cnt':
+        xdim = 1
+    elif scan_cmd[0] == 'timescanc' or scan_cmd[0] == 'timescan':
+        xdim = int(scan_cmd[1])+1
+    else:
+        xdim = int(scan_cmd[4])+1
+    ydim = 1
+    if scan_cmd.shape[0] > 7:
+        if scan_cmd[0] == 'cdmeshs':
+            ydim = np.floor(np.abs(float(scan_cmd[6])-float(scan_cmd[7]))/float(scan_cmd[8]))+1
+        else:
             ydim = int(scan_cmd[8])+1
-        if np.asarray(spectra0).shape[0] == xdim*ydim and readas1d is not True:
-            spectra0 = np.asarray(spectra0)
+    with h5py.File(scan_suffix+"_merge.h5", 'r+', locking=True) as hf:
+        spectra0 = np.asarray(hf['raw/channel00/spectra'])
+        if spectra0.shape[0] == xdim*ydim and readas1d is not True:
             spectra0 = spectra0.reshape((ydim, xdim, spectra0.shape[1]))
+            del hf['raw/channel00/spectra']
+            hf.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4)
+            del spectra0 #clear it from memory, probably not really needed but no harm either
+            icr0 = np.asarray(hf['raw/channel00/icr'])
+            ocr0 = np.asarray(hf['raw/channel00/ocr'])
+            i0 = np.asarray(hf['raw/I0'])
+            i1 = np.asarray(hf['raw/I1'])
+            tm = np.asarray(hf['raw/acquisition_time'])
             icr0 = np.asarray(icr0).reshape((ydim, xdim))
             ocr0 = np.asarray(ocr0).reshape((ydim, xdim))
             i0 = np.asarray(i0).reshape((ydim, xdim))
             i1 = np.asarray(i1).reshape((ydim, xdim))
             tm = np.asarray(tm).reshape((ydim, xdim))
+            del hf['raw/channel00/icr']
+            del hf['raw/channel00/ocr']
+            del hf['raw/I0']
+            del hf['raw/I1']
+            del hf['raw/acquisition_time']
+            hf.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4)
+            if ch1 is not None:
+                spectra1 = np.asarray(hf['raw/channel01/spectra'])
+                spectra1 = spectra1.reshape((ydim, xdim, spectra1.shape[1]))
+                del hf['raw/channel01/spectra']
+                hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4)
+                del spectra1 #clear it from memory, probably not really needed but no harm either
+                icr1 = np.asarray(hf['raw/channel01/icr'])
+                ocr1 = np.asarray(hf['raw/channel01/ocr'])
+                icr1 = np.asarray(icr1).reshape((ydim, xdim))
+                ocr1 = np.asarray(ocr1).reshape((ydim, xdim))
+                del hf['raw/channel01/icr']
+                del hf['raw/channel01/ocr']
+                hf.create_dataset('raw/channel01/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4)
+                hf.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1), compression='gzip', compression_opts=4)
+            mot1 = np.asarray(hf['mot1'])
+            mot2 = np.asarray(hf['mot2'])
             if np.asarray(mot1).shape[0] < xdim*ydim:
                 print("Warning: mot1 has less than "+str(xdim*ydim)+" elements; padding with zero.")
                 mot1 = np.concatenate((np.asarray(mot1), np.zeros(xdim*ydim-np.asarray(mot1).shape[0])))
@@ -3177,96 +3258,91 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 mot2 = np.concatenate((np.asarray(mot2), np.zeros(xdim*ydim-np.asarray(mot2).shape[0])))
             mot1 = np.asarray(mot1[0:xdim*ydim]).reshape((ydim, xdim))
             mot2 = np.asarray(mot2[0:xdim*ydim]).reshape((ydim, xdim))
+            del hf['mot1']
+            del hf['mot2']
+            dset = hf.create_dataset('mot1', data=np.squeeze(mot1), compression='gzip', compression_opts=4)
+            dset.attrs['Name'] = mot1_name
+            dset = hf.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4)
+            dset.attrs['Name'] = mot2_name
             timetrig = False
-        elif np.asarray(spectra0).shape[0] < xdim*ydim and readas1d is not True:
-            spectra0 = np.asarray(spectra0)
+        elif spectra0.shape[0] < xdim*ydim and readas1d is not True:
             zerosize = xdim*ydim-spectra0.shape[0]
             zeros = np.zeros((zerosize, spectra0.shape[1]))
             spectra0 = np.concatenate((spectra0, zeros)).reshape((ydim, xdim, spectra0.shape[1]))
+            del hf['raw/channel00/spectra']
+            hf.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4)
+            del spectra0 #clear it from memory, probably not really needed but no harm either
+            icr0 = np.asarray(hf['raw/channel00/icr'])
+            ocr0 = np.asarray(hf['raw/channel00/ocr'])
+            i0 = np.asarray(hf['raw/I0'])
+            i1 = np.asarray(hf['raw/I1'])
+            tm = np.asarray(hf['raw/acquisition_time'])
             zeros = np.zeros((zerosize))
             icr0 = np.concatenate((np.asarray(icr0), zeros)).reshape((ydim, xdim))
             ocr0 = np.concatenate((np.asarray(ocr0), zeros)).reshape((ydim, xdim))
             i0 = np.concatenate((np.asarray(i0), zeros)).reshape((ydim, xdim))
             i1 = np.concatenate((np.asarray(i1), zeros)).reshape((ydim, xdim))
             tm = np.concatenate((np.asarray(tm), zeros)).reshape((ydim, xdim))
+            del hf['raw/channel00/icr']
+            del hf['raw/channel00/ocr']
+            del hf['raw/I0']
+            del hf['raw/I1']
+            del hf['raw/acquisition_time']
+            hf.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4)
+            mot1 = np.asarray(hf['mot1'])
+            mot2 = np.asarray(hf['mot2'])
+            if np.asarray(mot1).shape[0] < xdim*ydim:
+                print("Warning: mot1 has less than "+str(xdim*ydim)+" elements; padding with zero.")
+                mot1 = np.concatenate((np.asarray(mot1), np.zeros(xdim*ydim-np.asarray(mot1).shape[0])))
+            if np.asarray(mot2).shape[0] < xdim*ydim:
+                print("Warning: mot2 has less than "+str(xdim*ydim)+" elements; padding with zero.")
+                mot2 = np.concatenate((np.asarray(mot2), np.zeros(xdim*ydim-np.asarray(mot2).shape[0])))
             mot1 = np.concatenate((np.asarray(mot1), zeros))[0:xdim*ydim].reshape((ydim, xdim))
             mot2 = np.concatenate((np.asarray(mot2), zeros))[0:xdim*ydim].reshape((ydim, xdim))
-            timetrig = False
-        else:            
-            spectra0 = np.asarray(spectra0)
-            icr0 = np.asarray(icr0)
-            ocr0 = np.asarray(ocr0)
+            del hf['mot1']
+            del hf['mot2']
+            dset = hf.create_dataset('mot1', data=np.squeeze(mot1), compression='gzip', compression_opts=4)
+            dset.attrs['Name'] = mot1_name
+            dset = hf.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4)
+            dset.attrs['Name'] = mot2_name
             if ch1 is not None:
-                spectra1 = np.asarray(spectra1)
-            i0 = np.asarray(i0)
-            i1 = np.asarray(i1)
-            tm = np.asarray(tm)
-            mot1 = np.asarray(mot1)
-            mot2 = np.asarray(mot2)
-            # in this case we should never sort or flip data
-            sort = False
-            timetrig = True
-        if ch1 is not None:
-            if np.asarray(spectra1).shape[0] == xdim*ydim and readas1d is not True:
-                spectra1 = np.asarray(spectra1)
-                spectra1 = spectra1.reshape((ydim, xdim, spectra1.shape[1]))
-                icr1 = np.asarray(icr1).reshape((ydim, xdim))
-                ocr1 = np.asarray(ocr1).reshape((ydim, xdim))
-            elif np.asarray(spectra1).shape[0] < xdim*ydim and readas1d is not True:
-                spectra1 = np.asarray(spectra1)
+                spectra1 = np.asarray(hf['raw/channel01/spectra'])
                 zerosize = xdim*ydim-spectra1.shape[0]
                 zeros = np.zeros((zerosize, spectra1.shape[1]))
                 spectra1 = np.asarray(spectra1)
                 spectra1 = np.concatenate((spectra1, zeros)).reshape((ydim, xdim, spectra1.shape[1]))
+                del hf['raw/channel01/spectra']
+                hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4)
+                del spectra1 #clear it from memory, probably not really needed but no harm either
+                icr1 = np.asarray(hf['raw/channel01/icr'])
+                ocr1 = np.asarray(hf['raw/channel01/ocr'])
                 zeros = np.zeros((zerosize))
                 icr1 = np.concatenate((np.asarray(icr1), zeros)).reshape((ydim, xdim))
                 ocr1 = np.concatenate((np.asarray(ocr1), zeros)).reshape((ydim, xdim))
-            else:            
-                spectra1 = np.asarray(spectra1)
-                icr1 = np.asarray(icr1)
-                ocr1 = np.asarray(ocr1)
-        # store data arrays so they can be concatenated in case of multiple scans
-        if k == 0:
-            spectra0_tmp = spectra0
-            del spectra0
-            icr0_tmp = icr0
-            ocr0_tmp = ocr0
-            if ch1 is not None:
-                spectra1_tmp = spectra1
-                del spectra1
-                icr1_tmp = icr1
-                ocr1_tmp = ocr1
-            mot1_tmp = mot1
-            mot2_tmp = mot2
-            i0_tmp = i0
-            i1_tmp = i1
-            tm_tmp = tm
-        else:
-            spectra0_tmp = np.concatenate((spectra0_tmp,spectra0), axis=0)
-            del spectra0
-            icr0_tmp = np.concatenate((icr0_tmp,icr0), axis=0)
-            ocr0_tmp = np.concatenate((ocr0_tmp,ocr0), axis=0)
-            if ch1 is not None:
-                spectra1_tmp = np.concatenate((spectra1_tmp,spectra1), axis=0)
-                del spectra1
-                icr1_tmp = np.concatenate((icr1_tmp,icr1), axis=0)
-                ocr1_tmp = np.concatenate((ocr1_tmp,ocr1), axis=0)
-            mot1_tmp = np.concatenate((mot1_tmp,mot1), axis=0)
-            mot2_tmp = np.concatenate((mot2_tmp,mot2), axis=0)
-            i0_tmp = np.concatenate((i0_tmp,i0), axis=0)
-            i1_tmp = np.concatenate((i1_tmp,i1), axis=0)
-            tm_tmp = np.concatenate((tm_tmp,tm), axis=0)
-
+                del hf['raw/channel01/icr']
+                del hf['raw/channel01/ocr']
+                hf.create_dataset('raw/channel01/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4)
+                hf.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1), compression='gzip', compression_opts=4)
+            timetrig = False
+        else:            
+            # in this case we should never sort or flip data
+            sort = False
+            timetrig = True
+  
     # redefine as original arrays for further processing
-    spectra0 = spectra0_tmp
-    del spectra0_tmp
-    icr0 = icr0_tmp 
-    ocr0 = ocr0_tmp 
-    i0 = i0_tmp 
-    i1 = i1_tmp 
-    tm = tm_tmp 
-    mot1 = mot1_tmp 
-    mot2 = mot2_tmp 
+    with h5py.File(scan_suffix+"_merge.h5", 'r', locking=True) as hf:
+        spectra0 = np.asarray(hf['raw/channel00/spectra'])
+        icr0 = hf['raw/channel00/icr']
+        ocr0 = hf['raw/channel00/ocr'] 
+        i0 = hf['raw/I0'] 
+        i1 = hf['raw/I1'] 
+        tm = hf['raw/acquisition_time'] 
+        mot1 = hf['mot1'] 
+        mot2 = hf['mot2'] 
 
     # for continuous scans, the mot1 position runs in snake-type fashion
     #   so we need to sort the positions line per line and adjust all other data accordingly
@@ -3304,25 +3380,30 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
 
     # Hooray! We read all the information! Let's write it to a separate file
     print("Writing merged file: "+scan_suffix+"_merge.h5...", end=" ")
-    f = h5py.File(scan_suffix+"_merge.h5", 'w', locking=True)
-    f.create_dataset('cmd', data=' '.join(scan_cmd))
-    f.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0), compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec0), compression='gzip', compression_opts=4)
-    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec0), compression='gzip', compression_opts=4)
-    f.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4)
-    f.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
-    f.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4)
-    f.close()
-    del spectra0
+    with h5py.File(scan_suffix+"_merge.h5", 'r+', locking=True) as hf:
+        hf.create_dataset('cmd', data=' '.join(scan_cmd))
+        del hf['raw/channel00/spectra']
+        hf.create_dataset('raw/channel00/spectra', data=np.squeeze(spectra0), compression='gzip', compression_opts=4)
+        del spectra0
+        del hf['raw/channel00/icr']
+        del hf['raw/channel00/ocr']
+        del hf['raw/I0']
+        del hf['raw/I1']
+        del hf['raw/acquisition_time']
+        hf.create_dataset('raw/channel00/icr', data=np.squeeze(icr0), compression='gzip', compression_opts=4)
+        hf.create_dataset('raw/channel00/ocr', data=np.squeeze(ocr0), compression='gzip', compression_opts=4)
+        hf.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec0), compression='gzip', compression_opts=4)
+        hf.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec0), compression='gzip', compression_opts=4)
+        hf.create_dataset('raw/I0', data=np.squeeze(i0), compression='gzip', compression_opts=4)
+        hf.create_dataset('raw/I1', data=np.squeeze(i1), compression='gzip', compression_opts=4)
+        hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm), compression='gzip', compression_opts=4)
 
     # redefine as original arrays for further processing
     if ch1 is not None:
-        spectra1 = spectra1_tmp 
-        del spectra1_tmp
-        icr1 = icr1_tmp 
-        ocr1 = ocr1_tmp 
+        with h5py.File(scan_suffix+"_merge.h5", 'r', locking=True) as hf:
+            spectra1 = np.asarray(hf['raw/channel01/spectra'])
+            icr1 = hf['raw/channel01/icr']
+            ocr1 = hf['raw/channel01/ocr'] 
 
     # for continuous scans, the mot1 position runs in snake-type fashion
     #   so we need to sort the positions line per line and adjust all other data accordingly
@@ -3360,24 +3441,27 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 maxspec1[i] = spectra1[:,i].max()
 
     # Hooray! We read all the information! Let's write it to a separate file
-    f = h5py.File(scan_suffix+"_merge.h5", 'r+', locking=True)
-    if ch1 is not None:
-        f.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/sumspec', data=np.squeeze(sumspec1), compression='gzip', compression_opts=4)
-        f.create_dataset('raw/channel01/maxspec', data=np.squeeze(maxspec1), compression='gzip', compression_opts=4)
-    dset = f.create_dataset('mot1', data=np.squeeze(mot1), compression='gzip', compression_opts=4)
-    dset.attrs['Name'] = mot1_name
-    dset = f.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4)
-    dset.attrs['Name'] = mot2_name
-    f.close()
-    if ch1 is not None:
-        del spectra1
+    with h5py.File(scan_suffix+"_merge.h5", 'r+', locking=True) as hf:
+        if ch1 is not None:
+            del hf['raw/channel00/spectra']
+            hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4)
+            del spectra1
+            del hf['raw/channel01/icr']
+            del hf['raw/channel01/ocr']
+            hf.create_dataset('raw/channel01/icr', data=np.squeeze(icr1), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/channel01/ocr', data=np.squeeze(ocr1), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/channel01/sumspec', data=np.squeeze(sumspec1), compression='gzip', compression_opts=4)
+            hf.create_dataset('raw/channel01/maxspec', data=np.squeeze(maxspec1), compression='gzip', compression_opts=4)
+        del hf['mot1']
+        del hf['mot2']
+        dset = hf.create_dataset('mot1', data=np.squeeze(mot1), compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot1_name
+        dset = f.create_dataset('mot2', data=np.squeeze(mot2), compression='gzip', compression_opts=4)
+        dset.attrs['Name'] = mot2_name
     print("ok")
 
 ##############################################################################
-def ConvSoleilNxs(solnxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True):
+def ConvSoleilNxs(solnxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", ch0id=["channel00", "channel01"], ch1id=None, i0id="", i1id=None, icrid="icr", ocrid="ocr", tmid="realtime00", sort=True, outdir=None):
     '''
     Convert PUMA or NANOSCOPIUM Nexus format to our H5 structure file
 
@@ -3405,6 +3489,8 @@ def ConvSoleilNxs(solnxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", 
         Measurement time identifier within the PUMA Nexus file. The default is "realtime00".
     sort : Boolean, optional
         If True the data is sorted following the motor encoder positions. The default is True.
+    outdir : string, optional
+        If None (default) the converted data is stored in the same directory as the raw data. If not None the data is stored in the directory provided by the user.
 
     Returns
     -------
@@ -3624,7 +3710,13 @@ def ConvSoleilNxs(solnxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", 
                 maxspec1[i] = spectra1[:,i].max()    
     
     # write h5 file in our structure
-    filename = solnxs[0].split(".")[0]+'_conv.h5'
+    if outdir is None:
+        filename = solnxs[0].split(".")[0]+'_conv.h5'
+    else:
+        if not outdir.endswith('/'):
+            outdir += '/'
+        filename = outdir+os.path.splitext(os.path.basename(solnxs[0]))[0]+'_conv.h5'
+
     with h5py.File(filename, 'w', locking=True) as f:
         f.create_dataset('cmd', data=scan_cmd)
         f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
@@ -3649,7 +3741,7 @@ def ConvSoleilNxs(solnxs, mot1_name="COD_GONIO_Tz1", mot2_name="COD_GONIO_Ts2", 
     print("Done")
     
 ##############################################################################
-def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True):
+def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id='falconx_det0', ch1id='falconx2_det0', i0id='fpico2', i0corid=None, i1id='fpico3', i1corid=None, icrid='trigger_count_rate', ocrid='event_count_rate', atol=None, sort=True, outdir=None):
     """
     Convert ID15A bliss H5 format to our H5 structure file
     
@@ -3688,6 +3780,8 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
         The default is None, indicating a value of 1e-4.
     sort : Boolean, optional
         If True the data is sorted following the motor encoder positions. The default is True.
+    outdir : string, optional
+        If None (default) the converted data is stored in the same directory as the raw data. If not None the data is stored in the directory provided by the user.
 
     Returns
     -------
@@ -4122,7 +4216,12 @@ def ConvID15H5(h5id15, scanid, scan_dim, mot1_name='hry', mot2_name='hrz', ch0id
             maxspec1[i] = spectra1[:,:,i].max()
     
     # write h5 file in our structure
-    filename = h5id15[0].split(".")[0]+scan_suffix+'.h5' #scanid is of type 1.1,  2.1,  4.1
+    if outdir is None:
+        filename = h5id15[0].split(".")[0]+scan_suffix+'.h5' #scanid is of type 1.1,  2.1,  4.1
+    else:
+        if not outdir.endswith('/'):
+            outdir += '/'
+        filename = outdir+os.path.splitext(os.path.basename(h5id15[0]))[0]+scan_suffix+'.h5'
     with h5py.File(filename, 'w', locking=True) as f:
         f.create_dataset('cmd', data=scan_cmd)
         f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
