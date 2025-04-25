@@ -2999,19 +2999,19 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 tm_arr = f['entry/data/exposuretime'][:]
                 f.close()
                 print("read")
-            with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
-                if firstgo:
-                    hf.create_dataset('raw/I0', data=np.squeeze(i0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-                    hf.create_dataset('raw/I1', data=np.squeeze(i1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-                    hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-                    firstgo = False
-                else:
-                    hf['raw/I0'].resize((hf['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
-                    hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
-                    hf['raw/I1'].resize((hf['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
-                    hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
-                    hf['raw/acquisition_time'].resize((hf['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
-                    hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
+                with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+                    if firstgo:
+                        hf.create_dataset('raw/I0', data=np.squeeze(i0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('raw/I1', data=np.squeeze(i1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        firstgo = False
+                    else:
+                        hf['raw/I0'].resize((hf['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
+                        hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
+                        hf['raw/I1'].resize((hf['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
+                        hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
+                        hf['raw/acquisition_time'].resize((hf['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
+                        hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
         else: #the adc_01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
             if os.path.isdir(sc_id+"/adc_01") is True:
                 adc = '/adc_01/'
@@ -3176,8 +3176,9 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                     print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
                                     mot2_arr = enc_vals[1]
                                     mot2_name = enc_names[1]
-                mot1_arr = np.delete(mot1_arr, np.where(counter_id != 1))
-                mot2_arr = np.delete(mot2_arr, np.where(counter_id != 1))
+                if np.sum(counter_id) != counter_id.shape[0]:
+                    mot1_arr = np.delete(mot1_arr, np.where(counter_id != 1))
+                    mot2_arr = np.delete(mot2_arr, np.where(counter_id != 1))
                 print("read")
                 with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
                     if firstgo:
