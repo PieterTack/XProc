@@ -1942,9 +1942,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     del file['mot1']
                     del file['mot2']
                     del file['raw/acquisition_time']
-                    del file['raw/'+chnl+'/spectra']
-                    del file['raw/'+chnl+'/icr']
-                    del file['raw/'+chnl+'/ocr']
                 except Exception:
                     pass
                 file.create_dataset('raw/I0', data=I0, compression='gzip', compression_opts=4)
@@ -2115,12 +2112,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
             print("Done")
             with h5py.File(h5file, 'r+', locking=True) as file:
-                try:
-                    del file['raw/'+chnl+'/spectra']
-                    del file['raw/'+chnl+'/icr']
-                    del file['raw/'+chnl+'/ocr']
-                except Exception:
-                    pass
                 if index == 0:
                     I0 = griddata((x, y), I0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
                     if i1flag is True:
@@ -2191,7 +2182,10 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
                         spectra0_tmp = griddata((x, y), file['raw/'+chnl+'/spectra'][:,:,i].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
                         if i == 0:
-                            del file['raw/'+chnl+'/spectra_tmp']
+                            try:
+                                del file['raw/'+chnl+'/spectra_tmp']
+                            except Exception:
+                                pass
                             file.create_dataset('raw/'+chnl+'/spectra_tmp', data=spectra0_tmp, compression='gzip', compression_opts=4,chunks=True, 
                                                 maxshape=(file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1], None))
                         else:
@@ -3545,7 +3539,7 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
     # Hooray! We read all the information! Let's write it to a separate file
     with h5py.File(scan_suffix+"_merge.h5", 'r+', locking=True) as hf:
         if ch1 is not None:
-            del hf['raw/channel00/spectra']
+            del hf['raw/channel01/spectra']
             hf.create_dataset('raw/channel01/spectra', data=np.squeeze(spectra1), compression='gzip', compression_opts=4)
             del spectra1
             del hf['raw/channel01/icr']
