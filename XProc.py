@@ -3498,8 +3498,8 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
     if ch1 is not None:
         with h5py.File(scan_suffix+"_merge.h5", 'r', locking=True) as hf:
             spectra1 = np.asarray(hf['raw/channel01/spectra'])
-            icr1 = hf['raw/channel01/icr']
-            ocr1 = hf['raw/channel01/ocr'] 
+            icr1 = np.asarray(hf['raw/channel01/icr'])
+            ocr1 = np.asarray(hf['raw/channel01/ocr']) 
 
     # for continuous scans, the mot1 position runs in snake-type fashion
     #   so we need to sort the positions line per line and adjust all other data accordingly
