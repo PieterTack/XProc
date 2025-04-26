@@ -1790,7 +1790,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, clrmap='viri
 
 
 ##############################################################################
-def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, halfpixshift=True, mot2nosort=False):
+def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, 
+                   halfpixshift=True, mot2nosort=False, omitspectra=False, interpol_method='nearest'):
     """
     Function to normalise IMS images to detector deadtime and I0 values.
 
@@ -1814,6 +1815,13 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         This value is only used when snake is True. Implements a half pixel shift in the motor encoder positions to account of the bidirectional event triggering. The default is True.
     mot2nosort : Boolean, optional
         When sort is True, mot2nosort can be set to True to omit sorting using the mot2 encoder values. The default is False.
+    omitspectra : Boolean, optional
+        When omitspectra is True, sorting and interpolation will not be performed on the /raw/channelXX/spectra, icr and ocr datasets.The default is False.
+        This can be beneficial in case of handling particularly large datasets, but be warned that this may cause unwanted effects during further processing
+        as the raw spectra data will no longer be able to be directly correlated to the element image data. For instance during PCA or Kmeans clustering, the 
+        resulting cluster sum spectra may not be indicative of the intended region.
+    interpol_method : string, optional
+        The scipy.griddata interpolation method to be used, as supplied to the griddata function. The default is 'nearest'.
 
     Returns
     -------
@@ -1845,20 +1853,11 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         if i1flag:
             I1 = I1_raw.copy()
         with h5py.File(h5file, 'r', locking=True) as file:
-            spectra0 = np.squeeze(np.asarray(file['raw/'+chnl+'/spectra']))
-            icr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/icr']))
-            ocr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/ocr']))
             ims0 = np.squeeze(np.asarray(file['fit/'+chnl+'/ims']))
-            names0 = np.asarray([n for n in file['fit/'+chnl+'/names']])
-            sum_fit0 = np.asarray(file['fit/'+chnl+'/sum/int'])
-            sum_bkg0 = np.asarray(file['fit/'+chnl+'/sum/bkg'])
         if len(ims0.shape) == 2 or len(ims0.shape) == 1:
             if len(ims0.shape) == 2:
                 ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
                 I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
-                spectra0 = spectra0.reshape((spectra0.shape[0], 1, spectra0.shape[1]))
-                icr0 = icr0.reshape((np.squeeze(icr0).shape[0], 1))
-                ocr0 = ocr0.reshape((np.squeeze(ocr0).shape[0], 1))
                 if i1flag is True:
                     I1 = I1.reshape((np.squeeze(I1).shape[0], 1))
                 tm = tm.reshape((np.squeeze(tm).shape[0], 1))
@@ -1866,9 +1865,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
             else:
                 ims0 = ims0.reshape((ims0.shape[0],1, 1))
-                spectra0 = spectra0.reshape((1, 1, spectra0.shape[0]))
-                icr0 = icr0.reshape((icr0.shape[0], 1))
-                ocr0 = ocr0.reshape((ocr0.shape[0], 1))
                 I0 = I0.reshape((I0.shape[0], 1))
                 if i1flag is True:
                     I1 = I1.reshape((I0.shape[0], 1))
@@ -1887,9 +1883,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 mot2 = mot2[0:ims0.shape[1],:]
             if ims0.shape[1] > mot1.shape[0]:
                 ims0 = ims0[:,0:mot1.shape[0],:]      
-                spectra0 = spectra0[0:mot1.shape[0],:,:]      
-                icr0 = icr0[0:mot1.shape[0],:]
-                ocr0 = ocr0[0:mot1.shape[0],:]
                 I0 = I0[0:mot1.shape[0],:]
                 if i1flag is True:
                     I1 = I1[0:mot1.shape[0],:]
@@ -1922,9 +1915,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             for i in range(mot1[:,0].size):
                 sort_id = np.argsort(mot1[i,:])
                 ims0[:,i,:] = ims0[:,i,sort_id]
-                spectra0[i,:,:] = spectra0[i,sort_id,:]
-                icr0[i,:] = icr0[i,sort_id]
-                ocr0[i,:] = ocr0[i,sort_id]
                 mot1[i,:] = mot1[i,sort_id]
                 mot2[i,:] = mot2[i,sort_id]
                 I0[i,:] = I0[i,sort_id]
@@ -1936,48 +1926,126 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 for i in range(mot2[0,:].size):
                     sort_id = np.argsort(mot2[:,i])
                     ims0[:,:,i] = ims0[:,sort_id,i]
-                    icr0[:,i] = icr0[sort_id,i]
-                    ocr0[:,i] = ocr0[sort_id,i]
-                    spectra0[:,i,:] = spectra0[sort_id,i,:]
                     mot1[:,i] = mot1[sort_id,i]
                     mot2[:,i] = mot2[sort_id,i]
                     I0[:,i] = I0[sort_id,i]
                     if i1flag is True:
                         I1[:,i] = I1[sort_id,i]
                     tm[:,i] = tm[sort_id,i]
+        # store data in any case so we can free some memory before working on the spectra
+        with h5py.File(h5file, 'r+', locking=True) as file:
+            if index == 0:
+                try:
+                    del file['raw/I0']
+                    if i1flag is True:
+                        del file['raw/I1']
+                    del file['mot1']
+                    del file['mot2']
+                    del file['raw/acquisition_time']
+                    del file['raw/'+chnl+'/spectra']
+                    del file['raw/'+chnl+'/icr']
+                    del file['raw/'+chnl+'/ocr']
+                except Exception:
+                    pass
+                file.create_dataset('raw/I0', data=I0, compression='gzip', compression_opts=4)
+                if i1flag is True:
+                    file.create_dataset('raw/I1', data=I1, compression='gzip', compression_opts=4)
+                dset = file.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
+                dset.attrs['Name'] = mot1_name
+                dset = file.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+                dset.attrs['Name'] = mot2_name
+                file.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
+            try:
+                del file['fit/'+chnl+'/ims']
+            except Exception:
+                pass
+            file.create_dataset('fit/'+chnl+'/ims', data=ims0, compression='gzip', compression_opts=4)
+        # make sure to free up some memory, we'll read in the relevant data again later
+        del ims0, I0, I1, mot1, mot2, tm
+
+        # Redo the procedure for the spectra, icr and ocr if requested
+        if omitspectra is False:
+            mot1 = mot1_raw.copy()
+            mot2 = mot2_raw.copy()
+            with h5py.File(h5file, 'r', locking=True) as file:
+                spectra0 = np.squeeze(np.asarray(file['raw/'+chnl+'/spectra']))
+                icr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/icr']))
+                ocr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/ocr']))
+            if len(spectra0.shape) == 2 or len(spectra0.shape) == 1:
+                if len(spectra0.shape) == 2:
+                    spectra0 = spectra0.reshape((spectra0.shape[0], 1, spectra0.shape[1]))
+                    icr0 = icr0.reshape((np.squeeze(icr0).shape[0], 1))
+                    ocr0 = ocr0.reshape((np.squeeze(ocr0).shape[0], 1))
+                    mot1 = mot1.reshape((np.squeeze(mot1).shape[0], 1))
+                    mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
+                else:
+                    spectra0 = spectra0.reshape((1, 1, spectra0.shape[0]))
+                    icr0 = icr0.reshape((icr0.shape[0], 1))
+                    ocr0 = ocr0.reshape((ocr0.shape[0], 1))
+                    mot1 = mot1.reshape((mot1.shape[0], 1))
+                    mot2 = mot2.reshape((mot2.shape[0], 1))
+                if mot1.shape[0] > spectra0.shape[0]:
+                    mot1 = mot1[0:spectra0.shape[0],:]            
+                if mot2.shape[0] > spectra0.shape[0]:
+                    mot2 = mot2[0:spectra0.shape[0],:]
+                if spectra0.shape[0] > mot1.shape[0]:
+                    spectra0 = spectra0[0:mot1.shape[0],:,:]      
+                    icr0 = icr0[0:mot1.shape[0],:]
+                    ocr0 = ocr0[0:mot1.shape[0],:]
+        
+            # for continuous scans, the mot1 position runs in snake-type fashion
+            #   so we need to sort the positions line per line and adjust all other data accordingly
+            # Usually sorting will have happened in xrf_fit_batch, but in some cases it is better to omit there and do it here
+            #   for instance when certain scan lines need to be deleted
+            if sort is True:
+                for i in range(mot1[:,0].size):
+                    sort_id = np.argsort(mot1[i,:])
+                    spectra0[i,:,:] = spectra0[i,sort_id,:]
+                    icr0[i,:] = icr0[i,sort_id]
+                    ocr0[i,:] = ocr0[i,sort_id]
+                    mot1[i,:] = mot1[i,sort_id]
+                    mot2[i,:] = mot2[i,sort_id]
+                # To make sure (especially when merging scans) sort mot2 as well
+                if mot2nosort is not True:
+                    for i in range(mot2[0,:].size):
+                        sort_id = np.argsort(mot2[:,i])
+                        icr0[:,i] = icr0[sort_id,i]
+                        ocr0[:,i] = ocr0[sort_id,i]
+                        spectra0[:,i,:] = spectra0[sort_id,i,:]
+                        mot1[:,i] = mot1[sort_id,i]
+                        mot2[:,i] = mot2[sort_id,i]
+            # store data in any case so we can free up memory before starting the interpolation
             with h5py.File(h5file, 'r+', locking=True) as file:
                 if index == 0:
                     try:
-                        del file['raw/I0']
-                        if i1flag is True:
-                            del file['raw/I1']
-                        del file['mot1']
-                        del file['mot2']
-                        del file['raw/acquisition_time']
                         del file['raw/'+chnl+'/spectra']
                         del file['raw/'+chnl+'/icr']
                         del file['raw/'+chnl+'/ocr']
                     except Exception:
                         pass
-                    file.create_dataset('raw/I0', data=I0, compression='gzip', compression_opts=4)
                     file.create_dataset('raw/'+chnl+'/icr', data=icr0, compression='gzip', compression_opts=4)
                     file.create_dataset('raw/'+chnl+'/ocr', data=ocr0, compression='gzip', compression_opts=4)
                     file.create_dataset('raw/'+chnl+'/spectra', data=spectra0, compression='gzip', compression_opts=4)
-                    if i1flag is True:
-                        file.create_dataset('raw/I1', data=I1, compression='gzip', compression_opts=4)
-                    dset = file.create_dataset('mot1', data=mot1, compression='gzip', compression_opts=4)
-                    dset.attrs['Name'] = mot1_name
-                    dset = file.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
-                    dset.attrs['Name'] = mot2_name
-                    file.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
-                try:
-                    del file['fit/'+chnl+'/ims']
-                except Exception:
-                    pass
-                file.create_dataset('fit/'+chnl+'/ims', data=ims0, compression='gzip', compression_opts=4)
+            del icr0, ocr0, spectra0, mot1, mot2
 
-    
+        # read in data again for snake correction and motor position interpolation
+        with h5py.File(h5file, 'r', locking=True) as file:
+            mot1_raw = np.asarray(file['mot1'])
+            mot1_name = str(file['mot1'].attrs["Name"])
+            mot2_raw = np.asarray(file['mot2'])
+            mot2_name = str(file['mot2'].attrs["Name"])
+            ims0 = np.squeeze(np.asarray(file['fit/'+chnl+'/ims']))
+            names0 = np.asarray([n for n in file['fit/'+chnl+'/names']])
+            sum_fit0 = np.asarray(file['fit/'+chnl+'/sum/int'])
+            sum_bkg0 = np.asarray(file['fit/'+chnl+'/sum/bkg'])
+            I0 =  np.asarray(file['raw/I0'])
+            tm = np.asarray(file['raw/acquisition_time'])
+            if i1flag is True:
+                I1 = np.asarray(file['raw/I1'])
+
         # correct I0
+        mot1 = mot1_raw.copy()
+        mot2 = mot2_raw.copy()
         ims0[ims0 < 0] = 0.
         sum_fit0[sum_fit0 < 0] = 0.
         sum_bkg0[sum_bkg0 < 0] = 0.
@@ -2013,7 +2081,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
                 mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
                 ims0_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
-                spectra0_tmp = np.zeros((spectra0.shape[0], spectra0.shape[1], spectra0.shape[2]))
                 ims0_err_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
             if timetriggered is True:
                 if halfpixshift is True:
@@ -2033,7 +2100,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
                 ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
                 ims0_err_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
-                spectra0_tmp = np.zeros((mot2_pos.shape[0], mot1_pos.shape[0], spectra0.shape[2]))
             # interpolate to the regular grid motor positions
             mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size),
                     mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
@@ -2043,12 +2109,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     
             for i in range(names0.size):
                 values = ims0[i,:,:].ravel()
-                ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method='nearest').T
-                ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
-            for i in range(spectra0.shape[2]):
-                spectra0_tmp[:,:,i] = griddata((x, y), spectra0[:,:,i].ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
-            icr0 = griddata((x, y), icr0.ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
-            ocr0 = griddata((x, y), ocr0.ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
+                ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method=interpol_method).T
+                ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
             ims0 = np.nan_to_num(ims0_tmp)
             ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
             print("Done")
@@ -2059,13 +2121,11 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     del file['raw/'+chnl+'/ocr']
                 except Exception:
                     pass
-                file.create_dataset('raw/'+chnl+'/icr', data=icr0, compression='gzip', compression_opts=4)
-                file.create_dataset('raw/'+chnl+'/ocr', data=ocr0, compression='gzip', compression_opts=4)
-                file.create_dataset('raw/'+chnl+'/spectra', data=spectra0_tmp, compression='gzip', compression_opts=4)
                 if index == 0:
-                    I0 = griddata((x, y), I0.ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
-                    I1 = griddata((x, y), I1.ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
-                    tm = griddata((x, y), tm.ravel(), (mot1_tmp, mot2_tmp), method='nearest').T
+                    I0 = griddata((x, y), I0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                    if i1flag is True:
+                        I1 = griddata((x, y), I1.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                    tm = griddata((x, y), tm.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
                     try:
                         del file['mot1']
                         del file['mot2']
@@ -2083,7 +2143,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     dset.attrs['Name'] = mot1_name
                     dset = file.create_dataset('mot2', data=mot2_tmp.T, compression='gzip', compression_opts=4)
                     dset.attrs['Name'] = mot2_name
-   
       
         # save normalised data
         print("     Writing...", end=" ")
@@ -2108,6 +2167,42 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             else:
                 dset.attrs["TmNorm"] = "False"
                 
+        # Reprocess some stuff to also interpolate the spectra, icr and ocr datasets
+        #   also free up some memory that we shouldn't need anymore
+        del ims0, ims0_err, names0, sum_fit0, sum_bkg0, sum_fit0_err, sum_bkg0_err, ims0_tmp, ims0_err_tmp
+
+        if omitspectra is False:
+            # if this is snakescan, interpolate ims array for motor positions so images look nice
+            #   this assumes that mot1 was the continuously moving motor
+            if snake is True:
+                print("Interpolating spectra for motor positions...", end=" ")
+                with h5py.File(h5file, 'a', locking=True) as file:
+                    icr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/icr']))
+                    ocr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/ocr']))
+                    icr0 = griddata((x, y), icr0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                    ocr0 = griddata((x, y), ocr0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                    try:
+                        del file['raw/'+chnl+'/icr']
+                        del file['raw/'+chnl+'/ocr']
+                    except Exception:
+                        pass
+                    file.create_dataset('raw/'+chnl+'/icr', data=icr0, compression='gzip', compression_opts=4)
+                    file.create_dataset('raw/'+chnl+'/ocr', data=ocr0, compression='gzip', compression_opts=4)
+                    for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
+                        spectra0_tmp = griddata((x, y), file['raw/'+chnl+'/spectra'][:,:,i].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                        if i == 0:
+                            del file['raw/'+chnl+'/spectra_tmp']
+                            file.create_dataset('raw/'+chnl+'/spectra_tmp', data=spectra0_tmp, compression='gzip', compression_opts=4,chunks=True, 
+                                                maxshape=(file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1], None))
+                        else:
+                            file['raw/'+chnl+'/spectra_tmp'].resize((file['raw/'+chnl+'/spectra_tmp'].shape[0],file['raw/'+chnl+'/spectra_tmp'].shape[1], file['raw/'+chnl+'/spectra_tmp'].shape[2]+1))
+                            file['raw/'+chnl+'/spectra_tmp'][:,:,-1] = spectra0_tmp
+                    print("Done")
+                    # rename old tmp dataset and remove it
+                    del file['raw/'+chnl+'/spectra']
+                    file['raw/'+chnl+'/spectra'] = file['raw/'+chnl+'/spectra_tmp']
+                    del file['raw/'+chnl+'/spectra_tmp']
+
         print("Done")
     
 ##############################################################################
@@ -2999,19 +3094,19 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 tm_arr = f['entry/data/exposuretime'][:]
                 f.close()
                 print("read")
-            with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
-                if firstgo:
-                    hf.create_dataset('raw/I0', data=np.squeeze(i0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-                    hf.create_dataset('raw/I1', data=np.squeeze(i1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-                    hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-                    firstgo = False
-                else:
-                    hf['raw/I0'].resize((hf['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
-                    hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
-                    hf['raw/I1'].resize((hf['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
-                    hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
-                    hf['raw/acquisition_time'].resize((hf['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
-                    hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
+                with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
+                    if firstgo:
+                        hf.create_dataset('raw/I0', data=np.squeeze(i0_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('raw/I1', data=np.squeeze(i1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('raw/acquisition_time', data=np.squeeze(tm_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        firstgo = False
+                    else:
+                        hf['raw/I0'].resize((hf['raw/I0'].shape[0]+i0_arr.shape[0]), axis=0)
+                        hf['raw/I0'][-i0_arr.shape[0]:] = i0_arr
+                        hf['raw/I1'].resize((hf['raw/I1'].shape[0]+i1_arr.shape[0]), axis=0)
+                        hf['raw/I1'][-i1_arr.shape[0]:] = i1_arr
+                        hf['raw/acquisition_time'].resize((hf['raw/acquisition_time'].shape[0]+tm_arr.shape[0]), axis=0)
+                        hf['raw/acquisition_time'][-tm_arr.shape[0]:] = tm_arr
         else: #the adc_01 does not contain full list of nxs files as xpress etc, but only consists single main nxs file with all scan data
             if os.path.isdir(sc_id+"/adc_01") is True:
                 adc = '/adc_01/'
@@ -3176,8 +3271,9 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                                     print("Warning: "+str(scan_cmd[5])+" not found in encoder list dictionary; using "+str(enc_names[1])+" instead...", end=" ")
                                     mot2_arr = enc_vals[1]
                                     mot2_name = enc_names[1]
-                mot1_arr = np.delete(mot1_arr, np.where(counter_id != 1))
-                mot2_arr = np.delete(mot2_arr, np.where(counter_id != 1))
+                if np.sum(counter_id) != counter_id.shape[0]:
+                    mot1_arr = np.delete(mot1_arr, np.where(counter_id != 1))
+                    mot2_arr = np.delete(mot2_arr, np.where(counter_id != 1))
                 print("read")
                 with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
                     if firstgo:
