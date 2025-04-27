@@ -1745,12 +1745,6 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, clrmap='viri
         if chan01_flag == True:
             imsdata1.data = np.flip(imsdata1.data, axis=0)
             
-    # set plot options (color limits, clim) if appropriate
-    if clim is not None:
-        plt_opts = Xims.Plot_opts(clim=clim)
-    else:
-        plt_opts = None
-
     sb_opts = Xims.Scale_opts(xscale=True, x_pix_size=pix_size, x_scl_size=scl_size, x_scl_text=str(scl_size)+' µm')
     if cb_opts is None:
         if log:
@@ -1760,7 +1754,7 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, clrmap='viri
         else:
             cb_opts = Xims.Colorbar_opt(title='Int.;[cts]')
     nrows = int(np.ceil(len(imsdata0.names)/ncols)) # define nrows based on ncols
-    colim_opts = Xims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
+    colim_opts = Xims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True, clim=clim)
 
     if log:
         imsdata0.data = np.log10(imsdata0.data)
@@ -1768,25 +1762,18 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, clrmap='viri
         imsdata0.data = np.sqrt(imsdata0.data)
 
     
-    Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), clrmap, sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch0_'+datadir+'_overview.png', dpi=dpi)
+    Xims.plot_colim(imsdata0, np.arange(len(imsdata0.names)), clrmap, sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch0_'+datadir+'_overview.png', dpi=dpi)
     
     if chan01_flag == True:
-        # set plot options (color limits, clim) if appropriate
-        if clim is not None:
-            plt_opts = Xims.Plot_opts(clim=clim)
-        else:
-            plt_opts = None
-
-
         nrows = int(np.ceil(len(imsdata1.names)/ncols)) # define nrows based on ncols
-        colim_opts = Xims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True)
+        colim_opts = Xims.Collated_image_opts(ncol=ncols, nrow=nrows, cb=True, clim=clim)
 
         if log:
             imsdata1.data = np.log10(imsdata1.data)
         if sqrt:
             imsdata1.data = np.sqrt(imsdata1.data)
         
-        Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), clrmap, sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, plt_opts=plt_opts, save=filename+'_ch1_'+datadir+'_overview.png', dpi=dpi)
+        Xims.plot_colim(imsdata1, np.arange(len(imsdata0.names)), clrmap, sb_opts=sb_opts, cb_opts=cb_opts, colim_opts=colim_opts, save=filename+'_ch1_'+datadir+'_overview.png', dpi=dpi)
 
 
 ##############################################################################
@@ -2300,7 +2287,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
             for i in range(names0.size):
                 if names0[i] == 'A'+str(i):
                     cutid0 = i+1
-            
+            del fitresults0
         else: #standard is not None; this is a srm spectrum and as such we would like to obtain the background values.
             # channel00
             config = ConfigDict.ConfigDict()
@@ -2384,7 +2371,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
             ims0[raylid,:,:] = np.sum(spectra0[:,:,rayl_min:rayl_max], axis=2)
             ims0[comptid,:,:] = np.sum(spectra0[:,:,compt_min:compt_max], axis=2)
             
-    
+        del spectra0, result0_sum, peak_int0
         print("Fit finished after "+str(time.time()-t0)+" seconds for "+str(n_spectra)+" spectra.")
     
         # correct for deadtime  
