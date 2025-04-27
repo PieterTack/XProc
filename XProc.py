@@ -2112,6 +2112,12 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
             print("Done")
             with h5py.File(h5file, 'r+', locking=True) as file:
+                try:
+                    del file['raw/'+chnl+'/spectra']
+                    del file['raw/'+chnl+'/icr']
+                    del file['raw/'+chnl+'/ocr']
+                except Exception:
+                    pass
                 if index == 0:
                     I0 = griddata((x, y), I0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
                     if i1flag is True:
@@ -2182,10 +2188,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
                         spectra0_tmp = griddata((x, y), file['raw/'+chnl+'/spectra'][:,:,i].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
                         if i == 0:
-                            try:
-                                del file['raw/'+chnl+'/spectra_tmp']
-                            except Exception:
-                                pass
+                            del file['raw/'+chnl+'/spectra_tmp']
                             file.create_dataset('raw/'+chnl+'/spectra_tmp', data=spectra0_tmp, compression='gzip', compression_opts=4,chunks=True, 
                                                 maxshape=(file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1], None))
                         else:
@@ -2300,6 +2303,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
             for i in range(names0.size):
                 if names0[i] == 'A'+str(i):
                     cutid0 = i+1
+            del fitresults0
             
         else: #standard is not None; this is a srm spectrum and as such we would like to obtain the background values.
             # channel00
@@ -2384,7 +2388,7 @@ def  fit_xrf_batch(h5file, cfgfile, channel=None, standard=None, ncores=None, ve
             ims0[raylid,:,:] = np.sum(spectra0[:,:,rayl_min:rayl_max], axis=2)
             ims0[comptid,:,:] = np.sum(spectra0[:,:,compt_min:compt_max], axis=2)
             
-    
+        del spectra0, result0_sum, peak_int0
         print("Fit finished after "+str(time.time()-t0)+" seconds for "+str(n_spectra)+" spectra.")
     
         # correct for deadtime  
