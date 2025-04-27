@@ -2026,10 +2026,27 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
             tm = np.asarray(file['raw/acquisition_time'])
             if i1flag is True:
                 I1 = np.asarray(file['raw/I1'])
-
-        # correct I0
         mot1 = mot1_raw.copy()
         mot2 = mot2_raw.copy()
+        if len(ims0.shape) == 2 or len(ims0.shape) == 1:
+            if len(ims0.shape) == 2:
+                ims0 = ims0.reshape((ims0.shape[0], ims0.shape[1], 1))
+                I0 = I0.reshape((np.squeeze(I0).shape[0], 1))
+                if i1flag is True:
+                    I1 = I1.reshape((np.squeeze(I1).shape[0], 1))
+                tm = tm.reshape((np.squeeze(tm).shape[0], 1))
+                mot1 = mot1.reshape((np.squeeze(mot1).shape[0], 1))
+                mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
+            else:
+                ims0 = ims0.reshape((ims0.shape[0],1, 1))
+                I0 = I0.reshape((I0.shape[0], 1))
+                if i1flag is True:
+                    I1 = I1.reshape((I0.shape[0], 1))
+                tm = tm.reshape((tm.shape[0], 1))
+                mot1 = mot1.reshape((mot1.shape[0], 1))
+                mot2 = mot2.reshape((mot2.shape[0], 1))
+
+        # correct I0
         ims0[ims0 < 0] = 0.
         sum_fit0[sum_fit0 < 0] = 0.
         sum_bkg0[sum_bkg0 < 0] = 0.
