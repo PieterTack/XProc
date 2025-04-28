@@ -1778,7 +1778,8 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, clrmap='viri
 
 ##############################################################################
 def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, 
-                   halfpixshift=True, mot2nosort=False, omitspectra=False, interpol_method='nearest'):
+                   halfpixshift=True, mot2nosort=False, omitspectra=False, interpol_method='nearest',
+                   lowmemory=False):
     """
     Function to normalise IMS images to detector deadtime and I0 values.
 
@@ -1809,6 +1810,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         resulting cluster sum spectra may not be indicative of the intended region.
     interpol_method : string, optional
         The scipy.griddata interpolation method to be used, as supplied to the griddata function. The default is 'nearest'.
+    lowmemory : Boolean, optional
+        Set True to interpolate spectra for motor positions in a more memory efficient way. Note that this significantly increases the required processing time. The default is False.
 
     Returns
     -------
@@ -2138,7 +2141,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     dset.attrs['Name'] = mot1_name
                     dset = file.create_dataset('mot2', data=mot2_tmp.T, compression='gzip', compression_opts=4)
                     dset.attrs['Name'] = mot2_name
-      
+            del ims0_tmp, ims0_err_tmp
+            
         # save normalised data
         print("     Writing...", end=" ")
         with h5py.File(h5file, 'r+', locking=True) as file:
@@ -2164,7 +2168,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 
         # Reprocess some stuff to also interpolate the spectra, icr and ocr datasets
         #   also free up some memory that we shouldn't need anymore
-        del ims0, ims0_err, names0, sum_fit0, sum_bkg0, sum_fit0_err, sum_bkg0_err, ims0_tmp, ims0_err_tmp
+        del ims0, ims0_err, names0, sum_fit0, sum_bkg0, sum_fit0_err, sum_bkg0_err
 
         if omitspectra is False:
             # if this is snakescan, interpolate ims array for motor positions so images look nice
@@ -2183,22 +2187,31 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                         pass
                     file.create_dataset('raw/'+chnl+'/icr', data=icr0, compression='gzip', compression_opts=4)
                     file.create_dataset('raw/'+chnl+'/ocr', data=ocr0, compression='gzip', compression_opts=4)
-                    for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
+                    if lowmemory is True:
+                        try:
+                            del file['raw/'+chnl+'/spectra_tmp']
+                        except Exception:
+                            pass
+                        file.create_dataset('raw/'+chnl+'/spectra_tmp', shape=(file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1],file['raw/'+chnl+'/spectra'].shape[2]), compression='gzip', compression_opts=4,chunks=True, 
+                                            maxshape=(file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1], None))
                         spectra0_tmp = np.zeros((file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1],1))
-                        spectra0_tmp[:,:,0] = griddata((x, y), file['raw/'+chnl+'/spectra'][:,:,i].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
-                        if i == 0:
-                            try:
-                                del file['raw/'+chnl+'/spectra_tmp']
-                            except Exception:
-                                pass
-                            file.create_dataset('raw/'+chnl+'/spectra_tmp', shape=(file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1],file['raw/'+chnl+'/spectra'].shape[2]), compression='gzip', compression_opts=4,chunks=True, 
-                                                maxshape=(file['raw/'+chnl+'/spectra'].shape[0],file['raw/'+chnl+'/spectra'].shape[1], None))
-                        file['raw/'+chnl+'/spectra_tmp'][:,:,i] = spectra0_tmp[:,:,0]
+                        for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
+                            spectra0_tmp[:,:,0] = griddata((x, y), file['raw/'+chnl+'/spectra'][:,:,i].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                            file['raw/'+chnl+'/spectra_tmp'][:,:,i] = spectra0_tmp[:,:,0]
+                        # rename old tmp dataset and remove it
+                        del file['raw/'+chnl+'/spectra']
+                        file['raw/'+chnl+'/spectra'] = file['raw/'+chnl+'/spectra_tmp']
+                        del file['raw/'+chnl+'/spectra_tmp']
+                    else:
+                        spectra0 = np.squeeze(np.asarray(file['raw/'+chnl+'/spectra']))
+                        for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
+                            spectra0[:,:,i] = griddata((x, y), spectra0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                        try:
+                            del file['raw/'+chnl+'/spectra']
+                        except Exception:
+                            pass
+                        file.create_dataset('raw/'+chnl+'/spectra', data=spectra0, compression='gzip', compression_opts=4)
                     print("Done")
-                    # rename old tmp dataset and remove it
-                    del file['raw/'+chnl+'/spectra']
-                    file['raw/'+chnl+'/spectra'] = file['raw/'+chnl+'/spectra_tmp']
-                    del file['raw/'+chnl+'/spectra_tmp']
 
         print("Done")
     
@@ -2745,6 +2758,129 @@ def ConvMalPanMPS(mpsfile):
     print("Done")
         
 ##############################################################################
+def ConvBrukerPdz(pdzfile):
+    """
+    Read the Bruker handheld PDZ files and restructure as H5 for further processing
+    
+
+    Parameters
+    ----------
+    csvfile : String
+        File path to the PDZ file to be converted.
+
+    Returns
+    -------
+    None.
+
+    """
+    import pdz_read as PR
+    
+    
+
+    # import pandas as pd
+
+    # try:
+    #     file = pd.read_csv(csvfile, header=None, sep=None)
+    # except UnicodeError:
+    #     file = pd.read_csv(csvfile, header=None, sep=None, encoding='utf_16')
+    
+    # rowheads = [n for n in file[0] if n is not np.nan]
+    # # loop through the different columns and assign them to spectra0, spectra2 etc.
+    # spectra0 = []
+    # ocr0 = []
+    # spectra1 = []
+    # ocr1 = []
+    # i0_0 = []
+    # i0_1 = []
+    # i1 = []
+    # tm0 = []
+    # tm1 = []
+    # mot1 = []
+    # mot2 = []
+    # for key in file.keys()[2:-1]:
+    #     # in principle the instrument always measures in two modes consecutively, so if this column 
+    #     # does not have a subsequent matching partner, something went wrong
+    #     if file[key][rowheads.index('ExposureNum')] == '1':
+    #         if file[key][rowheads.index('TestID')] != file[key+1][rowheads.index('TestID')]:
+    #             print("WARNING: measurement %s does not have a matching 10keV mode measurement. Measurement exempt from H5 file." % file[key][rowheads.index('TestID')])
+    #         else: #the measurement in 'key' has an accompanying 10keV mode measurement in 'key+1'
+    #             i1.append(0) #no transmission counter registered
+    #             mot1.append(file[key][rowheads.index('TestID')])
+    #             mot2.append(np.nan)
+                
+    #             i0_0.append(float(file[key][rowheads.index('TubeCurrentMon')]))
+    #             tm0.append(float(file[key][rowheads.index('Livetime')]))
+    #             spectra0.append([file[key][rowheads.index('TimeStamp')+1:].astype(float)])
+    #             ocr0.append(np.sum(spectra0[-1]))
+    #             i0_1.append(float(file[key+1][rowheads.index('TubeCurrentMon')])) 
+    #             tm1.append(float(file[key+1][rowheads.index('Livetime')])) 
+    #             spectra1.append([file[key+1][rowheads.index('TimeStamp')+1:].astype(float)])
+    #             ocr1.append(np.sum(spectra1[-1]))
+    # nspe = len(mot1)
+    # nchnls0 = np.asarray(spectra0[0]).shape
+    # nchnls1 = np.asarray(spectra1[0]).shape
+    # mot1 = np.asarray([n.encode('utf8') for n in mot1]).reshape((nspe,1))
+    # mot2 = np.asarray(mot2).reshape((nspe,1))
+    # ocr0 = np.asarray(ocr0).reshape((nspe,1))
+    # ocr1 = np.asarray(ocr1).reshape((nspe,1))
+    # tm0 = np.asarray(tm0).reshape((nspe,1))
+    # tm1 = np.asarray(tm1).reshape((nspe,1))
+    # i1 = np.asarray(i1).reshape((nspe,1))
+    # i0_0 = np.asarray(i0_0).reshape((nspe,1))
+    # i0_1 = np.asarray(i0_1).reshape((nspe,1))
+    # spectra0 = np.asarray(spectra0).reshape((nspe,1,nchnls0[1]))
+    # spectra1 = np.asarray(spectra1).reshape((nspe,1,nchnls1[1]))
+    sumspec0 = np.sum(spectra0[:], axis=(0,1))
+    maxspec0 = np.zeros(sumspec0.shape[0])
+    for i in range(sumspec0.shape[0]):
+        maxspec0[i] = spectra0[:,:,i].max()
+
+    sumspec1 = np.sum(spectra1[:], axis=(0,1))
+    maxspec1 = np.zeros(sumspec1.shape[0])
+    for i in range(sumspec1.shape[0]):
+        maxspec1[i] = spectra1[:,:,i].max()
+
+
+    # Hooray! We read all the information! Let's write it to a separate file
+    measurement_id = os.path.splitext(pdzfile)[0]
+    print("Writing merged file: "+measurement_id+"_merge_40keV.h5...", end=" ")
+    f = h5py.File(measurement_id+"_merge_40keV.h5", 'w', locking=True)
+    f.create_dataset('cmd', data='dscan Handheld Delta Premium 40keV mode')
+    f.create_dataset('raw/channel00/spectra', data=spectra0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=ocr0, compression='gzip', compression_opts=4) #as time is expressed as livetime no icr/ocr correction should be applied
+    f.create_dataset('raw/channel00/ocr', data=ocr0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec0), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=i0_0, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/acquisition_time', data=tm0, compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=mot1)
+    dset.attrs['Name'] = 'hxrf'
+    dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = 'hxrf'
+    f.close()
+    print("Done")
+    
+    print("Writing merged file: "+measurement_id+"_merge_10keV.h5...", end=" ")
+    f = h5py.File(measurement_id+"_merge_10keV.h5", 'w', locking=True)
+    f.create_dataset('cmd', data='dscan Handheld Delta Premium 10keV mode')
+    f.create_dataset('raw/channel00/spectra', data=spectra1, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=ocr1, compression='gzip', compression_opts=4) #as time is expressed as livetime no icr/ocr correction should be applied
+    f.create_dataset('raw/channel00/ocr', data=ocr1, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec1), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=i0_1, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=i1, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/acquisition_time', data=tm1, compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=mot1)
+    dset.attrs['Name'] = 'hxrf'
+    dset = f.create_dataset('mot2', data=mot2, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = 'hxrf'
+    f.close()
+    print("Done")
+
+    
+##############################################################################
 def ConvDeltaCsv(csvfile):
     """
     Read the Delta Premium handheld CSV files and restructure as H5 for further processing
@@ -3274,8 +3410,8 @@ def ConvP06Nxs(scanid, sort=True, ch0=['xspress3_01','channel00'], ch1=None, rea
                 print("read")
                 with h5py.File(scan_suffix+"_merge.h5", 'a', locking=True) as hf:
                     if firstgo:
-                        hf.create_dataset('mot1', data=np.squeeze(mot1_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
-                        hf.create_dataset('mot2', data=np.squeeze(mot2_arr), compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('mot1', data=mot1_arr, compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
+                        hf.create_dataset('mot2', data=mot2_arr, compression='gzip', compression_opts=4, chunks=True, maxshape=(None,))
                         firstgo = False
                     else:
                         hf['mot1'].resize((hf['mot1'].shape[0]+mot1_arr.shape[0]), axis=0)
