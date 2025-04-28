@@ -2141,7 +2141,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     dset.attrs['Name'] = mot1_name
                     dset = file.create_dataset('mot2', data=mot2_tmp.T, compression='gzip', compression_opts=4)
                     dset.attrs['Name'] = mot2_name
-      
+            del ims0_tmp, ims0_err_tmp
+            
         # save normalised data
         print("     Writing...", end=" ")
         with h5py.File(h5file, 'r+', locking=True) as file:
@@ -2167,7 +2168,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 
         # Reprocess some stuff to also interpolate the spectra, icr and ocr datasets
         #   also free up some memory that we shouldn't need anymore
-        del ims0, ims0_err, names0, sum_fit0, sum_bkg0, sum_fit0_err, sum_bkg0_err, ims0_tmp, ims0_err_tmp
+        del ims0, ims0_err, names0, sum_fit0, sum_bkg0, sum_fit0_err, sum_bkg0_err
 
         if omitspectra is False:
             # if this is snakescan, interpolate ims array for motor positions so images look nice
