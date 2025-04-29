@@ -293,30 +293,21 @@ def read_pdz(pdzfile):
         b3_list = [b for b in block_list if b['block_type'] == 3] 
         n_spectra = len(b3_list) 
         if n_spectra > 1: 
-            print('Found multiple spectral data blocks. Only parsing first spectrum. ')
+            print(f'Found multiple spectral data blocks: {n_spectra}. Only parsing first spectrum. ')
         arr = b3_list[0]['bytes'] 
     
         # parsing spectrum parameters and data 
         parsed, tail = multiparse(xformat, arr, verbose=False)
-        tube_keV = parsed[12] # FYI 
-        delta_keV = parsed[25] / 1000
-        start_keV = parsed[27] / 1000 
         n_channels = parsed[37]
-        intensity = parsed[-1]
         if n_channels != 2048: 
             print(f'Found unexpected number of channels in pdz metadata: {n_channels}')
-            
-        stop_keV = start_keV + delta_keV * (n_channels -1)
-        x_keV = np.linspace(start_keV, stop_keV, num=n_channels) 
-        
-        spectrum_df = pd.DataFrame(index=x_keV)
+        spe = parsed[-1] #element 40
+        tm = parsed[8]
+        tubecurrent = parsed[13]
+        icr = parsed[3]
+        ocr = parsed[4]
         basename = os.path.basename(pdzfile)
-        spectrum_df[basename] = intensity 
-        
-        # TODO: Test if computed channel energies `x_keV` are reasonable, 
-        # Parsing of spectrum parameters might fail 
-        # if Bruker messes with file format.   
-        # otherwise fall back on 0-40 keV range??  
+
 
     # pdz11_2048_channels 
     elif pdz_type == 'pdz11_2048_channels': 
@@ -329,19 +320,16 @@ def read_pdz(pdzfile):
         # parsing spectrum parameters and data 
         parsed, tail = multiparse(xformat, pdz_bytes, verbose=False)
         
-        tube_keV = parsed[10] # FYI 
-        delta_keV = parsed[5] / 1000
         n_channels = parsed[2]
-        intensity = parsed[13]
         if n_channels != 2048: 
             print(f'Found unexpected number of channels in pdz metadata: {n_channels}')
-            
-        # stop_keV = start_keV + delta_keV * (n_channels -1)
-        # x_keV = np.linspace(start_keV, stop_keV, num=n_channels) 
-        
-        # spectrum_df = pd.DataFrame(index=x_keV)
+        spe = parsed[13] #element 40
+        tm = 1. #TODO: no measurement time is found in the data structure?!
+        print('No measurement time identified... Selected default 1s/pt.')
+        tubecurrent = parsed[11]
+        icr = parsed[7]
+        ocr = parsed[8]
         basename = os.path.basename(pdzfile)
-        # spectrum_df[basename] = intensity 
         
     
     # pdz11_1024_channels
@@ -355,22 +343,24 @@ def read_pdz(pdzfile):
         # parsing spectrum parameters and data 
         parsed, tail = multiparse(xformat, pdz_bytes, verbose=False)
         
-        tube_keV = parsed[10] # FYI 
-        delta_keV = parsed[5] / 1000
         n_channels = parsed[2]
-        intensity = parsed[13]
         if n_channels != 1024: 
             print(f'Found unexpected number of channels in pdz metadata: {n_channels}')
-            
-        # stop_keV = start_keV + delta_keV * (n_channels -1)
-        # x_keV = np.linspace(start_keV, stop_keV, num=n_channels) 
-        
-        # spectrum_df = pd.DataFrame(index=x_keV)
+        spe = parsed[13] #element 40
+        tm = 1. #TODO: no measurement time is found in the data structure?!
+        print('No measurement time identified... Selected default 1s/pt.')
+        tubecurrent = parsed[11]
+        icr = parsed[7]
+        ocr = parsed[8]
         basename = os.path.basename(pdzfile)
-        # spectrum_df[basename] = intensity 
     
     else: 
         print(f'pdz_type: {pdz_type} Sorry, this specific pdz type is not yet implemented...')
         return 
 
-    return basename, spectrum, tubecurrent, icr, ocr, tm
+    return {'ID':basename, 
+            'spectrum':spe.astype(float), 
+            'current':float(tubecurrent), 
+            'icr':float(icr), 
+            'ocr':float(ocr), 
+            'realtime':float(tm)}
