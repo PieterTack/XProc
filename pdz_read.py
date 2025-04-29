@@ -293,21 +293,31 @@ def read_pdz(pdzfile):
         b3_list = [b for b in block_list if b['block_type'] == 3] 
         n_spectra = len(b3_list) 
         if n_spectra > 1: 
-            print(f'Found multiple spectral data blocks: {n_spectra}. Only parsing first spectrum. ')
-        arr = b3_list[0]['bytes'] 
-    
-        # parsing spectrum parameters and data 
-        parsed, tail = multiparse(xformat, arr, verbose=False)
-        n_channels = parsed[37]
-        if n_channels != 2048: 
-            print(f'Found unexpected number of channels in pdz metadata: {n_channels}')
-        spe = parsed[-1] #element 40
-        tm = parsed[8]
-        tubecurrent = parsed[13]
-        icr = parsed[3]
-        ocr = parsed[4]
-        basename = os.path.basename(pdzfile)
+            print(f'Found multiple spectral data blocks: {n_spectra}.')
+            # SpectroMeter Mode seems to have only 1, GeoMining and GeoExploration 3, GlassDual has 2.
 
+        dataset = []
+        basename = os.path.basename(pdzfile)
+        for i in range(n_spectra):
+            arr = b3_list[i]['bytes'] 
+        
+            # parsing spectrum parameters and data 
+            parsed, tail = multiparse(xformat, arr, verbose=False)
+            n_channels = parsed[37]
+            if n_channels != 2048: 
+                print(f'Found unexpected number of channels in pdz metadata: {n_channels}')
+            spe = parsed[-1] #element 40
+            tm = parsed[8]
+            tubecurrent = parsed[13]
+            icr = parsed[3]
+            ocr = parsed[4]
+    
+            dataset.append({'ID':basename+"_mode"+str(i), 
+                    'spectrum':spe.astype(float), 
+                    'current':float(tubecurrent), 
+                    'icr':float(icr), 
+                    'ocr':float(ocr), 
+                    'realtime':float(tm)})
 
     # pdz11_2048_channels 
     elif pdz_type == 'pdz11_2048_channels': 
@@ -330,7 +340,12 @@ def read_pdz(pdzfile):
         icr = parsed[7]
         ocr = parsed[8]
         basename = os.path.basename(pdzfile)
-        
+        dataset = {'ID':basename, 
+                'spectrum':spe.astype(float), 
+                'current':float(tubecurrent), 
+                'icr':float(icr), 
+                'ocr':float(ocr), 
+                'realtime':float(tm)}
     
     # pdz11_1024_channels
     elif pdz_type == 'pdz11_1024_channels': 
@@ -353,14 +368,15 @@ def read_pdz(pdzfile):
         icr = parsed[7]
         ocr = parsed[8]
         basename = os.path.basename(pdzfile)
-    
+        dataset = {'ID':basename, 
+                'spectrum':spe.astype(float), 
+                'current':float(tubecurrent), 
+                'icr':float(icr), 
+                'ocr':float(ocr), 
+                'realtime':float(tm)}
+
     else: 
         print(f'pdz_type: {pdz_type} Sorry, this specific pdz type is not yet implemented...')
         return 
 
-    return {'ID':basename, 
-            'spectrum':spe.astype(float), 
-            'current':float(tubecurrent), 
-            'icr':float(icr), 
-            'ocr':float(ocr), 
-            'realtime':float(tm)}
+    return dataset
