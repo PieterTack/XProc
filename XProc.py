@@ -1958,7 +1958,6 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 spectra0 = np.squeeze(np.asarray(file['raw/'+chnl+'/spectra']))
                 icr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/icr']))
                 ocr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/ocr']))
-            print(spectra0.shape)
             if len(spectra0.shape) == 2 or len(spectra0.shape) == 1:
                 if len(spectra0.shape) == 2:
                     spectra0 = spectra0.reshape((spectra0.shape[0], 1, spectra0.shape[1]))
