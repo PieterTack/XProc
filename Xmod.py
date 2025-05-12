@@ -76,7 +76,7 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
             with h5py.File(file, 'r', locking=True) as h5:
                 for n in h5[namespath]: allnames.append(n.decode("utf8"))
                 if sumdata is False:
-                    nrows += np.asarray([n.decode("utf8") for n in h5["mot1"]]).size
+                    nrows += np.asarray([n for n in h5["mot1"]]).size
                 else:
                     nrows += 1
         unique_names = [name for name in np.unique(allnames)]
@@ -92,7 +92,10 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
                 if sumdata is False:
                     mot1_name = str(h5['mot1'].attrs["Name"])
                     if mot1_name == "hxrf":
-                        rows = [n.decode("utf8") for n in h5["mot1"]]
+                        try:
+                            rows = np.asarray([n.decode("utf8") for n in h5["mot1"]])
+                        except Exception:
+                            rows = np.asarray([n for n in h5["mot1"]])
                     else:
                         rows = np.asarray(h5["mot1"]).astype(str)+'_'+np.asarray(h5["mot2"]).astype(str)
                     # 'flatten' the data
@@ -112,6 +115,8 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
                         dataid = unique_names.index(x)
                         data[dataid,len(rowID)-1] = temp[i]
         data = np.asarray(data).astype(str)
+        rowID = np.asarray(rowID)
+        fileID = np.asarray(fileID)
     else: #h5file is a single string (or should be)   
         # read the h5 data
         with h5py.File(h5file, 'r', locking=True) as h5:
@@ -120,7 +125,10 @@ def XProcH5toCSV(h5file, h5dir, csvfile, overwrite=False):
             if sumdata is False:
                 mot1_name = str(h5['mot1'].attrs["Name"])
                 if mot1_name == "hxrf":
-                    rowID = [n.decode("utf8") for n in np.squeeze(h5["mot1"])]
+                    try:
+                        rowID = [n.decode("utf8") for n in np.squeeze(h5["mot1"])]
+                    except Exception:
+                        rowID = [n for n in np.squeeze(h5["mot1"])]
                 else:
                     rowID = ["-".join(map(str, a)) for a in np.column_stack([np.asarray(h5["mot1"]),np.asarray(h5["mot2"])])]
             else:
