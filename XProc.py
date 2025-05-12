@@ -1958,6 +1958,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 spectra0 = np.squeeze(np.asarray(file['raw/'+chnl+'/spectra']))
                 icr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/icr']))
                 ocr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/ocr']))
+            print(spectra0.shape)
             if len(spectra0.shape) == 2 or len(spectra0.shape) == 1:
                 if len(spectra0.shape) == 2:
                     spectra0 = spectra0.reshape((spectra0.shape[0], 1, spectra0.shape[1]))
@@ -1967,10 +1968,10 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     mot2 = mot2.reshape((np.squeeze(mot2).shape[0], 1))
                 else:
                     spectra0 = spectra0.reshape((1, 1, spectra0.shape[0]))
-                    icr0 = icr0.reshape((icr0.shape[0], 1))
-                    ocr0 = ocr0.reshape((ocr0.shape[0], 1))
-                    mot1 = mot1.reshape((mot1.shape[0], 1))
-                    mot2 = mot2.reshape((mot2.shape[0], 1))
+                    icr0 = icr0.reshape((1, 1))
+                    ocr0 = ocr0.reshape((1, 1))
+                    mot1 = mot1.reshape((1, 1))
+                    mot2 = mot2.reshape((1, 1))
                 if mot1.shape[0] > spectra0.shape[0]:
                     mot1 = mot1[0:spectra0.shape[0],:]            
                 if mot2.shape[0] > spectra0.shape[0]:
@@ -2769,7 +2770,9 @@ def ConvBrukerPdz(pdzfiles, outfile):
     
     if type(pdzfiles) != type(list()):
         pdzfiles = [pdzfiles]
-                
+       
+    mot1 = []         
+    mot2 = []         
     for index, pdzfile in enumerate(pdzfiles):
         pdzdata = PR.read_pdz(pdzfile) 
         # will return a list of structures if multiple spectra were found in a single file.
@@ -2784,22 +2787,23 @@ def ConvBrukerPdz(pdzfiles, outfile):
         # Note that all iterated files should have the same amount of specrta inside
         if index == 0:            
             i1 = np.zeros((n_spectra,len(pdzfiles)))
-            mot2 = np.array((n_spectra,len(pdzfiles))).fill(np.nan)
-            mot1 = np.array((n_spectra,len(pdzfiles)))
-            i0 = np.array((n_spectra,len(pdzfiles)))
-            tm = np.array((n_spectra,len(pdzfiles)))
-            icr = np.array((n_spectra,len(pdzfiles)))
-            ocr = np.array((n_spectra,len(pdzfiles)))
-            spectra = np.array((n_spectra,len(pdzfiles),len(pdzdata['spectrum'])))
+            i0 = np.zeros((n_spectra,len(pdzfiles)))
+            tm = np.zeros((n_spectra,len(pdzfiles)))
+            icr = np.zeros((n_spectra,len(pdzfiles)))
+            ocr = np.zeros((n_spectra,len(pdzfiles)))
+            spectra = np.zeros((n_spectra,len(pdzfiles),len(pdzdata[0]['spectrum'][:])))
         
         for i in range(n_spectra):
-            mot1[i, index] = pdzdata['ID']
-            i0[i, index] = pdzdata['current']
-            tm[i, index] = pdzdata['realtime']
-            spectra[i, index, :] = pdzdata['spectrum']
-            icr[i, index] = pdzdata['icr']
-            ocr[i, index] = pdzdata['ocr']
+            mot1.append(pdzdata[i]['ID'])
+            mot2.append(np.nan)
+            i0[i, index] = pdzdata[i]['current']
+            tm[i, index] = pdzdata[i]['realtime']
+            spectra[i, index, :] = pdzdata[i]['spectrum']
+            icr[i, index] = pdzdata[i]['icr']
+            ocr[i, index] = pdzdata[i]['ocr']
 
+    mot1 = np.asarray(mot1).reshape((len(pdzfiles),n_spectra)).T
+    mot2 = np.asarray(mot2).reshape((len(pdzfiles),n_spectra)).T
     nspe = len(pdzfiles)
     nchnls = spectra.shape[2]
     for i in range(n_spectra):
@@ -2810,16 +2814,18 @@ def ConvBrukerPdz(pdzfiles, outfile):
         tm_tmp = np.asarray(tm[i,:]).reshape((nspe,1))
         i1_tmp = np.asarray(i1[i,:]).reshape((nspe,1))
         i0_tmp = np.asarray(i0[i,:]).reshape((nspe,1))
-        spectra_tmp = np.asarray(spectra).reshape((nspe,1,nchnls))
+        spectra_tmp = np.asarray(spectra[i,:,:]).reshape((nspe,1,nchnls))
         sumspec = np.sum(spectra_tmp[:], axis=(0,1))
         maxspec = np.zeros(sumspec.shape[0])
-        for i in range(sumspec.shape[0]):
-            maxspec[i] = spectra_tmp[:,:,i].max()
+        for j in range(sumspec.shape[0]):
+            maxspec[j] = spectra_tmp[:,:,j].max()
     
         # Hooray! We read all the information! Let's write it to a separate file
+        if not outfile.endswith('.h5'):
+            outfile += '.h5'
         measurement_id = os.path.splitext(outfile)[0]
-        print("Writing merged file: "+measurement_id+f'_{i}'+"_merge.h5...", end=" ")
-        f = h5py.File(measurement_id+"_merge.h5", 'w', locking=True)
+        print("Writing merged file: "+measurement_id+'_'+str(i)+"_merge.h5...", end=" ")
+        f = h5py.File(measurement_id+'_'+str(i)+"_merge.h5", 'w', locking=True)
         f.create_dataset('cmd', data='dscan Handheld Bruker')
         f.create_dataset('raw/channel00/spectra', data=spectra_tmp, compression='gzip', compression_opts=4)
         f.create_dataset('raw/channel00/icr', data=icr_tmp, compression='gzip', compression_opts=4)
