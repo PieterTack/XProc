@@ -2841,6 +2841,215 @@ def ConvBrukerPdz(pdzfiles, outfile):
         f.close()
         print("Done")
     
+##############################################################################
+def ConvVantaCsv(csvfile):
+    """
+    Read the Vanta handheld CSV files and restructure as H5 for further processing
+    
+
+    Parameters
+    ----------
+    csvfile : String
+        File path to the CSV file to be converted.
+
+    Returns
+    -------
+    None.
+
+    """
+    import pandas as pd
+    import numpy as np
+    
+    with open(csvfile, encoding="utf-8-sig") as f:
+        lines = f.readlines()
+
+    # Remove the last line if it's empty
+    if not lines[-1].strip():
+        lines = lines[:-1]
+    
+    # Split lines into lists of cells
+    data = [line.strip().split(',') for line in lines]
+    
+    # Detect numeric data start (rows starting with "Data")
+    numeric_start_idx = None
+    for i, row in enumerate(data):
+        if len(row) > 0 and row[0] == "Data":
+            numeric_start_idx = i
+            break
+    if numeric_start_idx is None:
+        raise ValueError("Could not detect numeric data in the CSV!")
+    
+    # Split metadata and numeric data
+    metadata_rows = data[:numeric_start_idx]
+    numeric_rows = data[numeric_start_idx:]
+    
+    # Clean metadata: remove the last column if empty
+    metadata_cleaned = [row[:-1] if row[-1] == '' else row for row in metadata_rows]
+    metadata_dict = {row[0]: row[1:] for row in metadata_cleaned if len(row) > 1}
+    numeric_df = pd.DataFrame(numeric_rows).replace('', pd.NA)
+    numeric_values = numeric_df.iloc[:, 1:-1]
+    numeric_array = numeric_values.apply(pd.to_numeric, errors='coerce').to_numpy()
+ 
+    # loop through the different columns and assign them to spectra0, spectra2 etc.
+    spectra_50 = []
+    ocr_50 = []
+    icr_50 = []
+    i0_50 = []
+    i1_50 = []
+    tm_50 = []
+    mot1_50 = []
+    mot2_50 = []
+    spectra_40 = []
+    ocr_40 = []
+    icr_40 = []
+    i0_40 = []
+    i1_40 = []
+    tm_40 = []
+    mot1_40 = []
+    mot2_40 = []
+    spectra_15 = []
+    ocr_15 = []
+    icr_15 = []
+    i0_15 = []
+    i1_15 = []
+    tm_15 = []
+    mot1_15 = []
+    mot2_15 = []
+   
+    for i in range(len(metadata_dict['Exposure Number'])):
+        match int(metadata_dict['Exposure Number'][i]):
+            case 1:
+                i0_50.append(float(metadata_dict['Tube Current Monitor'][i]))
+                tm_50.append(float(metadata_dict['Live Time'][i]))
+                spectra_50.append(numeric_array[:,i])
+                ocr_50.append(float(metadata_dict['Output Count Rate'][i]))
+                icr_50.append(float(metadata_dict['Input Count Rate'][i]))
+                i1_50.append(0) #no transmission counter registered
+                mot1_50.append(metadata_dict['Reading Label'][i])
+                mot2_50.append(np.nan)
+            case 2:
+                i0_40.append(float(metadata_dict['Tube Current Monitor'][i]))
+                tm_40.append(float(metadata_dict['Live Time'][i]))
+                spectra_40.append(numeric_array[:,i])
+                ocr_40.append(float(metadata_dict['Output Count Rate'][i]))
+                icr_40.append(float(metadata_dict['Input Count Rate'][i]))
+                i1_40.append(0) #no transmission counter registered
+                mot1_40.append(metadata_dict['Reading Label'][i])
+                mot2_40.append(np.nan)
+            case 3:
+                i0_15.append(float(metadata_dict['Tube Current Monitor'][i]))
+                tm_15.append(float(metadata_dict['Live Time'][i]))
+                spectra_15.append(numeric_array[:,i])
+                ocr_15.append(float(metadata_dict['Output Count Rate'][i]))
+                icr_15.append(float(metadata_dict['Input Count Rate'][i]))
+                i1_15.append(0) #no transmission counter registered
+                mot1_15.append(metadata_dict['Reading Label'][i])
+                mot2_15.append(np.nan)
+            case _: 
+                print(
+                    f"WARNING: measurement {metadata_dict['Date'][i]} - {metadata_dict['Time'][i]} "
+                    "does not have an expected Exposure Number (1, 2 or 3). Measurement exempt from H5 file."
+                )
+            
+    nspe = len(mot1_50)
+    nchnls = np.asarray(spectra_50).shape
+    mot1_50 = np.asarray([n.encode('utf8') for n in mot1_50]).reshape((nspe,1))
+    mot2_50 = np.asarray(mot2_50).reshape((nspe,1))
+    ocr_50 = np.asarray(ocr_50).reshape((nspe,1))
+    tm_50 = np.asarray(tm_50).reshape((nspe,1))
+    i1_50 = np.asarray(i1_50).reshape((nspe,1))
+    i0_50 = np.asarray(i0_50).reshape((nspe,1))
+    spectra_50 = np.asarray(spectra_50).reshape((nspe,1,nchnls[1]))
+    sumspec = np.sum(spectra_50[:], axis=(0,1))
+    maxspec = np.zeros(sumspec.shape[0])
+    for i in range(sumspec.shape[0]):
+        maxspec[i] = spectra_50[:,:,i].max()
+
+    # Hooray! We read all the information! Let's write it to a separate file
+    measurement_id = os.path.splitext(csvfile)[0]
+    print("Writing merged file: "+measurement_id+"_merge_50keV.h5...", end=" ")
+    f = h5py.File(measurement_id+"_merge_50keV.h5", 'w', locking=True)
+    f.create_dataset('cmd', data='dscan Handheld Vanta 50keV mode')
+    f.create_dataset('raw/channel00/spectra', data=spectra_50, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=icr_50, compression='gzip', compression_opts=4) #as time is expressed as livetime no icr/ocr correction should be applied
+    f.create_dataset('raw/channel00/ocr', data=ocr_50, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=i0_50, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=i1_50, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/acquisition_time', data=tm_50, compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=mot1_50)
+    dset.attrs['Name'] = 'hxrf'
+    dset = f.create_dataset('mot2', data=mot2_50, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = 'hxrf'
+    f.close()
+    print("Done")
+    
+    nspe = len(mot1_40)
+    nchnls = np.asarray(spectra_40[0]).shape
+    mot1_40 = np.asarray([n.encode('utf8') for n in mot1_40]).reshape((nspe,1))
+    mot2_40 = np.asarray(mot2_40).reshape((nspe,1))
+    ocr_40 = np.asarray(ocr_40).reshape((nspe,1))
+    tm_40 = np.asarray(tm_40).reshape((nspe,1))
+    i1_40 = np.asarray(i1_40).reshape((nspe,1))
+    i0_40 = np.asarray(i0_40).reshape((nspe,1))
+    spectra_40 = np.asarray(spectra_40).reshape((nspe,1,nchnls[1]))
+    sumspec = np.sum(spectra_40[:], axis=(0,1))
+    maxspec = np.zeros(sumspec.shape[0])
+    for i in range(sumspec.shape[0]):
+        maxspec[i] = spectra_40[:,:,i].max()
+    
+    print("Writing merged file: "+measurement_id+"_merge_40keV.h5...", end=" ")
+    f = h5py.File(measurement_id+"_merge_40keV.h5", 'w', locking=True)
+    f.create_dataset('cmd', data='dscan Handheld Vanta 40keV mode')
+    f.create_dataset('raw/channel00/spectra', data=spectra_40, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=icr_40, compression='gzip', compression_opts=4) #as time is expressed as livetime no icr/ocr correction should be applied
+    f.create_dataset('raw/channel00/ocr', data=ocr_40, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=i0_40, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=i1_40, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/acquisition_time', data=tm_40, compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=mot1_40)
+    dset.attrs['Name'] = 'hxrf'
+    dset = f.create_dataset('mot2', data=mot2_40, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = 'hxrf'
+    f.close()
+    print("Done")
+
+    nspe = len(mot1_15)
+    nchnls = np.asarray(spectra_15[0]).shape
+    mot1_15 = np.asarray([n.encode('utf8') for n in mot1_15]).reshape((nspe,1))
+    mot2_15 = np.asarray(mot2_15).reshape((nspe,1))
+    ocr_15 = np.asarray(ocr_15).reshape((nspe,1))
+    tm_15 = np.asarray(tm_15).reshape((nspe,1))
+    i1_15 = np.asarray(i1_15).reshape((nspe,1))
+    i0_15 = np.asarray(i0_15).reshape((nspe,1))
+    spectra_15 = np.asarray(spectra_15).reshape((nspe,1,nchnls[1]))
+    sumspec = np.sum(spectra_15[:], axis=(0,1))
+    maxspec = np.zeros(sumspec.shape[0])
+    for i in range(sumspec.shape[0]):
+        maxspec[i] = spectra_15[:,:,i].max()
+    
+    print("Writing merged file: "+measurement_id+"_merge_15keV.h5...", end=" ")
+    f = h5py.File(measurement_id+"_merge_15keV.h5", 'w', locking=True)
+    f.create_dataset('cmd', data='dscan Handheld Vanta 15keV mode')
+    f.create_dataset('raw/channel00/spectra', data=spectra_15, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/icr', data=icr_15, compression='gzip', compression_opts=4) #as time is expressed as livetime no icr/ocr correction should be applied
+    f.create_dataset('raw/channel00/ocr', data=ocr_15, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/sumspec', data=np.squeeze(sumspec), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/channel00/maxspec', data=np.squeeze(maxspec), compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I0', data=i0_15, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/I1', data=i1_15, compression='gzip', compression_opts=4)
+    f.create_dataset('raw/acquisition_time', data=tm_15, compression='gzip', compression_opts=4)
+    dset = f.create_dataset('mot1', data=mot1_15)
+    dset.attrs['Name'] = 'hxrf'
+    dset = f.create_dataset('mot2', data=mot2_15, compression='gzip', compression_opts=4)
+    dset.attrs['Name'] = 'hxrf'
+    f.close()
+    print("Done")
+
+    
     
 ##############################################################################
 def ConvDeltaCsv(csvfile):
