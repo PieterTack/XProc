@@ -2887,7 +2887,10 @@ def ConvVantaCsv(csvfile):
     metadata_cleaned = [row[:-1] if row[-1] == '' else row for row in metadata_rows]
     metadata_dict = {row[0]: row[1:] for row in metadata_cleaned if len(row) > 1}
     numeric_df = pd.DataFrame(numeric_rows).replace('', pd.NA)
-    numeric_values = numeric_df.iloc[:, 1:-1]
+    numeric_values = numeric_df.iloc[:, 1:]
+    # Check if the last column is entirely NaN
+    if numeric_values.iloc[:, -1].isna().all():
+        numeric_values = numeric_values.iloc[:, :-1]
     numeric_array = numeric_values.apply(pd.to_numeric, errors='coerce').to_numpy()
  
     # loop through the different columns and assign them to spectra0, spectra2 etc.
