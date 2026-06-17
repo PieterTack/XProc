@@ -13,6 +13,8 @@ sys.path.insert(0,'C:/Data/university/python_pro/Xims')
 import Xims
 
 import matplotlib.pyplot as plt
+from scipy.ndimage import median_filter
+
 
 
 def find_drift(h5file, rowids=[0,-1], signalid=8, flip=False, shift=0):
@@ -89,6 +91,35 @@ def find_cor(h5file, transshift=None, corrange=[150, 153, 0.01], signalid=8, bkg
     # angle = angle[:180]
     # print(angle)
     tomopy.write_center(proj, angle[:proj.shape[0]], dpath=os.path.dirname(os.path.abspath(h5file))+'/find_cor', cen_range=corrange, mask=False, sinogram_order=False, algorithm='gridrec', filter_name='shepp')
+
+
+def despike_sinogram_elementwise(proj, size=(3, 3), z=8.0):
+    """
+    Robustly replace isolated hot pixels in each element sinogram.
+
+    proj shape: (n_angles, n_elements, n_translation)
+    Filtering is done per element, so elements are never mixed.
+    """
+    proj_out = proj.copy()
+
+    for k in range(proj.shape[1]):
+        sino = proj[:, k, :]
+
+        local_med = median_filter(sino, size=size)
+        resid = sino - local_med
+
+        mad = np.median(np.abs(resid - np.median(resid)))
+        sigma = 1.4826 * mad + 1e-12
+
+        mask = resid > z * sigma
+
+        sino_clean = sino.copy()
+        sino_clean[mask] = local_med[mask]
+
+        proj_out[:, k, :] = sino_clean
+
+    return proj_out
+
 
 def spectra_tomo_recon(h5file, rot_mot=None, rot_centre=None, channel='channel00', snake=False, interp_tr=False, limit_rotrange=None, transshift=None):
     # Transshift: amount of pixels to shift over full rotational range. Applied on raw data, before limit_rotrange
@@ -220,6 +251,7 @@ def spectra_tomo_recon(h5file, rot_mot=None, rot_centre=None, channel='channel00
 def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', datadir='norm', channel='channel00', ncol=8, selfabs=None, snake=False, interp_tr=False, limit_rotrange=None, transshift=None, bkgr=None):
     # bkgr is list with 4 elements: [a,b,c,d] with [a:b] the range along rotation axis and [c:d] along translation axis where the signal is considered background in the sinogram
     # Transshift: amount of pixels to shift over full rotational range. Applied on raw data, before limit_rotrange
+
     if rot_mot is None:
         rotid = 'mot1'
         transid = 'mot2'
@@ -287,15 +319,15 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', datadir='
     # remove background signal
     for k in range(0, ims.shape[0]):
         if bkgr is not None:
-            bkgr_intensity = np.max(proj[bkgr[0]:bkgr[1],k,bkgr[2]:bkgr[3]])
+            bkgr_intensity = np.mean(proj[bkgr[0]:bkgr[1],k,bkgr[2]:bkgr[3]])
             proj[:,k,:] -= bkgr_intensity
             if errorflag:
-                bkgr_intensity = np.max(proj_err[bkgr[0]:bkgr[1],k,bkgr[2]:bkgr[3]])
+                bkgr_intensity = np.mean(proj_err[bkgr[0]:bkgr[1],k,bkgr[2]:bkgr[3]])
                 proj_err[:,k,:] -= bkgr_intensity
     # remove negative and NaN values, remove stripe artefacts, ...
-    proj = tomopy.remove_neg(tomopy.remove_nan(np.moveaxis(ims, 0, 1)))
+    proj = tomopy.remove_neg(tomopy.remove_nan(proj))
     if errorflag:
-        proj_err = tomopy.remove_neg(tomopy.remove_nan(np.moveaxis(ims_err, 0, 1)))
+        proj_err = tomopy.remove_neg(tomopy.remove_nan(proj_err))
 
     
     # interpolate for translation motor positions (e.g. in case of rotation over virtual motor axis)
@@ -391,8 +423,19 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', datadir='
     print(h5file+" "+channel+" Center of rotation: ", rot_center)
 
 
-    # proj = tomopy.prep.stripe.remove_stripe_sf(proj, size=1)
-    # proj = tomopy.prep.stripe.remove_dead_stripe(proj, snr=5, size=20, norm=False)
+    proj = tomopy.remove_nan(tomopy.remove_neg(proj))
+    proj[np.isnan(proj)] = 0.
+    # proj = despike_sinogram_elementwise(proj, size=(3, 3), z=8.0)
+    # proj = tomopy.prep.stripe.remove_dead_stripe(proj, snr=2, size=31, norm=False)
+    proj = tomopy.prep.stripe.remove_stripe_fw(proj, level=5, wname='db5', sigma=1)
+    print(proj.shape)
+    # proj = tomopy.misc.corr.gaussian_filter(proj, sigma=1)
+
+    # proj = tomopy.prep.normalize.normalize_roi(proj, roi=bkgr) #To check compatibility: the roi parameter takes a list of four pixel coordinates: [top-left-x, top-left-y, bottom-left-x, bottom-left-y]
+
+    # Noise filtering
+    proj = median_filter(proj, size=(3, 1, 2)) # shape: (angle, elements, translation) #only smooth along translation direction, not along angles or elements
+
 
     # extra_options = {'MinConstraint': 0}
     # options = {
@@ -402,14 +445,19 @@ def h5_tomo_proc(h5file, rot_mot=None, rot_centre=None, signal='Ba-K', datadir='
     #     'extra_options': extra_options
     # }        
     recon = tomopy.recon(proj, angle, center=rot_center, algorithm='gridrec', sinogram_order=False, filter_name='shepp') #tomopy.astra, options=options)#
+    # recon = tomopy.recon(proj, angle, center=rot_center, algorithm='sirt', sinogram_order=False, num_iter=50) #tomopy.astra, options=options)#
     if errorflag:
         recon_err = tomopy.recon(proj_err, angle, center=rot_center, algorithm='gridrec', sinogram_order=False, filter_name='shepp') #tomopy.astra, options=options)#
     # Algorithms: 'gridrec', 'mlem'
-    # filter_name: 'shepp' (default), 'parzen'
+    # filter_name: 'shepp' (default), 'parzen', 'hann'
     
     # Ring removal attempt
     # recon = tomopy.misc.corr.remove_ring(recon)
   
+    recon = tomopy.remove_neg(recon)
+    if errorflag:
+        recon_err = tomopy.remove_neg(recon_err)
+    
     # flip over vertical axis to match images better to measurement geometry
     recon = np.flip(recon, 1)    
     if errorflag:
@@ -564,6 +612,7 @@ def h5_i1tomo_recon(h5file, rot_mot=None, rot_centre=None, snake=False, channel=
             
         
         # proj = tomopy.prep.normalize.normalize_bg(proj)
+        # proj = tomopy.prep.normalize.normalize_roi(proj)
         # proj = tomopy.prep.stripe.remove_stripe_sf(proj, size=1)
         # proj = tomopy.prep.stripe.remove_dead_stripe(proj, snr=5, size=20, norm=False)
         # proj = tomopy.prep.stripe.remove_all_stripe(proj, snr=3, la_size=10, sm_size=2)
