@@ -1820,6 +1820,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     """
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
+    i1flag = False
     with h5py.File(h5file, 'r', locking=True) as file:
         keys = [key for key in file['fit'].keys() if 'channel' in key]
         I0_raw =  np.asarray(file['raw/I0'])
@@ -1960,7 +1961,9 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 pass
             file.create_dataset('fit/'+chnl+'/ims', data=ims0, compression='gzip', compression_opts=4)
         # make sure to free up some memory, we'll read in the relevant data again later
-        del ims0, I0, I1, mot1, mot2, tm
+        del ims0, I0, mot1, mot2, tm
+        if i1flag:
+            del I1
 
         # Redo the procedure for the spectra, icr and ocr if requested
         if omitspectra is False:
