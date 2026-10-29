@@ -1828,7 +1828,11 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         mot1_name = str(file['mot1'].attrs["Name"])
         mot2_raw = np.asarray(file['mot2'])
         mot2_name = str(file['mot2'].attrs["Name"])
-        cmd = str(np.asarray(file['cmd'])).split(' ')
+        cmd = file["cmd"][()]
+        if isinstance(cmd, bytes):
+            cmd = cmd.decode("utf-8")
+        cmd = cmd.rstrip("\x00").strip()
+        cmd = cmd.split(' ')
         if 'raw/I1' in file.keys():
             I1_raw = np.asarray(file['raw/I1'])
             i1flag = True
@@ -1878,10 +1882,18 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     I1 = I1[0:mot1.shape[0],:]
                 tm = tm[0:mot1.shape[0],:]
             except_list = ["b'timescanc", "b'dscan", "b'ascan", "timescanc", "dscan", "ascan", "c", "b'c"]
-            if cmd[0] not in except_list:
+            # UGCTacq continuous meshes are time-triggered and are deliberately
+            # stored in acquisition order.  Step meshes may also be snake scans,
+            # but that remains controlled by the caller's snake argument.
+            if cmd[0] == "camesh":
                 snake = True
-                timetriggered=True  #if timetriggered is true one likely has more datapoints than fit on the regular grid, so have to interpolate in different way
-    
+                timetriggered = True
+            elif cmd[0] == "amesh":
+                timetriggered = False
+            elif cmd[0] not in except_list:
+                snake = True
+                timetriggered = True  # legacy behaviour for other formats
+
         # Set snake etc to false when concerning hxrf data, as here the mot positions are measurement IDs rather than motor coordinates
         if mot1_name == "hxrf":
             snake = False
@@ -2097,9 +2109,18 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(xdim))
                     mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(ydim)) 
                 else:
-                    mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(cmd[4]))
-                    mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(cmd[8])) 
-                if cmd[0] == "b'cdmesh" or cmd[0] == "b'cdmeshs":
+                    # UGCTacq stores interval counts in the command.  A scan with
+                    # N intervals contains N+1 points.  Other formats retain the
+                    # historical XProc point-count interpretation.
+                    if cmd[0] in ("amesh", "camesh"):
+                        mot1_count = int(cmd[4]) + 1
+                        mot2_count = int(cmd[8]) + 1
+                    else:
+                        mot1_count = int(cmd[4])
+                        mot2_count = int(cmd[8])
+                    mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=mot1_count)
+                    mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=mot2_count) 
+                if cmd[0] in ("b'cdmesh", "b'cdmeshs", "cdmesh", "cdmeshs", "camesh"):
                     mot1_pos = mot1_pos - (mot1_pos[0] - mot1[0,0])
                     mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
                 ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
