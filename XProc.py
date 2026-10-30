@@ -1777,6 +1777,104 @@ def hdf_overview_images(h5file, datadir, ncols, pix_size, scl_size, clrmap='viri
 
 
 ##############################################################################
+def _xproc_clean_command(cmd_value):
+    """Return a normalized command-token list for bytes and string datasets."""
+    if isinstance(cmd_value, bytes):
+        cmd_value = cmd_value.decode("utf-8", errors="replace")
+    cmd_text = str(cmd_value).rstrip("\\x00").strip()
+    if cmd_text.startswith("b'") and cmd_text.endswith("'"):
+        cmd_text = cmd_text[2:-1]
+    return cmd_text.split()
+
+
+def _xproc_is_gridded_scan(mot1, mot2, spatial_shape):
+    """True when motor arrays already share the stored two-dimensional image grid."""
+    return (mot1.ndim == 2 and mot2.ndim == 2 and
+            mot1.shape == mot2.shape and tuple(mot1.shape) == tuple(spatial_shape) and
+            mot1.shape[0] > 1 and mot1.shape[1] > 1)
+
+
+def _xproc_center_continuous_positions(mot1, gridded):
+    """Shift event positions to frame centres without destroying a 2-D snake grid."""
+    centered = np.asarray(mot1, dtype=float).copy()
+    if centered.size < 2:
+        return centered
+
+    if gridded:
+        # Each stored row is an acquisition line. Determine that line's actual
+        # direction from its finite encoder differences and shift the complete
+        # line by half of its median point spacing. Forward and reverse rows
+        # therefore receive opposite shifts while preserving data association.
+        for row in range(centered.shape[0]):
+            diffs = np.diff(centered[row, :])
+            diffs = diffs[np.isfinite(diffs) & (np.abs(diffs) > 0)]
+            if diffs.size:
+                centered[row, :] += 0.5 * np.median(diffs)
+        return centered
+
+    # Legacy one-dimensional event stream. Centre every sample between its own
+    # position and the following sample while keeping the final point defined.
+    flat = centered.reshape(-1)
+    finite_diff = np.diff(flat)
+    flat[:-1] += 0.5 * finite_diff
+    if flat.size > 1:
+        flat[-1] += 0.5 * finite_diff[-1]
+    return flat.reshape(centered.shape)
+
+
+def _xproc_make_target_grid(cmd, mot1, mot2, gridded):
+    """Build a regular (rows, columns) target grid for legacy and UGCTacq data."""
+    command = cmd[0] if cmd else ""
+
+    if gridded:
+        nrows, ncols = mot1.shape
+    elif command == "cdmeshs":
+        ncols = int(np.floor(abs(float(cmd[2]) - float(cmd[3])) / float(cmd[4])))
+        nrows = int(np.floor(abs(float(cmd[6]) - float(cmd[7])) / float(cmd[8]))) + 1
+    elif len(cmd) > 8:
+        # UGCTacq stores interval counts; historical XProc converters generally
+        # store point counts for continuous commands.
+        add_endpoint = 1 if command in ("amesh", "camesh") else 0
+        ncols = int(cmd[4]) + add_endpoint
+        nrows = int(cmd[8]) + add_endpoint
+    else:
+        raise ValueError("Cannot determine a two-dimensional interpolation grid from cmd")
+
+    if len(cmd) > 8 and command in ("amesh", "camesh", "cdmesh", "cdmeshs"):
+        x_start, x_end = float(cmd[2]), float(cmd[3])
+        y_start, y_end = float(cmd[6]), float(cmd[7])
+    else:
+        x_start, x_end = np.nanmin(mot1), np.nanmax(mot1)
+        y_start, y_end = np.nanmin(mot2), np.nanmax(mot2)
+
+    # Align command-space grids to the measured first point, retaining the
+    # historical XProc behaviour for continuous scans.
+    if command in ("camesh", "cdmesh", "cdmeshs"):
+        x_offset = np.ravel(mot1)[0] - x_start
+        y_offset = np.ravel(mot2)[0] - y_start
+        x_start += x_offset
+        x_end += x_offset
+        y_start += y_offset
+        y_end += y_offset
+
+    mot1_pos = np.linspace(x_start, x_end, num=ncols)
+    mot2_pos = np.linspace(y_start, y_end, num=nrows)
+    mot1_grid, mot2_grid = np.meshgrid(mot1_pos, mot2_pos, indexing="xy")
+    return mot1_pos, mot2_pos, mot1_grid, mot2_grid
+
+
+def _xproc_griddata(values, mot1, mot2, mot1_grid, mot2_grid, method):
+    """Interpolate one scalar map, excluding non-finite source coordinates."""
+    x = np.asarray(mot1).ravel()
+    y = np.asarray(mot2).ravel()
+    z = np.asarray(values).ravel()
+    valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
+    if np.count_nonzero(valid) == 0:
+        return np.zeros(mot1_grid.shape, dtype=float)
+    return griddata((x[valid], y[valid]), z[valid],
+                    (mot1_grid, mot2_grid), method=method)
+
+
 def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=False, tmnorm=False, 
                    halfpixshift=True, mot2nosort=False, omitspectra=False, interpol_method='nearest',
                    lowmemory=False):
@@ -1820,6 +1918,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
     """
     print("Initiating data normalisation of <"+h5file+">...", end=" ")
     # read h5file
+    i1flag = False
     with h5py.File(h5file, 'r', locking=True) as file:
         keys = [key for key in file['fit'].keys() if 'channel' in key]
         I0_raw =  np.asarray(file['raw/I0'])
@@ -1828,11 +1927,7 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         mot1_name = str(file['mot1'].attrs["Name"])
         mot2_raw = np.asarray(file['mot2'])
         mot2_name = str(file['mot2'].attrs["Name"])
-        cmd = file["cmd"][()]
-        if isinstance(cmd, bytes):
-            cmd = cmd.decode("utf-8")
-        cmd = cmd.rstrip("\x00").strip()
-        cmd = cmd.split(' ')
+        cmd = _xproc_clean_command(file["cmd"][()])
         if 'raw/I1' in file.keys():
             I1_raw = np.asarray(file['raw/I1'])
             i1flag = True
@@ -1881,18 +1976,20 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 if i1flag is True:
                     I1 = I1[0:mot1.shape[0],:]
                 tm = tm[0:mot1.shape[0],:]
-            except_list = ["b'timescanc", "b'dscan", "b'ascan", "timescanc", "dscan", "ascan", "c", "b'c"]
-            # UGCTacq continuous meshes are time-triggered and are deliberately
-            # stored in acquisition order.  Step meshes may also be snake scans,
-            # but that remains controlled by the caller's snake argument.
-            if cmd[0] == "camesh":
+            command = cmd[0] if cmd else ""
+            # UGCTacq camesh files are continuous snake meshes. They may already
+            # be stored as a 2-D acquisition-order grid; interpolation below
+            # detects that layout from the motor and image shapes. Legacy formats
+            # retain caller-controlled flags and historical fallback behaviour.
+            if command == "camesh":
                 snake = True
                 timetriggered = True
-            elif cmd[0] == "amesh":
+            elif command == "amesh":
                 timetriggered = False
-            elif cmd[0] not in except_list:
+            elif command not in ("timescanc", "dscan", "ascan", "c", "cnt",
+                                 "timescan", "cdmesh", "cdmeshs"):
                 snake = True
-                timetriggered = True  # legacy behaviour for other formats
+                timetriggered = True
 
         # Set snake etc to false when concerning hxrf data, as here the mot positions are measurement IDs rather than motor coordinates
         if mot1_name == "hxrf":
@@ -1960,7 +2057,9 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 pass
             file.create_dataset('fit/'+chnl+'/ims', data=ims0, compression='gzip', compression_opts=4)
         # make sure to free up some memory, we'll read in the relevant data again later
-        del ims0, I0, I1, mot1, mot2, tm
+        del ims0, I0, mot1, mot2, tm
+        if i1flag:
+            del I1
 
         # Redo the procedure for the spectra, icr and ocr if requested
         if omitspectra is False:
@@ -2085,66 +2184,51 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
         #   this assumes that mot1 was the continuously moving motor
         if snake is True:
             print("Interpolating image for motor positions...", end=" ")
-            if timetriggered is False:
-                if halfpixshift is True:
-                    pos_low = np.min(mot1[:,0])
-                    pos_high = np.max(mot1[:,0])
-                    for i in range(0, mot1[:,0].size): #correct for half a pixel shift
-                        if mot1[i,0] <= np.average((pos_high,pos_low)):
-                            mot1[i,:] += abs(mot1[i,1]-mot1[i,0])/2.
-                        else:
-                            mot1[i,:] -= abs(mot1[i,1]-mot1[i,0])/2.
-                mot1_pos = np.average(mot1, axis=0) #mot1[0,:]
-                mot2_pos = np.average(mot2, axis=1) #mot2[:,0]
-                ims0_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
-                ims0_err_tmp = np.zeros((ims0.shape[0], ims0.shape[1], ims0.shape[2]))
-            if timetriggered is True:
-                if halfpixshift is True:
-                    # correct positions for half pixel shift
-                    mot1[0:mot1.size-1, 0] = mot1[0:mot1.size-1, 0] + np.diff(mot1[:,0])/2.
-                # based on cmd determine regular grid positions
-                if cmd[0]=="b'cdmeshs":
-                    xdim = np.floor(np.abs(float(cmd[2])-float(cmd[3]))/float(cmd[4]))
-                    ydim = np.floor(np.abs(float(cmd[6])-float(cmd[7]))/float(cmd[8]))+1
-                    mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=int(xdim))
-                    mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=int(ydim)) 
-                else:
-                    # UGCTacq stores interval counts in the command.  A scan with
-                    # N intervals contains N+1 points.  Other formats retain the
-                    # historical XProc point-count interpretation.
-                    if cmd[0] in ("amesh", "camesh"):
-                        mot1_count = int(cmd[4]) + 1
-                        mot2_count = int(cmd[8]) + 1
-                    else:
-                        mot1_count = int(cmd[4])
-                        mot2_count = int(cmd[8])
-                    mot1_pos = np.linspace(float(cmd[2]), float(cmd[3]), num=mot1_count)
-                    mot2_pos = np.linspace(float(cmd[6]), float(cmd[7]), num=mot2_count) 
-                if cmd[0] in ("b'cdmesh", "b'cdmeshs", "cdmesh", "cdmeshs", "camesh"):
-                    mot1_pos = mot1_pos - (mot1_pos[0] - mot1[0,0])
-                    mot2_pos = mot2_pos - (mot2_pos[0] - mot2[0,0])
-                ims0_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
-                ims0_err_tmp = np.zeros((ims0.shape[0], mot2_pos.shape[0], mot1_pos.shape[0]))
-            # interpolate to the regular grid motor positions
-            mot1_tmp, mot2_tmp = np.mgrid[mot1_pos[0]:mot1_pos[-1]:complex(mot1_pos.size),
-                    mot2_pos[0]:mot2_pos[-1]:complex(mot2_pos.size)]
+            gridded_input = _xproc_is_gridded_scan(
+                mot1, mot2, ims0.shape[1:]
+            )
+
+            if gridded_input:
+                print("[2-D acquisition grid]", end=" ")
+            else:
+                print("[legacy point stream]", end=" ")
+
+            # The old time-triggered half-pixel expression operated down the
+            # first image column. On a 2-D snake grid that mixes successive rows
+            # and can displace points by nearly the full line length. Centre each
+            # acquisition line independently instead.
+            if halfpixshift is True:
+                mot1 = _xproc_center_continuous_positions(
+                    mot1, gridded_input
+                )
+
+            mot1_pos, mot2_pos, mot1_tmp, mot2_tmp = \
+                _xproc_make_target_grid(cmd, mot1, mot2, gridded_input)
+
+            target_shape = mot1_tmp.shape
+            ims0_tmp = np.zeros((ims0.shape[0],) + target_shape)
+            ims0_err_tmp = np.zeros((ims0.shape[0],) + target_shape)
             x = mot1.ravel()
             y = mot2.ravel()
     
-    
             for i in range(names0.size):
                 values = ims0[i,:,:].ravel()
-                ims0_tmp[i,:,:] = griddata((x, y), values, (mot1_tmp, mot2_tmp), method=interpol_method).T
-                ims0_err_tmp[i,:,:] = griddata((x, y), ims0_err[i,:,:].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                ims0_tmp[i,:,:] = _xproc_griddata(
+                    values, mot1, mot2, mot1_tmp, mot2_tmp, interpol_method
+                )
+                ims0_err_tmp[i,:,:] = _xproc_griddata(
+                    ims0_err[i,:,:], mot1, mot2,
+                    mot1_tmp, mot2_tmp, interpol_method
+                )
             ims0 = np.nan_to_num(ims0_tmp)
             ims0_err = np.nan_to_num(ims0_err_tmp)*ims0
             print("Done")
             with h5py.File(h5file, 'r+', locking=True) as file:
                 if index == 0:
-                    I0 = griddata((x, y), I0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                    I0 = _xproc_griddata(I0, mot1, mot2, mot1_tmp, mot2_tmp, interpol_method)
                     if i1flag is True:
-                        I1 = griddata((x, y), I1.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
-                    tm = griddata((x, y), tm.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                        I1 = _xproc_griddata(I1, mot1, mot2, mot1_tmp, mot2_tmp, interpol_method)
+                    tm = _xproc_griddata(tm, mot1, mot2, mot1_tmp, mot2_tmp, interpol_method)
                     try:
                         del file['mot1']
                         del file['mot2']
@@ -2158,9 +2242,9 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     if i1flag is True:
                         file.create_dataset('raw/I1', data=I1, compression='gzip', compression_opts=4)
                     file.create_dataset('raw/acquisition_time', data=tm, compression='gzip', compression_opts=4)
-                    dset = file.create_dataset('mot1', data=mot1_tmp.T, compression='gzip', compression_opts=4)
+                    dset = file.create_dataset('mot1', data=mot1_tmp, compression='gzip', compression_opts=4)
                     dset.attrs['Name'] = mot1_name
-                    dset = file.create_dataset('mot2', data=mot2_tmp.T, compression='gzip', compression_opts=4)
+                    dset = file.create_dataset('mot2', data=mot2_tmp, compression='gzip', compression_opts=4)
                     dset.attrs['Name'] = mot2_name
             del ims0_tmp, ims0_err_tmp
             
@@ -2199,8 +2283,8 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                 with h5py.File(h5file, 'a', locking=True) as file:
                     icr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/icr']))
                     ocr0 = np.squeeze(np.asarray(file['raw/'+chnl+'/ocr']))
-                    icr0 = griddata((x, y), icr0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
-                    ocr0 = griddata((x, y), ocr0.ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                    icr0 = _xproc_griddata(icr0, mot1, mot2, mot1_tmp, mot2_tmp, interpol_method)
+                    ocr0 = _xproc_griddata(ocr0, mot1, mot2, mot1_tmp, mot2_tmp, interpol_method)
                     try:
                         del file['raw/'+chnl+'/icr']
                         del file['raw/'+chnl+'/ocr']
@@ -2210,11 +2294,17 @@ def norm_xrf_batch(h5file, I0norm=None, snake=False, sort=False, timetriggered=F
                     file.create_dataset('raw/'+chnl+'/ocr', data=ocr0, compression='gzip', compression_opts=4)
                     if lowmemory is True:
                         for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
-                            file['raw/'+chnl+'/spectra'][:,:,i] = griddata((x, y), file['raw/'+chnl+'/spectra'][:,:,i].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                            file['raw/'+chnl+'/spectra'][:,:,i] = _xproc_griddata(
+                                file['raw/'+chnl+'/spectra'][:,:,i], mot1, mot2,
+                                mot1_tmp, mot2_tmp, interpol_method
+                            )
                     else:
                         spectra0 = np.squeeze(np.asarray(file['raw/'+chnl+'/spectra']))
                         for i in range(file['raw/'+chnl+'/spectra'].shape[2]):
-                            spectra0[:,:,i] = griddata((x, y), spectra0[:,:,i].ravel(), (mot1_tmp, mot2_tmp), method=interpol_method).T
+                            spectra0[:,:,i] = _xproc_griddata(
+                                spectra0[:,:,i], mot1, mot2,
+                                mot1_tmp, mot2_tmp, interpol_method
+                            )
                         try:
                             del file['raw/'+chnl+'/spectra']
                         except Exception:
